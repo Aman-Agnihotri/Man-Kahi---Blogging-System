@@ -1,0 +1,67 @@
+services:
+    # PostgreSQL
+    postgres:
+        image: postgres:15-alpine
+        container_name: mankahi-postgres
+        environment:
+            POSTGRES_USER: hunterhhh412
+            POSTGRES_PASSWORD: Ag9696940226
+            POSTGRES_DB: mankahi_db
+        ports:
+            - "5432:5432"
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+
+    # Auth Service
+    auth-service:
+        build: ./services/auth-service
+        container_name: mankahi-auth
+        ports:
+            - "3001:3001"
+        depends_on:
+            - postgres
+        environment:
+            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_db
+        volumes:
+            - ./services/auth-service:/app
+        command: npm run dev
+
+    # Blog Service
+    blog-service:
+        build: ./services/blog-service
+        container_name: mankahi-blog
+        ports:
+            - "3002:3002"
+        depends_on:
+            - postgres
+        environment:
+            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_db
+        volumes:
+            - ./services/blog-service:/app
+        command: npm run dev
+
+    # Frontend (Nuxt)
+    frontend:
+        build: ./frontend
+        container_name: mankahi-frontend
+        ports:
+            - "3000:3000"
+        depends_on:
+            - auth-service
+            - blog-service
+        volumes:
+            - ./frontend:/app
+        command: npm run dev
+
+    nginx:
+        image: nginx:latest
+        container_name: mankahi-nginx
+        ports:
+            - "80:80"
+        depends_on:
+            - frontend
+        volumes:
+            - ./nginx.conf:/etc/nginx/nginx.conf:ro
+
+volumes:
+    postgres-data:
