@@ -1,0 +1,131 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+    id        String    @id @default(cuid())
+    username  String    @db.VarChar(50)
+    email     String    @unique @db.VarChar(100)
+    password  String?   @db.VarChar(255) // Nullable for OAuth users
+    createdAt DateTime  @default(now()) @db.Timestamp(6)
+    updatedAt DateTime  @updatedAt @db.Timestamp(6)
+    deletedAt DateTime? @db.Timestamp(6)
+
+    blogs Blog[] // Relation to blogs authored by the user
+    roles UserRole[] // Relation to user roles
+
+    @@map("users")
+}
+
+model Blog {
+    id        String    @id @default(cuid())
+    title     String    @db.VarChar(200)
+    content   String    @db.Text
+    createdAt DateTime  @default(now()) @db.Timestamp(6)
+    updatedAt DateTime  @updatedAt @db.Timestamp(6)
+    deletedAt DateTime? @db.Timestamp(6)
+
+    authorId String
+    author   User   @relation(fields: [authorId], references: [id])
+
+    tags       BlogTag[] // Relation to tags
+    categoryId String?
+    category   Category? @relation(fields: [categoryId], references: [id])
+
+    analytics BlogAnalytics?
+
+    @@index([title]) // Index added for faster search by title
+    @@map("blogs")
+}
+
+model BlogAnalytics {
+    id     String @id @default(cuid())
+    blogId String @unique
+    views  Int    @default(0)
+    reads  Int    @default(0)
+
+    blog Blog @relation(fields: [blogId], references: [id])
+
+    @@map("blog_analytics")
+}
+
+model BlogTag {
+    id     String @id @default(cuid())
+    blogId String
+    blog   Blog   @relation(fields: [blogId], references: [id])
+
+    tagId String
+    tag   Tag    @relation(fields: [tagId], references: [id])
+
+    @@unique([blogId, tagId]) // Ensure a blog cannot have duplicate tags
+    @@index([tagId]) // Index added for efficient tag-based filtering
+    @@map("blog_tags")
+}
+
+model Tag {
+    id          String    @id @default(cuid())
+    name        String    @unique @db.VarChar(50)
+    description String?   @db.Text // Optional description for SEO or metadata
+    blogs       BlogTag[]
+
+    @@map("tags")
+}
+
+model Category {
+    id    String @id @default(cuid())
+    name  String @unique @db.VarChar(50)
+    blogs Blog[]
+
+    @@map("categories")
+}
+
+model UserRole {
+    id     String @id @default(cuid())
+    userId String
+    user   User   @relation(fields: [userId], references: [id])
+
+    roleId String
+    role   Role   @relation(fields: [roleId], references: [id])
+
+    assignedAt  DateTime     @default(now())
+    permissions Permission[] // Relation to permissions assigned to the role
+
+    @@unique([userId, roleId])
+    @@map("user_roles")
+}
+
+model Role {
+    id          String           @id @default(cuid())
+    name        String           @unique @db.VarChar(50)
+    users       UserRole[]
+    permissions RolePermission[] // Updated to reference join table
+
+    @@map("roles")
+}
+
+model RolePermission {
+    id           String     @id @default(cuid())
+    roleId       String
+    permissionId String
+    role         Role       @relation(fields: [roleId], references: [id])
+    permission   Permission @relation(fields: [permissionId], references: [id])
+
+    @@unique([roleId, permissionId]) // Prevent duplicate entries
+    @@map("role_permissions")
+}
+
+model Permission {
+    id          String           @id @default(cuid())
+    name        String           @unique @db.VarChar(100)
+    description String?          @db.Text // Optional description for the permission
+    roles       RolePermission[] // Updated to reference join table
+    UserRole    UserRole?        @relation(fields: [userRoleId], references: [id])
+    userRoleId  String?
+
+    @@map("permissions")
+}
