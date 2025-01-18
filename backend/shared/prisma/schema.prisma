@@ -33,13 +33,14 @@ model Blog {
     authorId String
     author   User   @relation(fields: [authorId], references: [id])
 
-    tags       BlogTag[] // Relation to tags
+    tags       BlogTag[]
     categoryId String?
     category   Category? @relation(fields: [categoryId], references: [id])
 
     analytics BlogAnalytics?
 
-    @@index([title]) // Index added for faster search by title
+    @@index([title])
+    @@index([authorId, createdAt]) // For common queries
     @@map("blogs")
 }
 
@@ -115,15 +116,19 @@ model RolePermission {
     role         Role       @relation(fields: [roleId], references: [id])
     permission   Permission @relation(fields: [permissionId], references: [id])
 
-    @@unique([roleId, permissionId]) // Prevent duplicate entries
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@unique([roleId, permissionId])
     @@map("role_permissions")
 }
 
 model Permission {
     id          String           @id @default(cuid())
     name        String           @unique @db.VarChar(100)
-    description String?          @db.Text // Optional description for the permission
-    roles       RolePermission[] // Updated to reference join table
+    description String?          @db.Text
+    roles       RolePermission[]
+    slug        String           @unique @db.VarChar(50) // For immutability
     UserRole    UserRole?        @relation(fields: [userRoleId], references: [id])
     userRoleId  String?
 
