@@ -2,8 +2,12 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import dotenv from 'dotenv'
+import session from 'express-session'
+import RedisStore from 'connect-redis'
 import { logger } from './utils/logger'
 import authRoutes from './routes/auth.routes'
+import { oauthRoutes } from './routes/oauth.routes'
+import { passport } from './controllers/passport.controller'
 import { prisma } from './config/prisma'
 import { redis } from './config/redis'
 
@@ -13,10 +17,30 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 3001
 
+// Session configuration
+const SESSION_SECRET = process.env.SESSION_SECRET || 'your-session-secret'
+
 // Middleware
 app.use(helmet()) // Security headers
 app.use(cors()) // CORS support
 app.use(express.json()) // Parse JSON bodies
+
+// Session middleware
+app.use(session({
+  store: new RedisStore({ client: redis }),
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}))
+
+// Initialize passport
+app.use(passport.initialize())
+app.use(passport.session())
 
 // Request logging
 app.use((req, res, next) => {
@@ -35,6 +59,7 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes)
+app.use('/api/oauth', oauthRoutes)
 
 // Global error handler
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

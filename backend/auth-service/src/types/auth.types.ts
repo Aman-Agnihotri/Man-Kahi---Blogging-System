@@ -17,6 +17,7 @@ export interface UserWithRoles extends Omit<User, 'roles'> {
 
 export interface LoginResponse {
     token: string
+    refreshToken: string
     user: AuthUser
 }
 
@@ -45,7 +46,8 @@ export interface UserRole {
 export interface TokenPayload {
     userId: string
     email: string
-    roles: string[]
+    roles?: string[]
+    type?: 'access' | 'refresh'
 }
 
 export interface ErrorResponse {

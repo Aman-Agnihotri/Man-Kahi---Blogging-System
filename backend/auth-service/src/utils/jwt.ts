@@ -1,36 +1,37 @@
 import jwt from 'jsonwebtoken'
 import { logger } from './logger'
+import { TokenPayload } from '../types/auth.types'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h'
+const JWT_ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || '1h'
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d'
 
-interface JwtPayload {
-  userId: string
-  roles: string[]
-  [key: string]: unknown
-}
-
-export const generateToken = (payload: JwtPayload): string => {
+export const generateToken = (payload: TokenPayload, expiresIn?: string): string => {
   try {
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
+    let tokenExpiry = expiresIn
+    if (!tokenExpiry) {
+      tokenExpiry = payload.type === 'refresh' ? JWT_REFRESH_EXPIRES_IN : JWT_ACCESS_EXPIRES_IN
+    }
+    
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: tokenExpiry })
   } catch (error) {
     logger.error('Error generating JWT token:', error)
     throw error
   }
 }
 
-export const verifyToken = (token: string): JwtPayload => {
+export const verifyToken = (token: string): TokenPayload => {
   try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload
+    return jwt.verify(token, JWT_SECRET) as TokenPayload
   } catch (error) {
     logger.error('Error verifying JWT token:', error)
     throw error
   }
 }
 
-export const decodeToken = (token: string): JwtPayload | null => {
+export const decodeToken = (token: string): TokenPayload | null => {
   try {
-    return jwt.decode(token) as JwtPayload
+    return jwt.decode(token) as TokenPayload
   } catch (error) {
     logger.error('Error decoding JWT token:', error)
     return null

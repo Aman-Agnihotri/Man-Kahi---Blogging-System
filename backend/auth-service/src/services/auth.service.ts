@@ -1,10 +1,11 @@
 import { PrismaClient, Prisma } from '@prisma/client'
 import { hashPassword, verifyPassword } from '../utils/password'
-import { generateToken, getTokenExpiryInSeconds } from '../utils/jwt'
+import { generateToken as createToken, getTokenExpiryInSeconds } from '../utils/jwt'
 import { addToBlacklist } from '../config/redis'
 import { logger } from '../utils/logger'
 import { prisma } from '../config/prisma'
 import { RegisterInput, LoginResponse, AuthUser, UserWithRoles } from '../types/auth.types'
+import { OAuthProvider } from '../config/oauth'
 
 interface LoginInput {
     email: string
@@ -68,12 +69,9 @@ export class AuthService {
 
             const userRoles = user.UserRole.map(ur => ur.role.name)
 
-            // Generate JWT token
-            const token = generateToken({
-                userId: user.id,
-                email: user.email,
-                roles: userRoles
-            })
+            // Generate tokens
+            const token = await this.generateToken(user.id)
+            const refreshToken = await this.generateRefreshToken(user.id)
 
             const authUser: AuthUser = {
                 id: user.id,
@@ -84,7 +82,8 @@ export class AuthService {
 
             return {
                 user: authUser,
-                token
+                token,
+                refreshToken
             }
         } catch (error) {
             logger.error('Registration error:', error)
@@ -118,12 +117,9 @@ export class AuthService {
 
             const userRoles = user.UserRole.map(ur => ur.role.name)
 
-            // Generate JWT token
-            const token = generateToken({
-                userId: user.id,
-                email: user.email,
-                roles: userRoles
-            })
+            // Generate tokens
+            const token = await this.generateToken(user.id)
+            const refreshToken = await this.generateRefreshToken(user.id)
 
             const authUser: AuthUser = {
                 id: user.id,
@@ -134,12 +130,58 @@ export class AuthService {
 
             return {
                 user: authUser,
-                token
+                token,
+                refreshToken
             }
         } catch (error) {
             logger.error('Login error:', error)
             throw error
         }
+    }
+
+    async generateToken(userId: string): Promise<string> {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                UserRole: {
+                    include: {
+                        role: true
+                    }
+                }
+            }
+        })
+
+        if (!user) {
+            throw new Error('User not found')
+        }
+
+        const userRoles = user.UserRole.map(ur => ur.role.name)
+
+        return createToken({
+            userId: user.id,
+            email: user.email,
+            roles: userRoles
+        })
+    }
+
+    async generateRefreshToken(userId: string): Promise<string> {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId }
+        })
+
+        if (!user) {
+            throw new Error('User not found')
+        }
+
+        // Generate a longer-lived token for refresh
+        return createToken(
+            {
+                userId: user.id,
+                email: user.email,
+                type: 'refresh'
+            },
+            '7d' // 7 days expiry for refresh token
+        )
     }
 
     async logout(token: string): Promise<void> {
@@ -205,6 +247,40 @@ export class AuthService {
             }
         } catch (error) {
             logger.error('Add role error:', error)
+            throw error
+        }
+    }
+
+    async unlinkProvider(userId: string, provider: string): Promise<void> {
+        try {
+            // Check if user has other login methods before unlinking
+            const user = await this.prisma.user.findUnique({
+                where: { id: userId },
+                include: {
+                    oAuthProviders: true
+                }
+            })
+
+            if (!user) {
+                throw new Error('User not found')
+            }
+
+            // If this is the only login method and user has no password, prevent unlinking
+            if (!user.password && user.oAuthProviders.length <= 1) {
+                throw new Error('Cannot unlink the only authentication method')
+            }
+
+            // Delete the OAuth provider
+            await this.prisma.oAuthProvider.deleteMany({
+                where: {
+                    userId,
+                    provider
+                }
+            })
+
+            logger.info(`Unlinked provider ${provider} from user ${userId}`)
+        } catch (error) {
+            logger.error('Error unlinking provider:', error)
             throw error
         }
     }
