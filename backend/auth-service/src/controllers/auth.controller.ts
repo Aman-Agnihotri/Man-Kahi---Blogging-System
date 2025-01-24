@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { AuthService } from '../services/auth.service'
 import { logger } from '../utils/logger'
 import { AuthRequest } from '../middlewares/auth.middleware'
+import { RequestHandler } from 'express-serve-static-core'
 
 // Input validation schemas
 const registerSchema = z.object({
@@ -35,7 +36,7 @@ export class AuthController {
     this.authService = new AuthService()
   }
 
-  register = async (req: Request, res: Response): Promise<void> => {
+  register: RequestHandler = async (req, res) => {
     try {
       // Validate input
       const validatedInput = registerSchema.parse(req.body)
@@ -66,7 +67,7 @@ export class AuthController {
     }
   }
 
-  login = async (req: Request, res: Response): Promise<void> => {
+  login: RequestHandler = async (req, res) => {
     try {
       // Validate input
       const validatedInput = loginSchema.parse(req.body)
@@ -97,7 +98,7 @@ export class AuthController {
     }
   }
 
-  logout = async (req: AuthRequest, res: Response): Promise<void> => {
+  logout: RequestHandler = async (req, res) => {
     try {
       const token = req.headers.authorization?.split(' ')[1]
       if (!token) {
@@ -113,10 +114,17 @@ export class AuthController {
     }
   }
 
-  addRole = async (req: AuthRequest, res: Response): Promise<void> => {
+  addRole: RequestHandler = async (req, res) => {
     try {
       // Validate input
       const validatedInput = addRoleSchema.parse(req.body)
+
+      // Check if user has admin role
+      const authReq = req as AuthRequest
+      if (!authReq.user?.roles.includes('admin')) {
+        res.status(403).json({ message: 'Unauthorized' })
+        return
+      }
 
       // Add role to user
       const updatedUser = await this.authService.addRole(
@@ -130,7 +138,7 @@ export class AuthController {
           id: updatedUser.id,
           username: updatedUser.username,
           email: updatedUser.email,
-          roles: updatedUser.roles.map(ur => ur.role.name)
+          roles: updatedUser.roles.map(role => role.name)
         }
       })
     } catch (error) {

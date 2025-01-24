@@ -1,216 +1,211 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import { hashPassword, verifyPassword } from '../utils/password'
 import { generateToken, getTokenExpiryInSeconds } from '../utils/jwt'
 import { addToBlacklist } from '../config/redis'
 import { logger } from '../utils/logger'
 import { prisma } from '../config/prisma'
-
-interface RegisterInput {
-  username: string
-  email: string
-  password: string
-}
+import { RegisterInput, LoginResponse, AuthUser, UserWithRoles } from '../types/auth.types'
 
 interface LoginInput {
-  email: string
-  password: string
-}
-
-interface AuthResponse {
-  user: {
-    id: string
-    username: string
     email: string
-    roles: string[]
-  }
-  token: string
-}
-
-interface UserWithRoles {
-  id: string
-  username: string
-  email: string
-  roles: Array<{
-    role: {
-      name: string
-    }
-  }>
+    password: string
 }
 
 export class AuthService {
-  private prisma: PrismaClient
+    private prisma: PrismaClient
 
-  constructor() {
-    this.prisma = prisma
-  }
+    constructor() {
+        this.prisma = prisma
+    }
 
-  async register(input: RegisterInput): Promise<AuthResponse> {
-    try {
-      // Check if user already exists
-      const existingUser = await this.prisma.user.findFirst({
-        where: {
-          OR: [
-            { email: input.email },
-            { username: input.username }
-          ],
-        },
-      })
-
-      if (existingUser) {
-        throw new Error('User with this email or username already exists')
-      }
-
-      // Hash password
-      const hashedPassword = await hashPassword(input.password)
-
-      // Create user with default reader role
-      const user = await this.prisma.user.create({
-        data: {
-          username: input.username,
-          email: input.email,
-          password: hashedPassword,
-          roles: {
-            create: {
-              role: {
-                connectOrCreate: {
-                  where: { name: 'reader' },
-                  create: { name: 'reader' }
+    async register(input: RegisterInput): Promise<LoginResponse> {
+        try {
+            // Check if user already exists
+            const existingUser = await this.prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { email: input.email },
+                        { username: input.username }
+                    ]
                 }
-              }
+            })
+
+            if (existingUser) {
+                throw new Error('User with this email or username already exists')
             }
-          }
-        },
-        include: {
-          roles: {
-            include: {
-              role: true
-            }
-          }
-        }
-      })
 
-      // Generate JWT token
-      const token = generateToken({
-        userId: user.id,
-        roles: user.roles.map(ur => ur.role.name)
-      })
+            // Hash password
+            const hashedPassword = await hashPassword(input.password)
 
-      return {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          roles: user.roles.map(ur => ur.role.name)
-        },
-        token
-      }
-    } catch (error) {
-      logger.error('Registration error:', error)
-      throw error
-    }
-  }
-
-  async login(input: LoginInput): Promise<AuthResponse> {
-    try {
-      // Find user
-      const user = await this.prisma.user.findUnique({
-        where: { email: input.email },
-        include: {
-          roles: {
-            include: {
-              role: true
-            }
-          }
-        }
-      })
-
-      if (!user || !user.password) {
-        throw new Error('Invalid credentials')
-      }
-
-      // Verify password
-      const isValid = await verifyPassword(user.password, input.password)
-      if (!isValid) {
-        throw new Error('Invalid credentials')
-      }
-
-      // Generate JWT token
-      const token = generateToken({
-        userId: user.id,
-        roles: user.roles.map(ur => ur.role.name)
-      })
-
-      return {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          roles: user.roles.map(ur => ur.role.name)
-        },
-        token
-      }
-    } catch (error) {
-      logger.error('Login error:', error)
-      throw error
-    }
-  }
-
-  async logout(token: string): Promise<void> {
-    try {
-      const expiryInSeconds = getTokenExpiryInSeconds(token)
-      if (expiryInSeconds > 0) {
-        await addToBlacklist(token, expiryInSeconds)
-      }
-    } catch (error) {
-      logger.error('Logout error:', error)
-      throw error
-    }
-  }
-
-  async addRole(userId: string, roleName: string): Promise<UserWithRoles> {
-    try {
-      // Check if user exists
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        include: {
-          roles: {
-            include: {
-              role: true
-            }
-          }
-        }
-      })
-
-      if (!user) {
-        throw new Error('User not found')
-      }
-
-      // Add role to user
-      return await this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          roles: {
-            create: {
-              role: {
-                connectOrCreate: {
-                  where: { name: roleName },
-                  create: { name: roleName }
+            // Create user with default reader role
+            const user = await this.prisma.user.create({
+                data: {
+                    username: input.username,
+                    email: input.email,
+                    password: hashedPassword,
+                    UserRole: {
+                        create: {
+                            role: {
+                                connectOrCreate: {
+                                    where: { name: 'reader' },
+                                    create: {
+                                        name: 'reader',
+                                        description: 'Default reader role'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                include: {
+                    UserRole: {
+                        include: {
+                            role: true
+                        }
+                    }
                 }
-              }
+            })
+
+            const userRoles = user.UserRole.map(ur => ur.role.name)
+
+            // Generate JWT token
+            const token = generateToken({
+                userId: user.id,
+                email: user.email,
+                roles: userRoles
+            })
+
+            const authUser: AuthUser = {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                roles: userRoles
             }
-          }
-        },
-        include: {
-          roles: {
-            include: {
-              role: true
+
+            return {
+                user: authUser,
+                token
             }
-          }
+        } catch (error) {
+            logger.error('Registration error:', error)
+            throw error
         }
-      })
-    } catch (error) {
-      logger.error('Add role error:', error)
-      throw error
     }
-  }
+
+    async login(input: LoginInput): Promise<LoginResponse> {
+        try {
+            // Find user
+            const user = await this.prisma.user.findUnique({
+                where: { email: input.email },
+                include: {
+                    UserRole: {
+                        include: {
+                            role: true
+                        }
+                    }
+                }
+            })
+
+            if (!user || !user.password) {
+                throw new Error('Invalid credentials')
+            }
+
+            // Verify password
+            const isValid = await verifyPassword(input.password, user.password)
+            if (!isValid) {
+                throw new Error('Invalid credentials')
+            }
+
+            const userRoles = user.UserRole.map(ur => ur.role.name)
+
+            // Generate JWT token
+            const token = generateToken({
+                userId: user.id,
+                email: user.email,
+                roles: userRoles
+            })
+
+            const authUser: AuthUser = {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                roles: userRoles
+            }
+
+            return {
+                user: authUser,
+                token
+            }
+        } catch (error) {
+            logger.error('Login error:', error)
+            throw error
+        }
+    }
+
+    async logout(token: string): Promise<void> {
+        try {
+            const expiryInSeconds = getTokenExpiryInSeconds(token)
+            if (expiryInSeconds > 0) {
+                await addToBlacklist(token, expiryInSeconds)
+            }
+        } catch (error) {
+            logger.error('Logout error:', error)
+            throw error
+        }
+    }
+
+    async addRole(userId: string, roleName: string): Promise<UserWithRoles> {
+        try {
+            // Check if user exists
+            const user = await this.prisma.user.findUnique({
+                where: { id: userId },
+                include: {
+                    UserRole: {
+                        include: {
+                            role: true
+                        }
+                    }
+                }
+            })
+
+            if (!user) {
+                throw new Error('User not found')
+            }
+
+            // Add role to user
+            const updatedUser = await this.prisma.user.update({
+                where: { id: userId },
+                data: {
+                    UserRole: {
+                        create: {
+                            role: {
+                                connectOrCreate: {
+                                    where: { name: roleName },
+                                    create: {
+                                        name: roleName,
+                                        description: `Role ${roleName}`
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                include: {
+                    UserRole: {
+                        include: {
+                            role: true
+                        }
+                    }
+                }
+            })
+
+            return {
+                ...updatedUser,
+                roles: updatedUser.UserRole.map(ur => ur.role)
+            }
+        } catch (error) {
+            logger.error('Add role error:', error)
+            throw error
+        }
+    }
 }

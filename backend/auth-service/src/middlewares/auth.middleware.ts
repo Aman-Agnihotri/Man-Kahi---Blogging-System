@@ -3,16 +3,18 @@ import { verifyToken } from '../utils/jwt'
 import { isBlacklisted } from '../config/redis'
 import { logger } from '../utils/logger'
 
+export interface AuthUser {
+  userId: string
+  roles: string[]
+  [key: string]: unknown
+}
+
 export interface AuthRequest extends Request {
-  user?: {
-    userId: string
-    roles: string[]
-    [key: string]: unknown
-  }
+  user?: AuthUser
 }
 
 export const authenticate = async (
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
@@ -33,8 +35,12 @@ export const authenticate = async (
     }
 
     // Verify the token
-    const decoded = verifyToken(token)
-    req.user = decoded
+    const payload = verifyToken(token)
+    ;(req as AuthRequest).user = {
+      ...payload,
+      userId: payload.userId,
+      roles: payload.roles
+    }
 
     next()
   } catch (error) {
@@ -45,13 +51,14 @@ export const authenticate = async (
 
 // Middleware to check if user has required roles
 export const authorize = (requiredRoles: string[]) => {
-  return (req: AuthRequest, res: Response, next: NextFunction): void => {
-    if (!req.user) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const authReq = req as AuthRequest
+    if (!authReq.user) {
       res.status(401).json({ message: 'User not authenticated' })
       return
     }
 
-    const hasRequiredRole = req.user.roles.some(role => 
+    const hasRequiredRole = authReq.user.roles.some(role => 
       requiredRoles.includes(role)
     )
 
@@ -68,7 +75,7 @@ export const authorize = (requiredRoles: string[]) => {
 
 // Optional authentication middleware that doesn't require auth but attaches user if token exists
 export const optionalAuth = async (
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
@@ -89,8 +96,12 @@ export const optionalAuth = async (
     }
 
     // Verify and attach user
-    const decoded = verifyToken(token)
-    req.user = decoded
+    const payload = verifyToken(token)
+    ;(req as AuthRequest).user = {
+      ...payload,
+      userId: payload.userId,
+      roles: payload.roles
+    }
 
     next()
   } catch (error) {

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { AuthController } from '../controllers/auth.controller'
 import { authenticate, authorize } from '../middlewares/auth.middleware'
 import { authRateLimit, apiRateLimit } from '../middlewares/rate-limit.middleware'
+import { RequestHandler } from 'express'
 
 const router = Router()
 const authController = new AuthController()
@@ -11,15 +12,15 @@ router.post('/register', authRateLimit, authController.register)
 router.post('/login', authRateLimit, authController.login)
 
 // Protected routes
-router.post('/logout', authenticate, apiRateLimit, authController.logout)
+router.post('/logout', authenticate as RequestHandler, apiRateLimit, authController.logout)
 
 // Admin only routes
 router.post(
   '/roles',
-  authenticate,
-  authorize(['admin']),
+  authenticate as RequestHandler,
+  authorize(['admin']) as RequestHandler,
   apiRateLimit,
-  authController.addRole
+  authController.addRole as RequestHandler
 )
 
 // Health check endpoint

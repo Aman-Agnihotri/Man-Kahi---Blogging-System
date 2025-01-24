@@ -1,5 +1,8 @@
 # Use Node.js LTS version as the base image
-FROM node:20-slim as builder
+FROM node:20-slim AS builder
+
+# Install OpenSSL
+RUN apt-get update -y && apt-get install -y openssl
 
 # Set working directory
 WORKDIR /app
@@ -8,17 +11,23 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-# Copy source code
-COPY . .
+# Copy Prisma schema
+COPY prisma ./prisma/
 
 # Generate Prisma client
 RUN npx prisma generate
+
+# Copy remaining source code
+COPY . .
 
 # Build TypeScript code
 RUN npm run build
 
 # Production image
-FROM node:20-slim as production
+FROM node:20-slim AS production
+
+# Install OpenSSL
+RUN apt-get update -y && apt-get install -y openssl
 
 WORKDIR /app
 
@@ -45,7 +54,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
 CMD ["node", "dist/server.js"]
 
 # Development image
-FROM builder as development
+FROM builder AS development
 
 # Keep the container running for development
 CMD ["npm", "run", "dev"]

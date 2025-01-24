@@ -1,18 +1,19 @@
 services:
     # PostgreSQL
     postgres:
-        image: postgres:15-alpine
+        image: postgres:16-alpine
         container_name: mankahi-postgres
         environment:
             POSTGRES_USER: hunterhhh412
             POSTGRES_PASSWORD: Ag9696940226
-            POSTGRES_DB: mankahi_db
+            POSTGRES_MULTIPLE_DATABASES: mankahi_auth,mankahi_blog
         ports:
             - "5432:5432"
         volumes:
             - postgres-data:/var/lib/postgresql/data
+            - ./docker/postgres:/docker-entrypoint-initdb.d
         healthcheck:
-            test: ["CMD-SHELL", "pg_isready -U hunterhhh412 -d mankahi_db"]
+            test: ["CMD-SHELL", "pg_isready -U hunterhhh412"]
             interval: 10s
             timeout: 5s
             retries: 5
@@ -48,7 +49,7 @@ services:
         environment:
             NODE_ENV: development
             PORT: 3001
-            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_db
+            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_auth
             REDIS_URL: redis://redis:6379
             JWT_SECRET: your-secret-key-at-least-32-chars
             JWT_EXPIRES_IN: 24h
@@ -62,17 +63,30 @@ services:
 
     # Blog Service
     blog-service:
-        build: ./services/blog-service
+        build:
+            context: ./backend/blog-service
+            target: development
         container_name: mankahi-blog
         ports:
             - "3002:3002"
         depends_on:
             postgres:
                 condition: service_healthy
+            redis:
+                condition: service_healthy
         environment:
-            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_db
+            NODE_ENV: development
+            PORT: 3002
+            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_blog
+            REDIS_URL: redis://redis:6379
+            AUTH_SERVICE_URL: http://auth-service:3001
+            RATE_LIMIT_WINDOW: 900
+            RATE_LIMIT_MAX_REQUESTS: 100
+            CORS_ORIGIN: http://localhost:3000
         volumes:
-            - ./services/blog-service:/app
+            - ./backend/blog-service:/app
+            - /app/node_modules
+            - blog-uploads:/app/uploads
         command: npm run dev
 
     # Frontend (Nuxt)
@@ -101,6 +115,7 @@ services:
             - blog-service
         volumes:
             - ./nginx.conf:/etc/nginx/nginx.conf:ro
+            - blog-uploads:/var/www/uploads
         healthcheck:
             test: ["CMD", "nginx", "-t"]
             interval: 30s
@@ -110,3 +125,4 @@ services:
 volumes:
     postgres-data:
     redis-data:
+    blog-uploads:
