@@ -11,19 +11,53 @@ services:
             - "5432:5432"
         volumes:
             - postgres-data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U hunterhhh412 -d mankahi_db"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+    # Redis
+    redis:
+        image: redis:alpine
+        container_name: mankahi-redis
+        ports:
+            - "6379:6379"
+        volumes:
+            - redis-data:/data
+        command: redis-server --appendonly yes
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
 
     # Auth Service
     auth-service:
-        build: ./services/auth-service
+        build:
+            context: ./backend/auth-service
+            target: development
         container_name: mankahi-auth
         ports:
             - "3001:3001"
         depends_on:
-            - postgres
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
         environment:
+            NODE_ENV: development
+            PORT: 3001
             DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_db
+            REDIS_URL: redis://redis:6379
+            JWT_SECRET: your-secret-key-at-least-32-chars
+            JWT_EXPIRES_IN: 24h
+            RATE_LIMIT_WINDOW: 900
+            RATE_LIMIT_MAX_REQUESTS: 100
+            CORS_ORIGIN: http://localhost:3000
         volumes:
-            - ./services/auth-service:/app
+            - ./backend/auth-service:/app
+            - /app/node_modules
         command: npm run dev
 
     # Blog Service
@@ -33,7 +67,8 @@ services:
         ports:
             - "3002:3002"
         depends_on:
-            - postgres
+            postgres:
+                condition: service_healthy
         environment:
             DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_db
         volumes:
@@ -51,8 +86,10 @@ services:
             - blog-service
         volumes:
             - ./frontend:/app
+            - /app/node_modules
         command: npm run dev
 
+    # API Gateway
     nginx:
         image: nginx:latest
         container_name: mankahi-nginx
@@ -60,8 +97,16 @@ services:
             - "80:80"
         depends_on:
             - frontend
+            - auth-service
+            - blog-service
         volumes:
             - ./nginx.conf:/etc/nginx/nginx.conf:ro
+        healthcheck:
+            test: ["CMD", "nginx", "-t"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
 
 volumes:
     postgres-data:
+    redis-data:
