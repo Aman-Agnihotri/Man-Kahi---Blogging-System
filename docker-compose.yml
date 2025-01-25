@@ -33,6 +33,25 @@ services:
             timeout: 5s
             retries: 5
 
+    # MinIO
+    minio:
+        image: minio/minio
+        container_name: mankahi-minio
+        ports:
+            - "9000:9000"
+            - "9001:9001"
+        environment:
+            MINIO_ROOT_USER: minioadmin
+            MINIO_ROOT_PASSWORD: minioadmin
+        volumes:
+            - minio-data:/data
+        command: server /data --console-address ":9001"
+        healthcheck:
+            test: ["CMD", "mc", "ready", "local"]
+            interval: 30s
+            timeout: 20s
+            retries: 3
+
     # Elasticsearch
     elasticsearch:
         image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
@@ -70,11 +89,17 @@ services:
                 condition: service_healthy
         environment:
             NODE_ENV: development
-            PORT: 3001
-            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_auth
+            PORT: 3002
+            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_blog
             REDIS_URL: redis://redis:6379
-            JWT_SECRET: your-secret-key-at-least-32-chars
-            JWT_EXPIRES_IN: 24h
+            ELASTICSEARCH_URL: http://elasticsearch:9200
+            MINIO_ENDPOINT: minio
+            MINIO_PORT: 9000
+            MINIO_USE_SSL: "false"
+            MINIO_ACCESS_KEY: minioadmin
+            MINIO_SECRET_KEY: minioadmin
+            MINIO_REGION: us-east-1
+            AUTH_SERVICE_URL: http://auth-service:3001
             RATE_LIMIT_WINDOW: 900
             RATE_LIMIT_MAX_REQUESTS: 100
             CORS_ORIGIN: http://localhost:3000
@@ -158,4 +183,5 @@ volumes:
     postgres-data:
     redis-data:
     elasticsearch-data:
+    minio-data:
     blog-uploads:

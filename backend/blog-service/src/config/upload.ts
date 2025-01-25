@@ -1,136 +1,61 @@
 import multer from 'multer'
-import { Request } from 'express'
+import crypto from 'crypto'
 import path from 'path'
-import fs from 'fs'
+import { Request } from 'express'
 import sharp from 'sharp'
-import { logger } from '../utils/logger'
+import { env } from '@config/env'
+import { uploadImage } from '@utils/minio'
 
-// Configure upload directory
-const UPLOAD_DIR = 'uploads/images'
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-
-// Ensure upload directory exists
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true })
-}
-
-// Configure storage
-const storage = multer.diskStorage({
-  destination: (_req: Request, _file: Express.Multer.File, cb) => {
-    cb(null, UPLOAD_DIR)
-  },
-  filename: (_req: Request, file: Express.Multer.File, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
-    cb(
-      null,
-      `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`
-    )
-  },
-})
+// In-memory storage
+const storage = multer.memoryStorage()
 
 // File filter
-const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  // Accept only images
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true)
-  } else {
-    cb(new Error('Only image files are allowed'))
+const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  if (!env.ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+    cb(new Error('Invalid file type'))
+    return
   }
+  cb(null, true)
 }
 
-// Create multer instance
+// Multer upload configuration
 export const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: MAX_FILE_SIZE,
+    fileSize: env.MAX_FILE_SIZE, // e.g., 5MB
   },
 })
 
-// Image processing configuration
-interface ProcessImageOptions {
-  width?: number
-  height?: number
-  quality?: number
-}
-
-export const processImage = async (
-  filePath: string,
-  options: ProcessImageOptions = {}
-): Promise<string> => {
+// Process uploaded image
+export const processImage = async (file: Express.Multer.File): Promise<string> => {
   try {
-    const {
-      width = 800,  // Default max width
-      height = 800, // Default max height
-      quality = 80  // Default quality
-    } = options
-
-    const optimizedFilePath = filePath.replace(
-      /(\.[^.]+)$/,
-      `-optimized$1`
-    )
-
-    await sharp(filePath)
-      .resize(width, height, {
+    // Generate unique filename
+    const filename = `${crypto.randomBytes(16).toString('hex')}${path.extname(file.originalname)}`
+    
+    // Process image with Sharp
+    const processedImageBuffer = await sharp(file.buffer)
+      .resize(1200, 1200, { // Max dimensions
         fit: 'inside',
-        withoutEnlargement: true
+        withoutEnlargement: true,
       })
-      .jpeg({ quality })
-      .png({ quality: Math.floor(quality * 0.8) }) // PNG quality is 0-100
-      .toFile(optimizedFilePath)
+      .jpeg({ quality: 80 }) // Convert to JPEG with 80% quality
+      .toBuffer()
 
-    // Remove original file
-    await fs.promises.unlink(filePath)
+    // Create new file object with processed buffer
+    const processedFile: Express.Multer.File = {
+      ...file,
+      buffer: processedImageBuffer,
+      size: processedImageBuffer.length,
+      mimetype: 'image/jpeg',
+    }
 
-    return optimizedFilePath
-  } catch (error) {
-    logger.error('Error processing image:', error)
-    throw error
-  }
-}
-
-// Function to delete image
-export const deleteImage = async (filename: string): Promise<void> => {
-  const filePath = path.join(UPLOAD_DIR, filename)
-  try {
-    await fs.promises.unlink(filePath)
-  } catch (error) {
-    logger.error('Error deleting image:', error)
-    throw error
-  }
-}
-
-// Function to get image URL
-export const getImageUrl = (filename: string): string => {
-  return `/uploads/images/${filename}`
-}
-
-// Function to validate image path
-export const isValidImagePath = (imagePath: string): boolean => {
-  const normalizedPath = path.normalize(imagePath)
-  return normalizedPath.startsWith(UPLOAD_DIR)
-}
-
-export const IMAGE_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp'
-]
-
-export const getContentType = (filename: string): string => {
-  const ext = path.extname(filename).toLowerCase()
-  switch (ext) {
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg'
-    case '.png':
-      return 'image/png'
-    case '.gif':
-      return 'image/gif'
-    case '.webp':
-      return 'image/webp'
-    default:
-      return 'application/octet-stream'
+    // Upload to MinIO
+    const imageUrl = await uploadImage(processedFile, filename)
+    
+    return imageUrl
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+    throw new Error(`Error processing image: ${errorMessage}`)
   }
 }
