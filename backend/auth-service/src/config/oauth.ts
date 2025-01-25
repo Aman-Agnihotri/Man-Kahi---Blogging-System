@@ -4,7 +4,7 @@ export type OAuthProvider = 'google'
 
 export const PROVIDERS = ['google'] as const
 
-export const DEFAULT_ROLE = 'user'
+export const DEFAULT_ROLE = 'reader'
 
 export const providerScopes: Record<OAuthProvider, string[]> = {
   google: ['profile', 'email'],

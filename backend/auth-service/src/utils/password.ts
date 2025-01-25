@@ -39,7 +39,7 @@ export async function verifyPassword(
 // For password reset functionality
 export async function needsRehash(hash: string): Promise<boolean> {
   try {
-    return await argon2.needsRehash(hash, hashingConfig)
+    return argon2.needsRehash(hash, hashingConfig)
   } catch (error) {
     logger.error('Error checking if password needs rehash:', error)
     return false
