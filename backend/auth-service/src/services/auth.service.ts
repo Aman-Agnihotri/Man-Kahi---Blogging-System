@@ -105,7 +105,7 @@ export class AuthService {
                 }
             })
 
-            if (!user || !user.password) {
+            if (!user?.password) {
                 throw new Error('Invalid credentials')
             }
 

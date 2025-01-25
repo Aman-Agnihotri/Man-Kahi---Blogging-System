@@ -34,7 +34,7 @@ router.get(
       const linkToken = req.authInfo?.token
 
       // Redirect URL with tokens
-      const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000'
+      const frontendURL = process.env.FRONTEND_URL ?? 'http://localhost:3000'
       const params = new URLSearchParams({
         accessToken,
         refreshToken,
@@ -44,7 +44,7 @@ router.get(
       res.redirect(`${frontendURL}/auth/callback?${params.toString()}`)
     } catch (error) {
       logger.error('OAuth callback error:', error)
-      const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000'
+      const frontendURL = process.env.FRONTEND_URL ?? 'http://localhost:3000'
       res.redirect(
         `${frontendURL}/auth/callback?error=Authentication failed`
       )

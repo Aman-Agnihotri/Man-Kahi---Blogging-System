@@ -31,6 +31,6 @@ export function getClientSecret(provider: OAuthProvider): string {
 }
 
 export function getAuthCallbackURL(provider: OAuthProvider): string {
-  const baseURL = process.env.AUTH_SERVICE_URL || 'http://localhost:3000'
+  const baseURL = process.env.AUTH_SERVICE_URL ?? 'http://localhost:3000'
   return `${baseURL}/auth/${provider}/callback`
 }

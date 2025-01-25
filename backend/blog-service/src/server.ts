@@ -1,19 +1,21 @@
+import 'module-alias/register'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import path from 'path'
 import fs from 'fs'
 import dotenv from 'dotenv'
-import { logger } from './utils/logger'
-import { prisma } from './config/prisma'
-import { redis } from './config/redis'
+import { logger } from '@utils/logger'
+import { prisma } from '@config/prisma'
+import { redis } from '@config/redis'
+import { setupElasticsearch } from '@utils/elasticsearch'
 import blogRoutes from './routes/blog.routes'
 
 // Load environment variables
 dotenv.config()
 
 const app = express()
-const PORT = process.env.PORT || 3002
+const PORT = process.env.PORT ?? 3002
 
 // Middleware
 app.use(helmet()) // Security headers
@@ -84,6 +86,10 @@ const startServer = async () => {
     // Verify Redis connection
     await redis.ping()
     logger.info('Redis connection established')
+
+    // Setup Elasticsearch
+    await setupElasticsearch()
+    logger.info('Elasticsearch setup complete')
 
     // Create uploads directory if it doesn't exist
     const uploadsDir = path.join(__dirname, '../uploads/images')

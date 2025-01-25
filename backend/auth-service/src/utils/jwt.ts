@@ -2,9 +2,9 @@ import jwt from 'jsonwebtoken'
 import { logger } from './logger'
 import { TokenPayload } from '../types/auth.types'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
-const JWT_ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || '1h'
-const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d'
+const JWT_SECRET = process.env.JWT_SECRET ?? 'your-secret-key'
+const JWT_ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN ?? '1h'
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN ?? '7d'
 
 export const generateToken = (payload: TokenPayload, expiresIn?: string): string => {
   try {

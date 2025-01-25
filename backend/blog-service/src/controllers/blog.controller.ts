@@ -1,10 +1,18 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
-import { logger } from '../utils/logger'
-import { processMarkdown, validateMarkdown } from '../utils/markdown'
-import { processImage } from '../config/upload'
-import { searchBlogs, getPopularTags, getSuggestedBlogs } from '../utils/search'
+import { logger } from '@utils/logger'
+import { processMarkdown, validateMarkdown } from '@utils/markdown'
+import { processImage } from '@config/upload'
+import { searchBlogsElastic, indexBlog, updateBlogIndex, removeBlogFromIndex } from '@utils/elasticsearch'
+import { 
+  cacheBlog, 
+  getBlogFromCache, 
+  invalidateBlogCache,
+  incrementBlogViews,
+  cacheSearchResults,
+  getSearchFromCache
+} from '@config/redis'
 import slugify from 'slugify'
 
 const prisma = new PrismaClient()
@@ -32,7 +40,7 @@ const searchQuerySchema = z.object({
 
 export class BlogController {
   // Create new blog
-  async create(req: Request, res: Response): Promise<void> {
+  async create(req: Request, res: Response): Promise<Response> {
     try {
       const { body, file } = req
       const validatedInput = createBlogSchema.parse(body)
@@ -41,11 +49,10 @@ export class BlogController {
       // Validate markdown content
       const validation = validateMarkdown(content)
       if (!validation.isValid) {
-        res.status(400).json({
+        return res.status(400).json({
           message: 'Invalid markdown content',
           errors: validation.errors,
         })
-        return
       }
 
       // Process markdown
@@ -69,7 +76,7 @@ export class BlogController {
           content: processedContent,
           description,
           published,
-          authorId: req.user!.id, // From auth middleware
+          authorId: req.user!.id,
           ...(categoryId && { categoryId }),
           ...(tags && {
             tags: {
@@ -101,28 +108,64 @@ export class BlogController {
               tag: true,
             },
           },
+          analytics: true,
         },
       })
 
-      res.status(201).json(blog)
+      // Index in Elasticsearch
+      await indexBlog({
+        id: blog.id,
+        title: blog.title,
+        content: blog.content,
+        description: blog.description,
+        slug: blog.slug,
+        authorId: blog.authorId,
+        categoryId: blog.categoryId,
+        tags: blog.tags.map(t => t.tag.name),
+        published: blog.published,
+        createdAt: blog.createdAt,
+        updatedAt: blog.updatedAt,
+        deletedAt: null,
+        views: blog.analytics?.views ?? 0,
+      })
+
+      // Cache the blog
+      await cacheBlog(slug, JSON.stringify(blog))
+
+      return res.status(201).json(blog)
     } catch (error) {
       logger.error('Error creating blog:', error)
       if (error instanceof z.ZodError) {
-        res.status(400).json({
+        return res.status(400).json({
           message: 'Invalid input',
           errors: error.errors,
         })
-        return
       }
-      res.status(500).json({ message: 'Error creating blog post' })
+      return res.status(500).json({ message: 'Error creating blog post' })
     }
   }
 
   // Get blog by slug
-  async getBySlug(req: Request, res: Response): Promise<void> {
+  async getBySlug(req: Request, res: Response): Promise<Response> {
     try {
       const { slug } = req.params
 
+      // Try to get from cache first
+      const cachedBlog = await getBlogFromCache(slug)
+      if (cachedBlog) {
+        const blog = JSON.parse(cachedBlog)
+        // Check visibility
+        if (!blog.published && !req.user?.id) {
+          return res.status(404).json({ message: 'Blog not found' })
+        }
+        // Increment views in background
+        incrementBlogViews(blog.id).catch(error => 
+          logger.error('Error incrementing views:', error)
+        )
+        return res.json(blog)
+      }
+
+      // If not in cache, get from database
       const blog = await prisma.blog.findUnique({
         where: {
           slug,
@@ -141,25 +184,27 @@ export class BlogController {
       })
 
       if (!blog) {
-        res.status(404).json({ message: 'Blog not found' })
-        return
+        return res.status(404).json({ message: 'Blog not found' })
       }
 
-      // Increment views
-      await prisma.blogAnalytics.update({
-        where: { blogId: blog.id },
-        data: { views: { increment: 1 } },
-      })
+      // Cache the blog
+      await cacheBlog(slug, JSON.stringify(blog))
 
-      res.json(blog)
+      // Increment views in background and update Elasticsearch
+      Promise.all([
+        incrementBlogViews(blog.id),
+        updateBlogIndex(blog.id, { views: (blog.analytics?.views ?? 0) + 1 })
+      ]).catch(error => logger.error('Error updating views:', error))
+
+      return res.json(blog)
     } catch (error) {
       logger.error('Error fetching blog:', error)
-      res.status(500).json({ message: 'Error fetching blog post' })
+      return res.status(500).json({ message: 'Error fetching blog post' })
     }
   }
 
   // Update blog
-  async update(req: Request, res: Response): Promise<void> {
+  async update(req: Request, res: Response): Promise<Response> {
     try {
       const { id } = req.params
       const validatedInput = updateBlogSchema.parse(req.body)
@@ -168,17 +213,23 @@ export class BlogController {
       // Check blog exists and user is author
       const blog = await prisma.blog.findUnique({
         where: { id },
-        include: { tags: true },
+        select: {
+          authorId: true,
+          slug: true,
+          tags: {
+            include: {
+              tag: true,
+            },
+          },
+        },
       })
 
       if (!blog) {
-        res.status(404).json({ message: 'Blog not found' })
-        return
+        return res.status(404).json({ message: 'Blog not found' })
       }
 
       if (blog.authorId !== req.user!.id) {
-        res.status(403).json({ message: 'Not authorized' })
-        return
+        return res.status(403).json({ message: 'Not authorized' })
       }
 
       // Process content if provided
@@ -186,11 +237,10 @@ export class BlogController {
       if (content) {
         const validation = validateMarkdown(content)
         if (!validation.isValid) {
-          res.status(400).json({
+          return res.status(400).json({
             message: 'Invalid markdown content',
             errors: validation.errors,
           })
-          return
         }
         processedContent = processMarkdown(content)
       }
@@ -231,103 +281,116 @@ export class BlogController {
               tag: true,
             },
           },
+          analytics: true,
         },
       })
 
-      res.json(updatedBlog)
+      // Update Elasticsearch
+      await updateBlogIndex(id, {
+        title: updatedBlog.title,
+        content: updatedBlog.content,
+        description: updatedBlog.description,
+        slug: updatedBlog.slug,
+        categoryId: updatedBlog.categoryId,
+        tags: updatedBlog.tags.map(t => t.tag.name),
+        published: updatedBlog.published,
+        updatedAt: updatedBlog.updatedAt,
+      })
+
+      // Invalidate old cache and cache updated blog
+      await Promise.all([
+        invalidateBlogCache(blog.slug),
+        title ? invalidateBlogCache(slugify(title, { lower: true, strict: true })) : null,
+        cacheBlog(updatedBlog.slug, JSON.stringify(updatedBlog)),
+      ])
+
+      return res.json(updatedBlog)
     } catch (error) {
       logger.error('Error updating blog:', error)
       if (error instanceof z.ZodError) {
-        res.status(400).json({
+        return res.status(400).json({
           message: 'Invalid input',
           errors: error.errors,
         })
-        return
       }
-      res.status(500).json({ message: 'Error updating blog post' })
+      return res.status(500).json({ message: 'Error updating blog post' })
     }
   }
 
   // Delete blog (soft delete)
-  async delete(req: Request, res: Response): Promise<void> {
+  async delete(req: Request, res: Response): Promise<Response> {
     try {
       const { id } = req.params
 
       // Check blog exists and user is author
-      const blog = await prisma.blog.findUnique({ where: { id } })
+      const blog = await prisma.blog.findUnique({ 
+        where: { id },
+        select: { 
+          authorId: true,
+          slug: true 
+        }
+      })
 
       if (!blog) {
-        res.status(404).json({ message: 'Blog not found' })
-        return
+        return res.status(404).json({ message: 'Blog not found' })
       }
 
       if (blog.authorId !== req.user!.id) {
-        res.status(403).json({ message: 'Not authorized' })
-        return
+        return res.status(403).json({ message: 'Not authorized' })
       }
 
-      // Soft delete
-      await prisma.blog.update({
-        where: { id },
-        data: { deletedAt: new Date() },
-      })
+      // Soft delete, invalidate cache, and update Elasticsearch
+      await Promise.all([
+        prisma.blog.update({
+          where: { id },
+          data: { deletedAt: new Date() },
+        }),
+        invalidateBlogCache(blog.slug),
+        updateBlogIndex(id, { deletedAt: new Date() })
+      ])
 
-      res.json({ message: 'Blog deleted successfully' })
+      return res.json({ message: 'Blog deleted successfully' })
     } catch (error) {
       logger.error('Error deleting blog:', error)
-      res.status(500).json({ message: 'Error deleting blog post' })
+      return res.status(500).json({ message: 'Error deleting blog post' })
     }
   }
 
   // Search blogs
-  async search(req: Request, res: Response): Promise<void> {
+  async search(req: Request, res: Response): Promise<Response> {
     try {
       const params = searchQuerySchema.parse(req.query)
-      const results = await searchBlogs({
+      
+      // Try to get from cache first
+      const cacheKey = JSON.stringify(params)
+      const cachedResults = await getSearchFromCache(cacheKey)
+      if (cachedResults) {
+        return res.json(JSON.parse(cachedResults))
+      }
+
+      const results = await searchBlogsElastic({
         ...params,
         authorId: req.query.author as string,
       })
-      res.json(results)
+
+      // Cache results
+      await cacheSearchResults(cacheKey, JSON.stringify(results))
+
+      return res.json(results)
     } catch (error) {
       logger.error('Error searching blogs:', error)
       if (error instanceof z.ZodError) {
-        res.status(400).json({
+        return res.status(400).json({
           message: 'Invalid search parameters',
           errors: error.errors,
         })
-        return
       }
-      res.status(500).json({ message: 'Error searching blogs' })
-    }
-  }
-
-  // Get popular tags
-  async getPopularTags(req: Request, res: Response): Promise<void> {
-    try {
-      const limit = parseInt(req.query.limit as string) || 10
-      const tags = await getPopularTags(limit)
-      res.json(tags)
-    } catch (error) {
-      logger.error('Error fetching popular tags:', error)
-      res.status(500).json({ message: 'Error fetching popular tags' })
-    }
-  }
-
-  // Get suggested blogs
-  async getSuggestedBlogs(req: Request, res: Response): Promise<void> {
-    try {
-      const { blogId } = req.params
-      const limit = parseInt(req.query.limit as string) || 5
-      const suggestions = await getSuggestedBlogs(blogId, limit)
-      res.json(suggestions)
-    } catch (error) {
-      logger.error('Error fetching suggested blogs:', error)
-      res.status(500).json({ message: 'Error fetching suggested blogs' })
+      return res.status(500).json({ message: 'Error searching blogs' })
     }
   }
 
   // Get user's blogs
-  async getUserBlogs(req: Request, res: Response): Promise<void> {
+  async getUserBlogs(req: Request, res: Response): Promise<Response> {
     try {
       const userId = req.params.userId || req.user!.id
       const page = parseInt(req.query.page as string) || 1
@@ -362,7 +425,7 @@ export class BlogController {
         }),
       ])
 
-      res.json({
+      return res.json({
         blogs,
         total,
         page,
@@ -370,7 +433,7 @@ export class BlogController {
       })
     } catch (error) {
       logger.error('Error fetching user blogs:', error)
-      res.status(500).json({ message: 'Error fetching user blogs' })
+      return res.status(500).json({ message: 'Error fetching user blogs' })
     }
   }
 }

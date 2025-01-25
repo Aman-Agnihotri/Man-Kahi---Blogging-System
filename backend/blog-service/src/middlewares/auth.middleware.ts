@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import axios from 'axios'
 import { logger } from '../utils/logger'
 
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://auth-service:3001'
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL ?? 'http://auth-service:3001'
 
 interface AuthUser {
   id: string;

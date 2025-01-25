@@ -3,7 +3,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import dotenv from 'dotenv'
 import session from 'express-session'
-import RedisStore from 'connect-redis'
+import { RedisStore } from 'connect-redis'
 import { logger } from './utils/logger'
 import authRoutes from './routes/auth.routes'
 import { oauthRoutes } from './routes/oauth.routes'
@@ -15,10 +15,10 @@ import { redis } from './config/redis'
 dotenv.config()
 
 const app = express()
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT ?? 3001
 
 // Session configuration
-const SESSION_SECRET = process.env.SESSION_SECRET || 'your-session-secret'
+const SESSION_SECRET = process.env.SESSION_SECRET ?? 'your-session-secret'
 
 // Middleware
 app.use(helmet()) // Security headers
@@ -115,4 +115,3 @@ const startServer = async () => {
   }
 }
 
-startServer()

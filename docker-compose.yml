@@ -33,6 +33,28 @@ services:
             timeout: 5s
             retries: 5
 
+    # Elasticsearch
+    elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+        container_name: mankahi-elasticsearch
+        environment:
+            - discovery.type=single-node
+            - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+            - xpack.security.enabled=false
+        ports:
+            - "9200:9200"
+        volumes:
+            - elasticsearch-data:/usr/share/elasticsearch/data
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:9200"]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+
     # Auth Service
     auth-service:
         build:
@@ -74,15 +96,25 @@ services:
                 condition: service_healthy
             redis:
                 condition: service_healthy
+            elasticsearch:
+                condition: service_healthy
         environment:
             NODE_ENV: development
             PORT: 3002
             DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_blog
             REDIS_URL: redis://redis:6379
+            ELASTICSEARCH_URL: http://elasticsearch:9200
+            ELASTICSEARCH_INDEX_SHARDS: 3
+            ELASTICSEARCH_INDEX_REPLICAS: 1
             AUTH_SERVICE_URL: http://auth-service:3001
             RATE_LIMIT_WINDOW: 900
             RATE_LIMIT_MAX_REQUESTS: 100
             CORS_ORIGIN: http://localhost:3000
+            BLOG_CACHE_TTL: 3600
+            SEARCH_CACHE_TTL: 300
+            ANALYTICS_CACHE_TTL: 60
+            MAX_FILE_SIZE: 5242880
+            ALLOWED_IMAGE_TYPES: "image/jpeg,image/png,image/webp"
         volumes:
             - ./backend/blog-service:/app
             - /app/node_modules
@@ -125,4 +157,5 @@ services:
 volumes:
     postgres-data:
     redis-data:
+    elasticsearch-data:
     blog-uploads:
