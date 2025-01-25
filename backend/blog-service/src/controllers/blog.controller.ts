@@ -40,7 +40,7 @@ const searchQuerySchema = z.object({
 
 export class BlogController {
   // Create new blog
-  async create(req: Request, res: Response): Promise<Response> {
+  async create(req: Request, res: Response): Promise<any> {
     try {
       const { body, file } = req
       const validatedInput = createBlogSchema.parse(body)
@@ -64,8 +64,7 @@ export class BlogController {
       // Process image if provided
       let imageUrl: string | undefined
       if (file) {
-        const processedImagePath = await processImage(file.path)
-        imageUrl = processedImagePath
+        imageUrl = await processImage(file)
       }
 
       // Create blog post
@@ -146,7 +145,7 @@ export class BlogController {
   }
 
   // Get blog by slug
-  async getBySlug(req: Request, res: Response): Promise<Response> {
+  async getBySlug(req: Request, res: Response): Promise<any> {
     try {
       const { slug } = req.params
 
@@ -204,7 +203,7 @@ export class BlogController {
   }
 
   // Update blog
-  async update(req: Request, res: Response): Promise<Response> {
+  async update(req: Request, res: Response): Promise<any> {
     try {
       const { id } = req.params
       const validatedInput = updateBlogSchema.parse(req.body)
@@ -318,7 +317,7 @@ export class BlogController {
   }
 
   // Delete blog (soft delete)
-  async delete(req: Request, res: Response): Promise<Response> {
+  async delete(req: Request, res: Response): Promise<any> {
     try {
       const { id } = req.params
 
@@ -357,7 +356,7 @@ export class BlogController {
   }
 
   // Search blogs
-  async search(req: Request, res: Response): Promise<Response> {
+  async search(req: Request, res: Response): Promise<any> {
     try {
       const params = searchQuerySchema.parse(req.query)
       
@@ -389,8 +388,100 @@ export class BlogController {
     }
   }
 
+  // Get popular tags
+  async getPopularTags(req: Request, res: Response): Promise<void> {
+    try {
+      const tags = await prisma.tag.findMany({
+        take: 20,
+        where: {
+          blogs: {
+            some: {
+              blog: {
+                published: true,
+                deletedAt: null
+              }
+            }
+          }
+        },
+        orderBy: {
+          blogs: {
+            _count: 'desc'
+          }
+        }
+      });
+
+      res.json(tags);
+    } catch (error) {
+      logger.error('Error fetching popular tags:', error);
+      res.status(500).json({ message: 'Error fetching popular tags' });
+    }
+  }
+
+  // Get suggested blogs
+  async getSuggestedBlogs(req: Request, res: Response): Promise<void> {
+    try {
+      const { blogId } = req.params;
+      const currentBlog = await prisma.blog.findUnique({
+        where: { id: blogId },
+        include: {
+          tags: {
+            include: { tag: true }
+          },
+          category: true
+        }
+      });
+
+      if (!currentBlog) {
+        res.status(404).json({ message: 'Blog not found' });
+        return;
+      }
+
+      const tagIds = currentBlog.tags.map(t => t.tagId);
+      
+      const suggestedBlogs = await prisma.blog.findMany({
+        where: {
+          OR: [
+            {
+              tags: {
+                some: {
+                  tagId: {
+                    in: tagIds
+                  }
+                }
+              }
+            },
+            {
+              categoryId: currentBlog.categoryId
+            }
+          ],
+          AND: {
+            id: { not: blogId },
+            published: true,
+            deletedAt: null
+          }
+        },
+        take: 5,
+        orderBy: {
+          createdAt: 'desc'
+        },
+        include: {
+          category: true,
+          tags: {
+            include: { tag: true }
+          },
+          analytics: true
+        }
+      });
+
+      res.json(suggestedBlogs);
+    } catch (error) {
+      logger.error('Error fetching suggested blogs:', error);
+      res.status(500).json({ message: 'Error fetching suggested blogs' });
+    }
+  }
+
   // Get user's blogs
-  async getUserBlogs(req: Request, res: Response): Promise<Response> {
+  async getUserBlogs(req: Request, res: Response): Promise<any> {
     try {
       const userId = req.params.userId || req.user!.id
       const page = parseInt(req.query.page as string) || 1

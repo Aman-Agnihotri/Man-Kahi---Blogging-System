@@ -209,6 +209,38 @@ services:
             - analytics-logs:/app/logs
         command: npm run dev
 
+    # Admin Service
+    admin-service:
+        build:
+            context: ./backend/admin-service
+            target: development
+        container_name: mankahi-admin
+        ports:
+            - "3004:3004"
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            analytics-service:
+                condition: service_started
+        environment:
+            NODE_ENV: development
+            PORT: 3004
+            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_blog
+            JWT_SECRET: ${JWT_SECRET:-your-secret-key}
+            JWT_EXPIRES_IN: 1d
+            ANALYTICS_SERVICE_URL: http://analytics-service:3003
+            ADMIN_RATE_LIMIT_WINDOW: 900000
+            ADMIN_RATE_LIMIT_MAX: 100
+            LOG_LEVEL: debug
+            CORS_ORIGIN: http://localhost:3000
+        volumes:
+            - ./backend/admin-service:/app
+            - /app/node_modules
+            - admin-logs:/app/logs
+        command: npm run dev
+
 volumes:
     postgres-data:
     redis-data:
@@ -216,3 +248,4 @@ volumes:
     minio-data:
     blog-uploads:
     analytics-logs:
+    admin-logs:
