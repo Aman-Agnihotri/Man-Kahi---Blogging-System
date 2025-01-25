@@ -23,12 +23,16 @@ model User {
 }
 
 model Blog {
-    id        String    @id @default(cuid())
-    title     String    @db.VarChar(200)
-    content   String    @db.Text
-    createdAt DateTime  @default(now()) @db.Timestamp(6)
-    updatedAt DateTime  @updatedAt @db.Timestamp(6)
-    deletedAt DateTime? @db.Timestamp(6)
+    id          String    @id @default(cuid())
+    title       String    @db.VarChar(200)
+    content     String    @db.Text
+    readTime    Int       @default(0) // Estimated read time in minutes
+    slug        String    @unique // SEO-friendly URL
+    createdAt   DateTime  @default(now()) @db.Timestamp(6)
+    updatedAt   DateTime  @updatedAt @db.Timestamp(6)
+    deletedAt   DateTime? @db.Timestamp(6)
+    published   Boolean   @default(false)
+    description String?   @db.Text // For SEO meta description
 
     authorId String
     author   User   @relation(fields: [authorId], references: [id])
@@ -40,19 +44,54 @@ model Blog {
     analytics BlogAnalytics?
 
     @@index([title])
-    @@index([authorId, createdAt]) // For common queries
+    @@index([slug])
+    @@index([authorId, createdAt])
+    @@index([published, createdAt])
     @@map("blogs")
 }
 
 model BlogAnalytics {
-    id     String @id @default(cuid())
-    blogId String @unique
-    views  Int    @default(0)
-    reads  Int    @default(0)
+    id           String   @id @default(cuid())
+    blogId       String   @unique
+    views        Int      @default(0)
+    uniqueViews  Int      @default(0)
+    reads        Int      @default(0)
+    readProgress Float    @default(0) // Average read progress (0-100%)
+    linkClicks   Int      @default(0)
+    lastUpdated  DateTime @updatedAt
 
-    blog Blog @relation(fields: [blogId], references: [id])
+    recentVisitors Json? @db.JsonB // Store unique visitors for last 24h as array of hashed IPs
+    blog           Blog  @relation(fields: [blogId], references: [id])
 
+    @@index([views(sort: Desc)])
     @@map("blog_analytics")
+}
+
+// New model for cache control
+model CacheControl {
+    id              String    @id @default(cuid())
+    key             String    @unique // Cache key (e.g., blog:slug, search:query)
+    lastInvalidated DateTime  @default(now())
+    invalidateAt    DateTime? // Schedule invalidation
+    ttl             Int       @default(3600) // Time to live in seconds
+    type            String // Type of cached content (blog, search, etc.)
+
+    @@index([key])
+    @@index([type, lastInvalidated])
+    @@map("cache_control")
+}
+
+// New model for tracking real-time analytics events
+model AnalyticsEvent {
+    id        String   @id @default(cuid())
+    blogId    String
+    type      String // Event type (view, read, click)
+    timestamp DateTime @default(now())
+    metadata  Json?    @db.JsonB // Additional event data
+
+    @@index([timestamp(sort: Desc)])
+    @@index([blogId, type, timestamp])
+    @@map("analytics_events")
 }
 
 model BlogTag {
