@@ -11,7 +11,7 @@ services:
             - "5432:5432"
         volumes:
             - postgres-data:/var/lib/postgresql/data
-            - ./docker/postgres:/docker-entrypoint-initdb.d
+            - ../postgres:/docker-entrypoint-initdb.d
         healthcheck:
             test: ["CMD-SHELL", "pg_isready -U hunterhhh412"]
             interval: 10s
@@ -77,7 +77,7 @@ services:
     # Auth Service
     auth-service:
         build:
-            context: ./backend/auth-service
+            context: ../../backend/auth-service
             target: development
         container_name: mankahi-auth
         ports:
@@ -104,14 +104,14 @@ services:
             RATE_LIMIT_MAX_REQUESTS: 100
             CORS_ORIGIN: http://localhost:3000
         volumes:
-            - ./backend/auth-service:/app
+            - ../../backend/auth-service:/app
             - /app/node_modules
         command: npm run dev
 
     # Blog Service
     blog-service:
         build:
-            context: ./backend/blog-service
+            context: ../../backend/blog-service
             target: development
         container_name: mankahi-blog
         ports:
@@ -141,14 +141,14 @@ services:
             MAX_FILE_SIZE: 5242880
             ALLOWED_IMAGE_TYPES: "image/jpeg,image/png,image/webp"
         volumes:
-            - ./backend/blog-service:/app
+            - ../../backend/blog-service:/app
             - /app/node_modules
             - blog-uploads:/app/uploads
         command: npm run dev
 
     # Frontend (Nuxt)
     frontend:
-        build: ./frontend
+        build: ../../frontend
         container_name: mankahi-frontend
         ports:
             - "3000:3000"
@@ -156,7 +156,7 @@ services:
             - auth-service
             - blog-service
         volumes:
-            - ./frontend:/app
+            - ../../frontend:/app
             - /app/node_modules
         command: npm run dev
 
@@ -171,7 +171,8 @@ services:
             - auth-service
             - blog-service
         volumes:
-            - ./nginx.conf:/etc/nginx/nginx.conf:ro
+            - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+            - ../nginx/cors.conf:/etc/nginx/cors.conf:ro
             - blog-uploads:/var/www/uploads
         healthcheck:
             test: ["CMD", "nginx", "-t"]
@@ -182,7 +183,7 @@ services:
     # Analytics Service
     analytics-service:
         build:
-            context: ./backend/analytics-service
+            context: ../../backend/analytics-service
             target: development
         container_name: mankahi-analytics
         ports:
@@ -204,7 +205,7 @@ services:
             DASHBOARD_RATE_LIMIT_MAX: 300
             CORS_ORIGIN: http://localhost:3000
         volumes:
-            - ./backend/analytics-service:/app
+            - ../../backend/analytics-service:/app
             - /app/node_modules
             - analytics-logs:/app/logs
         command: npm run dev
@@ -212,7 +213,7 @@ services:
     # Admin Service
     admin-service:
         build:
-            context: ./backend/admin-service
+            context: ../../backend/admin-service
             target: development
         container_name: mankahi-admin
         ports:
@@ -236,7 +237,7 @@ services:
             LOG_LEVEL: debug
             CORS_ORIGIN: http://localhost:3000
         volumes:
-            - ./backend/admin-service:/app
+            - ../../backend/admin-service:/app
             - /app/node_modules
             - admin-logs:/app/logs
         command: npm run dev

@@ -64,7 +64,7 @@ fi
 
 # Apply/Delete Kubernetes configurations
 echo "Performing $ACTION for $ENVIRONMENT environment..."
-kustomize build k8s/overlays/$ENVIRONMENT | kubectl $ACTION -f -
+kustomize build ../overlays/$ENVIRONMENT | kubectl $ACTION -f -
 
 if [[ "$ACTION" == "apply" ]]; then
     # Wait for deployments to be ready

@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
     # PostgreSQL with optimized settings
     postgres:
@@ -13,7 +11,7 @@ services:
             - "5432:5432"
         volumes:
             - postgres-data:/var/lib/postgresql/data
-            - ./docker/postgres:/docker-entrypoint-initdb.d
+            - ../postgres:/docker-entrypoint-initdb.d
         healthcheck:
             test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
             interval: 10s
@@ -123,7 +121,7 @@ services:
     # Auth Service
     auth-service:
         build:
-            context: ./backend/auth-service
+            context: ../../backend/auth-service
             target: production
         container_name: mankahi-auth-prod
         restart: unless-stopped
@@ -157,7 +155,7 @@ services:
     # Blog Service
     blog-service:
         build:
-            context: ./backend/blog-service
+            context: ../../backend/blog-service
             target: production
         container_name: mankahi-blog-prod
         restart: unless-stopped
@@ -201,7 +199,7 @@ services:
     # Analytics Service
     analytics-service:
         build:
-            context: ./backend/analytics-service
+            context: ../../backend/analytics-service
             target: production
         container_name: mankahi-analytics-prod
         restart: unless-stopped
@@ -235,7 +233,7 @@ services:
     # Admin Service
     admin-service:
         build:
-            context: ./backend/admin-service
+            context: ../../backend/admin-service
             target: production
         container_name: mankahi-admin-prod
         restart: unless-stopped
@@ -270,7 +268,7 @@ services:
     # Frontend
     frontend:
         build:
-            context: ./frontend
+            context: ../../frontend
             target: production
         container_name: mankahi-frontend-prod
         restart: unless-stopped
@@ -300,8 +298,9 @@ services:
             - "80:80"
             - "443:443"
         volumes:
-            - ./nginx.conf:/etc/nginx/nginx.conf:ro
-            - ./nginx/ssl:/etc/nginx/ssl:ro
+            - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+            - ../nginx/cors.conf:/etc/nginx/cors.conf:ro
+            - ../nginx/ssl:/etc/nginx/ssl:ro
             - blog-uploads:/var/www/uploads
             - nginx-logs:/var/log/nginx
         deploy:
