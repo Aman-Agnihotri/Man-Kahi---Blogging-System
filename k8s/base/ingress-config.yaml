@@ -1,0 +1,43 @@
+---
+# Service Account for Nginx Ingress Controller
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nginx-ingress
+  namespace: mankahi
+
+---
+# ConfigMap for Nginx Ingress Controller
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-ingress-controller-config
+  namespace: mankahi
+data:
+  enable-vts-status: "true"
+  proxy-connect-timeout: "10"
+  proxy-read-timeout: "120"
+  proxy-send-timeout: "120"
+  proxy-body-size: "50m"
+
+---
+# Service for Nginx Ingress Controller
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller
+  namespace: mankahi
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 443
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller

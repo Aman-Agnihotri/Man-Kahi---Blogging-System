@@ -1,11 +1,10 @@
-import { PrismaClient, Prisma } from '@prisma/client'
-import { hashPassword, verifyPassword } from '../utils/password'
-import { generateToken as createToken, getTokenExpiryInSeconds } from '../utils/jwt'
-import { addToBlacklist } from '../config/redis'
-import { logger } from '../utils/logger'
-import { prisma } from '../config/prisma'
-import { RegisterInput, LoginResponse, AuthUser, UserWithRoles } from '../types/auth.types'
-import { OAuthProvider } from '../config/oauth'
+import { PrismaClient } from '@prisma/client'
+import { hashPassword, verifyPassword } from '@/utils/password'
+import { generateToken, getTokenExpiryInSeconds, TokenPayload } from '@shared/utils/jwt'
+import { addToBlacklist } from '@/config/redis'
+import { logger } from '@/utils/logger'
+import { prisma } from '@/config/prisma'
+import { RegisterInput, LoginResponse, AuthUser, UserWithRoles } from '@/types/auth.types'
 
 interface LoginInput {
     email: string
@@ -13,7 +12,7 @@ interface LoginInput {
 }
 
 export class AuthService {
-    private prisma: PrismaClient
+    private readonly prisma: PrismaClient
 
     constructor() {
         this.prisma = prisma
@@ -157,11 +156,12 @@ export class AuthService {
 
         const userRoles = user.UserRole.map(ur => ur.role.name)
 
-        return createToken({
+        return generateToken({
             userId: user.id,
             email: user.email,
-            roles: userRoles
-        })
+            roles: userRoles,
+            type: 'access'
+        } as TokenPayload)
     }
 
     async generateRefreshToken(userId: string): Promise<string> {
@@ -174,14 +174,12 @@ export class AuthService {
         }
 
         // Generate a longer-lived token for refresh
-        return createToken(
-            {
-                userId: user.id,
-                email: user.email,
-                type: 'refresh'
-            },
-            '7d' // 7 days expiry for refresh token
-        )
+        return generateToken({
+            userId: user.id,
+            email: user.email,
+            roles: [],  // Refresh tokens don't need roles
+            type: 'refresh'
+        } as TokenPayload)
     }
 
     async logout(token: string): Promise<void> {

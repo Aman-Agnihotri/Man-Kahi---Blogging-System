@@ -1,8 +1,7 @@
-import { Request, Response } from 'express'
 import { z } from 'zod'
-import { AuthService } from '../services/auth.service'
-import { logger } from '../utils/logger'
-import { AuthRequest } from '../middlewares/auth.middleware'
+import { AuthService } from '@/services/auth.service'
+import { logger } from '@/utils/logger'
+import { AuthRequest } from '@shared/middlewares/authenticateUser'
 import { RequestHandler } from 'express-serve-static-core'
 
 // Input validation schemas
@@ -14,7 +13,7 @@ const registerSchema = z.object({
     .min(8)
     .max(100)
     .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d\w\W]{8,}$/,
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/,
       'Password must contain at least one uppercase letter, one lowercase letter, and one number'
     ),
 })
@@ -30,7 +29,7 @@ const addRoleSchema = z.object({
 })
 
 export class AuthController {
-  private authService: AuthService
+  private readonly authService: AuthService
 
   constructor() {
     this.authService = new AuthService()

@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: mankahi
+data:
+  POSTGRES_DB: mankahi
+  POSTGRES_USER: postgres
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: mankahi
+data:
+  redis.conf: |
+    maxmemory 4gb
+    maxmemory-policy allkeys-lru
+    appendonly yes
+    save 900 1
+    save 300 10
+    save 60 10000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: elasticsearch-config
+  namespace: mankahi
+data:
+  elasticsearch.yml: |
+    cluster.name: mankahi-search
+    node.name: ${HOSTNAME}
+    network.host: 0.0.0.0
+    discovery.type: single-node
+    xpack.security.enabled: false
+    indices.memory.index_buffer_size: 30%
+    indices.queries.cache.size: 20%
+    thread_pool.write.size: 4
+    thread_pool.search.size: 8
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: services-config
+  namespace: mankahi
+data:
+  NODE_ENV: production
+  REDIS_HOST: redis-service
+  REDIS_PORT: "6379"
+  ELASTICSEARCH_NODE: http://elasticsearch-service:9200
+  ANALYTICS_SERVICE_URL: http://analytics-service:3003
+  AUTH_SERVICE_URL: http://auth-service:3001
+  BLOG_SERVICE_URL: http://blog-service:3002
+  ADMIN_SERVICE_URL: http://admin-service:3004

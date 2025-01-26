@@ -1,0 +1,178 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: mankahi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+            - secretRef:
+                name: postgres-secret
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-data
+          resources:
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+              ephemeral-storage: "1Gi"
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+              ephemeral-storage: "500Mi"
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: mankahi
+spec:
+  selector:
+    app: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: mankahi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+          volumeMounts:
+            - mountPath: /data
+              name: redis-data
+            - mountPath: /usr/local/etc/redis
+              name: redis-config
+          resources:
+            limits:
+              memory: "5Gi"
+              cpu: "1000m"
+              ephemeral-storage: "2Gi"
+            requests:
+              memory: "2Gi"
+              cpu: "500m"
+              ephemeral-storage: "1Gi"
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-pvc
+        - name: redis-config
+          configMap:
+            name: redis-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: mankahi
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch
+  namespace: mankahi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: elasticsearch
+          image: elasticsearch:8.10.4
+          ports:
+            - containerPort: 9200
+            - containerPort: 9300
+          volumeMounts:
+            - mountPath: /usr/share/elasticsearch/data
+              name: elasticsearch-data
+            - mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+              name: elasticsearch-config
+              subPath: elasticsearch.yml
+          env:
+            - name: ES_JAVA_OPTS
+              value: "-Xms1g -Xmx1g"
+          resources:
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+              ephemeral-storage: "2Gi"
+            requests:
+              memory: "1Gi"
+              cpu: "1000m"
+              ephemeral-storage: "1Gi"
+      volumes:
+        - name: elasticsearch-data
+          persistentVolumeClaim:
+            claimName: elasticsearch-pvc
+        - name: elasticsearch-config
+          configMap:
+            name: elasticsearch-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-service
+  namespace: mankahi
+spec:
+  selector:
+    app: elasticsearch
+  ports:
+    - name: rest
+      protocol: TCP
+      port: 9200
+      targetPort: 9200
+    - name: inter-node
+      protocol: TCP
+      port: 9300
+      targetPort: 9300

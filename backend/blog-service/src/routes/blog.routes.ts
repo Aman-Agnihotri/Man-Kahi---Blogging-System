@@ -1,6 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import { BlogController } from '../controllers/blog.controller';
-import { authenticate, authorize } from '../middlewares/auth.middleware';
+import { authenticateUser as authenticate, authorize } from '@shared/middlewares/authenticateUser';
 import { upload } from '../config/upload';
 import { apiRateLimit } from '../middlewares/rate-limit.middleware';
 import {

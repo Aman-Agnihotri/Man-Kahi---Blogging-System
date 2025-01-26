@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - storage.yaml
+  - config.yaml
+  - infrastructure.yaml
+  - services.yaml
+  - ingress.yaml
+  - ingress-config.yaml
+  - ingress-rbac.yaml
+  - monitoring.yaml
+
+commonLabels:
+  app.kubernetes.io/name: mankahi
+  app.kubernetes.io/instance: mankahi
+  app.kubernetes.io/part-of: mankahi-blogging-platform
+
+namespace: mankahi
+
+secretGenerator:
+  - name: postgres-secret
+    envs:
+      - secrets/postgres.env
+  - name: services-secret
+    envs:
+      - secrets/services.env
