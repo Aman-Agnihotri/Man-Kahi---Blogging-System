@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@shared/utils/prismaClient'
 import logger from '@shared/utils/logger'
 import { processMarkdown, validateMarkdown } from '@utils/markdown'
 import { processImage } from '@config/upload'
@@ -10,8 +10,6 @@ import {
   searchCache
 } from '@shared/config/redis'
 import slugify from 'slugify'
-
-const prisma = new PrismaClient()
 
 // Input validation schemas
 const createBlogSchema = z.object({

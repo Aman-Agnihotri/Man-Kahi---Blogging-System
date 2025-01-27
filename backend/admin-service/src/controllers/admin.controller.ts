@@ -1,27 +1,28 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { PrismaClient, Prisma } from '@prisma/client';
+import type { ExtendedBlog, Blog, User, Tag } from '@shared/utils/prismaClient';
+import prisma from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
 import axios from 'axios';
 
-type BlogWithRelations = Prisma.BlogGetPayload<{
-  include: {
-    author: {
-      select: {
-        id: true;
-        username: true;
-      };
-    };
-    category: true;
-    tags: {
-      include: {
-        tag: true;
-      };
-    };
+type BlogWithAnalytics = ExtendedBlog & {
+  analytics: {
+    views: number;
+    reads: number;
   };
-}>;
+};
 
-const prisma = new PrismaClient();
+type AnalyticsItem = {
+  blogId: string;
+  views: number;
+  reads: number;
+};
+
+type BlogTagRelation = {
+  blog: {
+    id: string;
+  };
+};
 
 const timeframeSchema = z.enum(['1h', '24h', '7d', '30d', 'all']).default('24h');
 const dateRangeSchema = z.object({
@@ -40,21 +41,31 @@ export class AdminController {
   async getDashboardStats(req: Request, res: Response): Promise<Response> {
     try {
       const timeframe = timeframeSchema.parse(req.query.timeframe);
+      const dateRange = dateRangeSchema.parse(req.query.dateRange);
 
       // Get total blogs count
-      const totalBlogs = await prisma.blog.count({
-        where: { deletedAt: null }
+      const totalBlogs = await (prisma as any).blog.count({
+        where: {
+          published: true
+        }
       });
 
       // Get total users count
-      const totalUsers = await prisma.user.count({
-        where: { deletedAt: null }
+      const totalUsers = await (prisma as any).user.count({
+        where: {
+          emailVerified: true
+        }
       });
 
       // Get total views and reads from analytics service
       const analyticsResponse = await axios.get(
         `${this.analyticsServiceUrl}/api/analytics/stats/overall`,
-        { params: { timeframe } }
+        { 
+          params: dateRange ? {
+            start: dateRange.start,
+            end: dateRange.end
+          } : { timeframe }
+        }
       );
 
       return res.json({
@@ -73,10 +84,16 @@ export class AdminController {
     try {
       const { blogId } = req.params;
       const timeframe = timeframeSchema.parse(req.query.timeframe);
+      const dateRange = dateRangeSchema.parse(req.query.dateRange);
 
       const analyticsResponse = await axios.get(
         `${this.analyticsServiceUrl}/api/analytics/blog/${blogId}`,
-        { params: { timeframe } }
+        { 
+          params: dateRange ? {
+            start: dateRange.start,
+            end: dateRange.end
+          } : { timeframe }
+        }
       );
 
       return res.json(analyticsResponse.data);
@@ -91,23 +108,27 @@ export class AdminController {
     try {
       const { userId } = req.params;
       const timeframe = timeframeSchema.parse(req.query.timeframe);
+      const dateRange = dateRangeSchema.parse(req.query.dateRange);
 
       // Get user's blogs
-      const blogs = await prisma.blog.findMany({
+      const blogs = await (prisma as any).blog.findMany({
         where: {
           authorId: userId,
-          deletedAt: null
+          published: true
         },
         select: {
           id: true,
           title: true
         }
-      });
+      }) as Pick<Blog, 'id' | 'title'>[];
 
       // Get analytics for each blog
-      const analyticsPromises = blogs.map(blog => 
+      const analyticsPromises = blogs.map((blog) => 
         axios.get(`${this.analyticsServiceUrl}/api/analytics/blog/${blog.id}`, {
-          params: { timeframe }
+          params: dateRange ? {
+            start: dateRange.start,
+            end: dateRange.end
+          } : { timeframe }
         })
       );
 
@@ -130,18 +151,24 @@ export class AdminController {
   async getTrendingContent(req: Request, res: Response): Promise<Response> {
     try {
       const timeframe = timeframeSchema.parse(req.query.timeframe);
+      const dateRange = dateRangeSchema.parse(req.query.dateRange);
 
       const analyticsResponse = await axios.get(
         `${this.analyticsServiceUrl}/api/analytics/trending`,
-        { params: { timeframe } }
+        { 
+          params: dateRange ? {
+            start: dateRange.start,
+            end: dateRange.end
+          } : { timeframe }
+        }
       );
 
       // Enrich analytics data with blog details
-      const blogIds = analyticsResponse.data.map((item: any) => item.blogId);
-      const blogs = await prisma.blog.findMany({
+      const blogIds = analyticsResponse.data.map((item: AnalyticsItem) => item.blogId);
+      const blogs = await (prisma as any).blog.findMany({
         where: {
           id: { in: blogIds },
-          deletedAt: null
+          published: true
         },
         include: {
           author: {
@@ -157,14 +184,20 @@ export class AdminController {
             }
           }
         }
-      });
+      }) as ExtendedBlog[];
 
       // Combine analytics with blog details
-      const enrichedData = analyticsResponse.data.map((analytics: any) => {
-        const blog = blogs.find(b => b.id === analytics.blogId);
+      const enrichedData: BlogWithAnalytics[] = analyticsResponse.data.map((analytics: AnalyticsItem) => {
+        const blog = blogs.find((b) => b.id === analytics.blogId);
+        if (!blog) {
+          throw new Error(`Blog not found with id: ${analytics.blogId}`);
+        }
         return {
-          ...analytics,
-          blog
+          ...blog,
+          analytics: {
+            views: analytics.views,
+            reads: analytics.reads
+          }
         };
       });
 
@@ -179,8 +212,9 @@ export class AdminController {
   async getTagAnalytics(req: Request, res: Response): Promise<Response> {
     try {
       const timeframe = timeframeSchema.parse(req.query.timeframe);
+      const dateRange = dateRangeSchema.parse(req.query.dateRange);
 
-      const tags = await prisma.tag.findMany({
+      const tags = await (prisma as any).tag.findMany({
         include: {
           blogs: {
             include: {
@@ -192,16 +226,25 @@ export class AdminController {
             }
           }
         }
-      });
+      }) as (Tag & { blogs: BlogTagRelation[] })[];
 
       // Get analytics for each tag's blogs
       const tagAnalytics = await Promise.all(
-        tags.map(async tag => {
-          const blogIds = tag.blogs.map(b => b.blog.id);
+        tags.map(async (tag) => {
+          const blogIds = tag.blogs.map((b: BlogTagRelation) => b.blog.id);
           
           const analyticsResponse = await axios.get(
             `${this.analyticsServiceUrl}/api/analytics/multi`,
-            { params: { blogIds, timeframe } }
+            { 
+              params: dateRange ? {
+                blogIds,
+                start: dateRange.start,
+                end: dateRange.end
+              } : { 
+                blogIds,
+                timeframe
+              }
+            }
           );
 
           return {
@@ -227,7 +270,7 @@ export class AdminController {
       const { blogId } = req.params;
       const { visible } = req.body;
 
-      const blog = await prisma.blog.update({
+      const blog = await (prisma as any).blog.update({
         where: { id: blogId },
         data: { published: visible },
         include: {
@@ -239,7 +282,7 @@ export class AdminController {
             }
           }
         }
-      });
+      }) as Blog & { author: Pick<User, 'id' | 'username' | 'email'> };
 
       return res.json(blog);
     } catch (error) {

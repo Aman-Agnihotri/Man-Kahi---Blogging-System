@@ -1,29 +1,30 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
 import { analytics as analyticsRedis } from '@shared/config/redis';
 import crypto from 'crypto';
-
-const prisma = new PrismaClient();
 
 // Input validation schemas
 const trackEventSchema = z.object({
   blogId: z.string(),
   type: z.enum(['view', 'read', 'click']),
   metadata: z.record(z.any()).optional(),
-  visitorId: z.string().optional(),
+  deviceId: z.string().optional(),
+  path: z.string(),
 });
 
 const trackProgressSchema = z.object({
   blogId: z.string(),
   progress: z.number().min(0).max(100),
-  visitorId: z.string(),
+  deviceId: z.string(),
+  path: z.string(),
 });
 
 const trackLinkSchema = z.object({
   blogId: z.string(),
   url: z.string().url(),
+  path: z.string(),
 });
 
 const getAnalyticsSchema = z.object({
@@ -36,10 +37,10 @@ export class AnalyticsController {
   async trackEvent(req: Request, res: Response): Promise<Response> {
     try {
       const validatedInput = trackEventSchema.parse(req.body);
-      const { blogId, type, metadata, visitorId } = validatedInput;
+      const { blogId, type, metadata, deviceId, path } = validatedInput;
 
-      // Generate visitor ID if not provided
-      const visitor = visitorId ?? this.generateVisitorId(req);
+      // Generate device ID if not provided
+      const device = deviceId ?? this.generateDeviceId(req);
 
       // Store event in database
       await prisma.analyticsEvent.create({
@@ -47,14 +48,15 @@ export class AnalyticsController {
           blogId,
           type,
           metadata: metadata || {},
-          visitorId: visitor,
+          deviceId: device,
+          path,
         },
       });
 
       // Update real-time stats in Redis
       switch (type) {
         case 'view':
-          await analyticsRedis.trackView(blogId, visitor);
+          await analyticsRedis.trackView(blogId, device);
           break;
         case 'read':
           await this.updateBlogAnalytics(blogId, 'reads');
@@ -75,7 +77,7 @@ export class AnalyticsController {
   async trackProgress(req: Request, res: Response): Promise<Response> {
     try {
       const validatedInput = trackProgressSchema.parse(req.body);
-      const { blogId, progress, visitorId } = validatedInput;
+      const { blogId, progress, deviceId, path } = validatedInput;
 
       // Store progress in Redis for real-time tracking
       await analyticsRedis.trackReadProgress(blogId, progress);
@@ -87,7 +89,8 @@ export class AnalyticsController {
             blogId,
             type: 'read',
             metadata: { progress },
-            visitorId,
+            deviceId,
+            path,
           },
         });
         await this.updateBlogAnalytics(blogId, 'reads');
@@ -107,10 +110,10 @@ export class AnalyticsController {
   async trackLink(req: Request, res: Response): Promise<Response> {
     try {
       const validatedInput = trackLinkSchema.parse(req.body);
-      const { blogId, url } = validatedInput;
+      const { blogId, url, path } = validatedInput;
 
       // Generate visitor ID for link clicks
-      const visitorId = this.generateVisitorId(req);
+      const deviceId = this.generateDeviceId(req);
 
       // Store event in Redis for real-time tracking
       await analyticsRedis.trackLinkClick(blogId, url);
@@ -121,7 +124,8 @@ export class AnalyticsController {
           blogId,
           type: 'click',
           metadata: { url },
-          visitorId,
+          deviceId,
+          path,
         },
       });
       
@@ -163,7 +167,7 @@ export class AnalyticsController {
   }
 
   // Private helper methods
-  private generateVisitorId(req: Request): string {
+  private generateDeviceId(req: Request): string {
     const ip = req.ip;
     const userAgent = req.headers['user-agent'] ?? '';
     return crypto

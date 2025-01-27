@@ -1,5 +1,5 @@
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
-import { redis } from '../../utils/redis';
+import { redis } from '../../config/redis';
 import { RateLimitConfig, RateLimitInfo, IRateLimiter } from './types';
 import logger from '../../utils/logger';
 import { formatDuration } from './utils';

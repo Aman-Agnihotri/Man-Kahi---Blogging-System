@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { User, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
 
 // Extend Express Request to include isAuthenticated for Passport
 declare global {

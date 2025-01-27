@@ -1,12 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
 import analyticsRoutes from '@routes/analytics.routes';
 
 const app = express();
-const prisma = new PrismaClient();
 
 // Middleware
 app.use(helmet());

@@ -1,4 +1,4 @@
-import { User, Role } from '@prisma/client'
+import { User, Role } from '@shared/utils/prismaClient'
 
 export interface AuthRequest extends Request {
     user?: AuthUser

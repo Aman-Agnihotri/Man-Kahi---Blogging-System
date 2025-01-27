@@ -1,9 +1,8 @@
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@shared/utils/prismaClient'
 import { hashPassword, verifyPassword } from '@utils/password'
 import { generateToken, getTokenExpiryInSeconds } from '@shared/utils/jwt'
 import { tokenBlacklist } from '@shared/config/redis'
 import logger from '@shared/utils/logger'
-import { prisma } from '@config/prisma'
 import { RegisterInput, LoginResponse, AuthUser, UserWithRoles } from '@/types/auth.types'
 
 interface LoginInput {
@@ -12,16 +11,10 @@ interface LoginInput {
 }
 
 export class AuthService {
-    private readonly prisma: PrismaClient
-
-    constructor() {
-        this.prisma = prisma
-    }
-
     async register(input: RegisterInput): Promise<LoginResponse> {
         try {
             // Check if user already exists
-            const existingUser = await this.prisma.user.findFirst({
+            const existingUser = await prisma.user.findFirst({
                 where: {
                     OR: [
                         { email: input.email },
@@ -38,19 +31,20 @@ export class AuthService {
             const hashedPassword = await hashPassword(input.password)
 
             // Create user with default reader role
-            const user = await this.prisma.user.create({
+            const user = await prisma.user.create({
                 data: {
                     username: input.username,
                     email: input.email,
                     password: hashedPassword,
-                    UserRole: {
+                    roles: {
                         create: {
                             role: {
                                 connectOrCreate: {
                                     where: { name: 'reader' },
                                     create: {
                                         name: 'reader',
-                                        description: 'Default reader role'
+                                        description: 'Default reader role',
+                                        slug: 'reader'
                                     }
                                 }
                             }
@@ -58,7 +52,7 @@ export class AuthService {
                     }
                 },
                 include: {
-                    UserRole: {
+                    roles: {
                         include: {
                             role: true
                         }
@@ -66,7 +60,7 @@ export class AuthService {
                 }
             })
 
-            const userRoles = user.UserRole.map(ur => ur.role.name)
+            const userRoles = user.roles.map(ur => ur.role.name)
 
             // Generate tokens
             const token = await this.generateToken(user.id)
@@ -93,10 +87,10 @@ export class AuthService {
     async login(input: LoginInput): Promise<LoginResponse> {
         try {
             // Find user
-            const user = await this.prisma.user.findUnique({
+            const user = await prisma.user.findUnique({
                 where: { email: input.email },
                 include: {
-                    UserRole: {
+                    roles: {
                         include: {
                             role: true
                         }
@@ -114,7 +108,7 @@ export class AuthService {
                 throw new Error('Invalid credentials')
             }
 
-            const userRoles = user.UserRole.map(ur => ur.role.name)
+            const userRoles = user.roles.map(ur => ur.role.name)
 
             // Generate tokens
             const token = await this.generateToken(user.id)
@@ -139,10 +133,10 @@ export class AuthService {
     }
 
     async generateToken(userId: string): Promise<string> {
-        const user = await this.prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { id: userId },
             include: {
-                UserRole: {
+                roles: {
                     include: {
                         role: true
                     }
@@ -154,7 +148,7 @@ export class AuthService {
             throw new Error('User not found')
         }
 
-        const userRoles = user.UserRole.map(ur => ur.role.name)
+        const userRoles = user.roles.map(ur => ur.role.name)
 
         return generateToken({
             id: user.id,
@@ -166,7 +160,7 @@ export class AuthService {
     }
 
     async generateRefreshToken(userId: string): Promise<string> {
-        const user = await this.prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { id: userId }
         })
 
@@ -199,10 +193,10 @@ export class AuthService {
     async addRole(userId: string, roleName: string): Promise<UserWithRoles> {
         try {
             // Check if user exists
-            const user = await this.prisma.user.findUnique({
+            const user = await prisma.user.findUnique({
                 where: { id: userId },
                 include: {
-                    UserRole: {
+                    roles: {
                         include: {
                             role: true
                         }
@@ -215,17 +209,18 @@ export class AuthService {
             }
 
             // Add role to user
-            const updatedUser = await this.prisma.user.update({
+            const updatedUser = await prisma.user.update({
                 where: { id: userId },
                 data: {
-                    UserRole: {
+                    roles: {
                         create: {
                             role: {
                                 connectOrCreate: {
                                     where: { name: roleName },
                                     create: {
                                         name: roleName,
-                                        description: `Role ${roleName}`
+                                        description: `Role ${roleName}`,
+                                        slug: roleName.toLowerCase()
                                     }
                                 }
                             }
@@ -233,7 +228,7 @@ export class AuthService {
                     }
                 },
                 include: {
-                    UserRole: {
+                    roles: {
                         include: {
                             role: true
                         }
@@ -243,7 +238,7 @@ export class AuthService {
 
             return {
                 ...updatedUser,
-                roles: updatedUser.UserRole.map(ur => ur.role)
+                roles: updatedUser.roles.map(ur => ur.role)
             }
         } catch (error) {
             logger.error('Add role error:', error)
@@ -254,7 +249,7 @@ export class AuthService {
     async unlinkProvider(userId: string, provider: string): Promise<void> {
         try {
             // Check if user has other login methods before unlinking
-            const user = await this.prisma.user.findUnique({
+            const user = await prisma.user.findUnique({
                 where: { id: userId },
                 include: {
                     oAuthProviders: true
@@ -271,7 +266,7 @@ export class AuthService {
             }
 
             // Delete the OAuth provider
-            await this.prisma.oAuthProvider.deleteMany({
+            await prisma.oAuthProvider.deleteMany({
                 where: {
                     userId,
                     provider

@@ -1,3 +1,6 @@
+// This is the main Prisma schema file that serves all microservices
+// It contains the complete data model for the entire application
+
 generator client {
     provider = "prisma-client-js"
 }
@@ -7,6 +10,7 @@ datasource db {
     url      = env("DATABASE_URL")
 }
 
+// Core user model with enhanced fields and relations
 model User {
     id        String    @id @default(cuid())
     username  String    @unique @db.VarChar(50)
@@ -16,55 +20,118 @@ model User {
     updatedAt DateTime  @updatedAt @db.Timestamp(6)
     deletedAt DateTime? @db.Timestamp(6)
 
-    blogs          Blog[] // Relation to blogs authored by the user
-    roles          UserRole[] // Relation to user roles
-    oAuthProviders OAuthProvider[] // Relation to OAuth providers
+    // Relations
+    blogs          Blog[] // User's authored blogs
+    roles          UserRole[] // User's assigned roles
+    oAuthProviders OAuthProvider[] // User's OAuth connections
 
+    // Profile-specific fields
+    bio           String?   @db.Text
+    profileImage  String?   @db.VarChar(255)
+    lastLoginAt   DateTime? @db.Timestamp(6)
+    emailVerified Boolean   @default(false)
+
+    // Analytics and tracking
+    lastIp        String?   @db.VarChar(45)
+    loginAttempts Int       @default(0)
+    lockedUntil   DateTime? @db.Timestamp(6)
+
+    @@index([email])
+    @@index([username])
+    @@index([lastLoginAt])
     @@map("users")
 }
 
+// OAuth provider integration
 model OAuthProvider {
     id         String   @id @default(cuid())
-    provider   String // e.g. 'google', 'github'
+    provider   String // e.g., 'google', 'github'
     providerId String // ID from the provider
-    user       User     @relation(fields: [userId], references: [id])
+    user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
     userId     String
     createdAt  DateTime @default(now()) @db.Timestamp(6)
     updatedAt  DateTime @updatedAt @db.Timestamp(6)
 
+    // Provider-specific data
+    accessToken  String?   @db.Text
+    refreshToken String?   @db.Text
+    expiresAt    DateTime?
+    tokenType    String?   @db.VarChar(50)
+    scope        String?   @db.Text
+    idToken      String?   @db.Text
+    profileData  Json?     @db.JsonB // Store provider-specific profile data
+
     @@unique([provider, providerId])
     @@unique([provider, userId])
+    @@index([provider])
     @@map("oauth_providers")
 }
 
+// Core blog model with enhanced features
 model Blog {
     id          String    @id @default(cuid())
     title       String    @db.VarChar(200)
     content     String    @db.Text
     readTime    Int       @default(0) // Estimated read time in minutes
-    slug        String    @unique // SEO-friendly URL
+    slug        String    @unique @db.VarChar(200) // SEO-friendly URL
     createdAt   DateTime  @default(now()) @db.Timestamp(6)
     updatedAt   DateTime  @updatedAt @db.Timestamp(6)
     deletedAt   DateTime? @db.Timestamp(6)
     published   Boolean   @default(false)
     description String?   @db.Text // For SEO meta description
 
-    authorId String
-    author   User   @relation(fields: [authorId], references: [id])
+    // Content-specific fields
+    contentType String  @default("markdown") @db.VarChar(50) // markdown/html/richtext
+    excerpt     String? @db.Text
+    coverImage  String? @db.VarChar(255)
+    language    String  @default("en") @db.VarChar(10)
 
+    // SEO and metadata
+    metaTitle       String? @db.VarChar(200)
+    metaDescription String? @db.Text
+    canonicalUrl    String? @db.VarChar(255)
+    featured        Boolean @default(false)
+
+    // Content management
+    version     Int       @default(1) // Content version tracking
+    status      String    @default("draft") @db.VarChar(20) // draft/published/archived
+    publishedAt DateTime? @db.Timestamp(6)
+
+    // Relations
+    authorId   String
+    author     User           @relation(fields: [authorId], references: [id], onDelete: Restrict)
     tags       BlogTag[]
     categoryId String?
-    category   Category? @relation(fields: [categoryId], references: [id])
+    category   Category?      @relation(fields: [categoryId], references: [id])
+    analytics  BlogAnalytics?
+    revision   BlogRevision[]
 
-    analytics BlogAnalytics?
-
+    // Indexes for common query patterns
     @@index([title])
     @@index([slug])
     @@index([authorId, createdAt])
     @@index([published, createdAt])
+    @@index([language])
     @@map("blogs")
 }
 
+// Blog content revision history
+model BlogRevision {
+    id        String   @id @default(cuid())
+    blogId    String
+    blog      Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+    version   Int
+    content   String   @db.Text
+    createdAt DateTime @default(now()) @db.Timestamp(6)
+    createdBy String // User ID who made the revision
+    comment   String?  @db.Text // Optional revision comment
+
+    @@unique([blogId, version])
+    @@index([blogId, createdAt])
+    @@map("blog_revisions")
+}
+
+// Enhanced analytics for blogs
 model BlogAnalytics {
     id           String   @id @default(cuid())
     blogId       String   @unique
@@ -73,118 +140,209 @@ model BlogAnalytics {
     reads        Int      @default(0)
     readProgress Float    @default(0) // Average read progress (0-100%)
     linkClicks   Int      @default(0)
+    shareCount   Int      @default(0)
     lastUpdated  DateTime @updatedAt
 
-    recentVisitors Json? @db.JsonB // Store unique visitors for last 24h as array of hashed IPs
-    blog           Blog  @relation(fields: [blogId], references: [id])
+    // Detailed analytics data
+    recentVisitors    Json? @db.JsonB // Store unique visitors for last 24h
+    deviceStats       Json? @db.JsonB // Device/browser statistics
+    referrerStats     Json? @db.JsonB // Traffic sources
+    timeSpentStats    Json? @db.JsonB // Time spent distribution
+    interactionEvents Json? @db.JsonB // User interaction events
+
+    // Social metrics
+    likes      Int   @default(0)
+    comments   Int   @default(0)
+    shares     Int   @default(0)
+    engagement Float @default(0) // Engagement rate calculation
+
+    blog Blog @relation(fields: [blogId], references: [id], onDelete: Cascade)
 
     @@index([views(sort: Desc)])
     @@map("blog_analytics")
 }
 
-// New model for cache control
+// Cache control for performance optimization
 model CacheControl {
     id              String    @id @default(cuid())
-    key             String    @unique // Cache key (e.g., blog:slug, search:query)
+    key             String    @unique // Cache key (e.g., blog:slug)
     lastInvalidated DateTime  @default(now())
     invalidateAt    DateTime? // Schedule invalidation
     ttl             Int       @default(3600) // Time to live in seconds
-    type            String // Type of cached content (blog, search, etc.)
+    type            String // Type of cached content
+    metadata        Json?     @db.JsonB // Additional cache metadata
+    version         Int       @default(1) // Cache version
+    compressed      Boolean   @default(false)
+    size            Int       @default(0) // Size in bytes
 
     @@index([key])
     @@index([type, lastInvalidated])
     @@map("cache_control")
 }
 
-// New model for tracking real-time analytics events
+// Real-time analytics events tracking
 model AnalyticsEvent {
     id        String   @id @default(cuid())
     blogId    String
     type      String // Event type (view, read, click)
     timestamp DateTime @default(now())
     metadata  Json?    @db.JsonB // Additional event data
+    userId    String? // Anonymous events possible
+    deviceId  String? // Device fingerprint
+    sessionId String? // Session tracking
+
+    // Enhanced tracking data
+    userAgent   String? @db.Text
+    referer     String? @db.VarChar(255)
+    path        String  @db.VarChar(255)
+    queryParams Json?   @db.JsonB
+    duration    Int? // Event duration in milliseconds
+    ip          String? @db.VarChar(45)
+    countryCode String? @db.VarChar(2)
 
     @@index([timestamp(sort: Desc)])
     @@index([blogId, type, timestamp])
+    @@index([type, userId])
     @@map("analytics_events")
 }
 
+// Enhanced blog tagging system
 model BlogTag {
-    id     String @id @default(cuid())
-    blogId String
-    blog   Blog   @relation(fields: [blogId], references: [id])
+    id        String   @id @default(cuid())
+    blogId    String
+    blog      Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+    tagId     String
+    tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+    createdAt DateTime @default(now()) @db.Timestamp(6)
 
-    tagId String
-    tag   Tag    @relation(fields: [tagId], references: [id])
-
-    @@unique([blogId, tagId]) // Ensure a blog cannot have duplicate tags
-    @@index([tagId]) // Index added for efficient tag-based filtering
+    @@unique([blogId, tagId])
+    @@index([tagId])
     @@map("blog_tags")
 }
 
+// Enhanced tag model with metadata
 model Tag {
     id          String    @id @default(cuid())
     name        String    @unique @db.VarChar(50)
-    description String?   @db.Text // Optional description for SEO or metadata
+    slug        String    @unique @db.VarChar(50)
+    description String?   @db.Text
     blogs       BlogTag[]
+    color       String?   @db.VarChar(7) // Hex color code
+    icon        String?   @db.VarChar(50)
+    createdAt   DateTime  @default(now()) @db.Timestamp(6)
+    updatedAt   DateTime  @updatedAt @db.Timestamp(6)
 
+    // Additional metadata
+    featured  Boolean @default(false)
+    sortOrder Int     @default(0)
+    seoTitle  String? @db.VarChar(200)
+    seoDesc   String? @db.Text
+
+    @@index([slug])
+    @@index([featured, sortOrder])
     @@map("tags")
 }
 
+// Enhanced category model
 model Category {
-    id    String @id @default(cuid())
-    name  String @unique @db.VarChar(50)
-    blogs Blog[]
+    id          String     @id @default(cuid())
+    name        String     @unique @db.VarChar(50)
+    slug        String     @unique @db.VarChar(50)
+    description String?    @db.Text
+    blogs       Blog[]
+    parentId    String? // For hierarchical categories
+    parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+    children    Category[] @relation("CategoryHierarchy")
+    createdAt   DateTime   @default(now()) @db.Timestamp(6)
+    updatedAt   DateTime   @updatedAt @db.Timestamp(6)
 
+    // Additional fields
+    icon      String? @db.VarChar(50)
+    color     String? @db.VarChar(7)
+    sortOrder Int     @default(0)
+    isHidden  Boolean @default(false)
+    seoTitle  String? @db.VarChar(200)
+    seoDesc   String? @db.Text
+
+    @@index([slug])
+    @@index([parentId])
+    @@index([sortOrder])
     @@map("categories")
 }
 
+// Enhanced role-based access control
 model UserRole {
-    id     String @id @default(cuid())
-    userId String
-    user   User   @relation(fields: [userId], references: [id])
-
-    roleId String
-    role   Role   @relation(fields: [roleId], references: [id])
-
+    id          String       @id @default(cuid())
+    userId      String
+    user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+    roleId      String
+    role        Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
     assignedAt  DateTime     @default(now())
-    permissions Permission[] // Relation to permissions assigned to the role
+    assignedBy  String? // User ID who assigned the role
+    expiresAt   DateTime? // Optional role expiration
+    permissions Permission[] // Direct permissions override
+    metadata    Json?        @db.JsonB // Additional role metadata
 
     @@unique([userId, roleId])
+    @@index([roleId])
+    @@index([assignedAt])
     @@map("user_roles")
 }
 
+// Enhanced role model
 model Role {
     id          String           @id @default(cuid())
     name        String           @unique @db.VarChar(50)
+    slug        String           @unique @db.VarChar(50)
+    description String?          @db.Text
     users       UserRole[]
-    permissions RolePermission[] // Updated to reference join table
+    permissions RolePermission[] // Role permissions
+    createdAt   DateTime         @default(now()) @db.Timestamp(6)
+    updatedAt   DateTime         @updatedAt @db.Timestamp(6)
+    isSystem    Boolean          @default(false) // System-defined roles
+    priority    Int              @default(0) // Role priority for conflict resolution
+    metadata    Json?            @db.JsonB // Additional role metadata
 
+    @@index([slug])
+    @@index([priority])
     @@map("roles")
 }
 
+// Enhanced role permissions
 model RolePermission {
     id           String     @id @default(cuid())
     roleId       String
     permissionId String
-    role         Role       @relation(fields: [roleId], references: [id])
-    permission   Permission @relation(fields: [permissionId], references: [id])
-
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+    role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+    permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+    createdAt    DateTime   @default(now())
+    updatedAt    DateTime   @updatedAt
+    conditions   Json?      @db.JsonB // Conditional permissions
+    priority     Int        @default(0) // Permission priority
+    metadata     Json?      @db.JsonB // Additional permission metadata
 
     @@unique([roleId, permissionId])
+    @@index([priority])
     @@map("role_permissions")
 }
 
+// Enhanced permissions model
 model Permission {
-    id          String           @id @default(cuid())
-    name        String           @unique @db.VarChar(100)
-    description String?          @db.Text
-    roles       RolePermission[]
-    slug        String           @unique @db.VarChar(50) // For immutability
-    UserRole    UserRole?        @relation(fields: [userRoleId], references: [id])
-    userRoleId  String?
+    id           String           @id @default(cuid())
+    name         String           @unique @db.VarChar(100)
+    slug         String           @unique @db.VarChar(50)
+    description  String?          @db.Text
+    roles        RolePermission[] // Role relations
+    UserRole     UserRole?        @relation(fields: [userRoleId], references: [id])
+    userRoleId   String?
+    resourceType String? // Optional resource type this permission applies to
+    action       String? // Optional action type (create, read, update, delete)
+    createdAt    DateTime         @default(now())
+    updatedAt    DateTime         @updatedAt
+    conditions   Json?            @db.JsonB // Permission conditions
+    metadata     Json?            @db.JsonB // Additional permission metadata
 
+    @@index([slug])
+    @@index([resourceType, action])
     @@map("permissions")
 }

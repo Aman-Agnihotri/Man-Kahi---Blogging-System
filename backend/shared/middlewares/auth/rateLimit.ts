@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { rateLimiting } from "../../utils/redis";
+import { rateLimit as rateLimiting } from "../../config/redis";
 import logger from "../../utils/logger";
 import { RateLimitInfo } from "./types";
 

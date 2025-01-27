@@ -1,8 +1,7 @@
-import { PrismaClient, Prisma } from '@prisma/client'
+import { prisma } from '@shared/utils/prismaClient'
+import { Prisma } from '@prisma/client'
 import logger from '@shared/utils/logger'
 import { redis } from '@shared/config/redis'
-
-const prisma = new PrismaClient()
 
 export interface SearchOptions {
   query: string

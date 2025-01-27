@@ -29,7 +29,8 @@ export const DATABASE_PROVIDER = getEnvVar('DATABASE_PROVIDER', 'postgresql');
 export const DATABASE_URL = getEnvVar('DATABASE_URL');
 
 export const JWT_SECRET = getEnvVar('JWT_SECRET');
-export const JWT_EXPIRATION = getEnvVar('JWT_EXPIRATION', '15m');
+export const JWT_ACCESS_EXPIRES_IN = getEnvVar('JWT_ACCESS_EXPIRES_IN', '1h');
+export const JWT_REFRESH_EXPIRES_IN = getEnvVar('JWT_REFRESH_EXPIRES_IN', '7d');
 
 export const LOG_LEVEL = getEnvVar('LOG_LEVEL', 'info');
 
@@ -41,45 +42,6 @@ if (NODE_ENV !== 'test' && NODE_ENV !== 'dev' && NODE_ENV !== 'prod') {
 }
 
 const isTestEnv = NODE_ENV === "test";
-
-export const rateLimitConfig = {
-    ip: {
-        windowMs: isTestEnv ? 1000 : 10 * 60 * 1000, // 10 minutes or 1 second in test environment
-        limit: isTestEnv ? 100 : 5000                // 5000 requests per 10 minutes or 100 per second in test
-    },
-    login: {
-        windowMs: isTestEnv ? 1000 : 15 * 60 * 1000, // 15 minutes or 1 second in test environment
-        limit: isTestEnv ? 5 : 10                    // 10 requests per 15 minutes or 5 per second in test
-    },
-    registration: {
-        windowMs: isTestEnv ? 1000 : 15 * 60 * 1000, // 15 minutes or 1 second in test environment
-        limit: isTestEnv ? 5 : 10                    // 10 requests per 15 minutes or 5 per second in test
-    },
-    token_refresh: {
-        windowMs: isTestEnv ? 1000 : 15 * 60 * 1000, // 15 minutes or 1 second in test environment
-        limit: 5                                                           // 5 requests per 15 minutes
-    },
-    oauth: {
-        windowMs: isTestEnv ? 1000 : 15 * 60 * 1000, // 15 minutes or 1 second in test environment
-        limit: isTestEnv ? 5 : 10                    // 10 requests per 15 minutes or 5 per second in test
-    },
-    roles: {
-        admin: { 
-            points: isTestEnv ? 50 : 10_000,         // 10,000 requests per hour or 50 requests per second in test
-            duration: isTestEnv ? 1 : 60 * 60
-        },
-        writer: { 
-            points: isTestEnv ? 25 : 5_000,          // 5,000 requests per hour or 25 requests per second in test
-            duration: isTestEnv ? 1 : 60 * 60
-        },
-        reader: { 
-            points: isTestEnv ? 100 : 1_000,         // 1,000 requests per hour or 100 requests per second in test
-            duration: isTestEnv ? 1 : 60 * 60
-        }
-    }
-};
-
-export const getRateLimitConfig = () => rateLimitConfig;
 
 // Allowed IP addresses for rate limit bypass for testing
 export const rateLimitBypassIp = "244.128.248.221";

@@ -1,9 +1,7 @@
 import { Client, estypes } from '@elastic/elasticsearch'
 import logger from '@shared/utils/logger'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@shared/utils/prismaClient'
 import { env } from '@config/env'
-
-const prisma = new PrismaClient()
 
 const elasticClient = new Client({
   node: env.ELASTICSEARCH_URL,

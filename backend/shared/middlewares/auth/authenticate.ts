@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, TokenExpiredError, JsonWebTokenError } from "../../utils/jwt";
 import { prisma } from "../../utils/prismaClient";
-import { tokenBlacklist } from "../../utils/redis";
+import { tokenBlacklist } from "../../config/redis";
 import logger from "../../utils/logger";
 import { AuthOptions, AuthenticatedRequest, TokenPayload, AuthenticatedUser } from "./types";
 import { rateLimit } from "./rateLimit";

@@ -1,4 +1,15 @@
 {
+  "name": "@backend/shared",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prisma:generate": "prisma generate",
+    "prebuild": "npm run prisma:generate",
+    "clean": "rm -rf dist",
+    "prepare": "npm run build"
+  },
   "dependencies": {
     "@prisma/client": "^6.2.1",
     "dotenv": "^16.4.7",
@@ -14,6 +25,9 @@
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7",
-    "prisma": "^6.2.1"
+    "@types/node": "^20.11.0",
+    "prisma": "^6.2.1",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
   }
 }

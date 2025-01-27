@@ -8,7 +8,7 @@ import logger from '@shared/utils/logger'
 import authRoutes from './routes/auth.routes'
 import { oauthRoutes } from './routes/oauth.routes'
 import { passport } from './controllers/passport.controller'
-import { prisma } from './config/prisma'
+import { prisma } from '@shared/utils/prismaClient'
 import { redis } from '@shared/config/redis'
 
 // Load environment variables

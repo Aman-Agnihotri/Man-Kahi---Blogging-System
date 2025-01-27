@@ -1,6 +1,6 @@
 import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@shared/utils/prismaClient'
 import { verifyToken } from '@shared/utils/jwt'
 import logger from '@shared/utils/logger'
 import {
@@ -14,7 +14,6 @@ import {
 } from '../config/oauth'
 import { AuthService } from '../services/auth.service'
 
-const prisma = new PrismaClient()
 const authService = new AuthService()
 
 /**
