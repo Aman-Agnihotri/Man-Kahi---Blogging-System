@@ -2,7 +2,7 @@ import MarkdownIt from 'markdown-it'
 import markdownItAnchor from 'markdown-it-anchor'
 import markdownItHighlightjs from 'markdown-it-highlightjs'
 import sanitizeHtml from 'sanitize-html'
-import { logger } from './logger'
+import logger from '@shared/utils/logger'
 
 // Initialize markdown parser with plugins
 const md = new MarkdownIt({
@@ -66,10 +66,12 @@ export const processMarkdown = (content: string): string => {
 // Extract metadata from markdown content
 export const extractMetadata = (content: string) => {
   try {
-    const titleMatch = content.match(/^#\s+(.+)$/m)
+    const titleRegex = /^#\s+(.+)$/m
+    const titleMatch = titleRegex.exec(content)
     const title = titleMatch ? titleMatch[1].trim() : ''
 
-    const descriptionMatch = content.match(/^>[\s\n]*(.+?)[\s\n]*$/m)
+    const descriptionRegex = /^>\s*(.+?)\s*$/m
+    const descriptionMatch = descriptionRegex.exec(content)
     const description = descriptionMatch ? descriptionMatch[1].trim() : ''
 
     // Extract all image URLs
@@ -141,24 +143,28 @@ export const validateMarkdown = (content: string): ValidationResult => {
       errors.push('Content is too short (minimum 100 characters)')
     }
 
-    // Check for title
-    if (!content.match(/^#\s+.+$/m)) {
-      errors.push('Missing title (should start with # )')
-    }
+    // Check for title 
+        const titleRegex = /^#\s+.+$/m
+        if (!titleRegex.exec(content)) {
+          errors.push('Missing title (should start with # )')
+        }
 
     // Check for broken image links
-    const imageLinks = content.match(/!\[.*?\]\((.*?)\)/g) || []
-    imageLinks.forEach(link => {
-      const url = link.match(/!\[.*?\]\((.*?)\)/)![1]
-      if (!url.match(/^(http|https|\/)/)) {
-        errors.push(`Invalid image URL: ${url}`)
-      }
-    })
+        const imageLinks = content.match(/!\[.*?\]\((.*?)\)/g) || []
+        imageLinks.forEach(link => {
+          const linkRegex = /!\[.*?\]\((.*?)\)/;
+          const matchResult = linkRegex.exec(link);
+          const url = matchResult ? matchResult[1] : '';
+          if (!/^(http|https|\/)/.exec(url)) {
+            errors.push(`Invalid image URL: ${url}`)
+          }
+        })
 
     // Check for broken code blocks
     const codeBlocks = content.match(/```[\s\S]*?```/g) || []
     codeBlocks.forEach(block => {
-      if (!block.match(/```\w*\n[\s\S]*?\n```/)) {
+      const codeBlockRegex = /```\w*\n[\s\S]*?\n```/
+      if (!codeBlockRegex.exec(block)) {
         errors.push('Malformed code block')
       }
     })

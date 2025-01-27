@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { logger } from './logger';
+import logger from '@shared/utils/logger';
 
 const ANALYTICS_SERVICE_URL = process.env.ANALYTICS_SERVICE_URL ?? 'http://analytics-service:3003';
 

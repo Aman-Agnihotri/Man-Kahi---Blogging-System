@@ -1,59 +1,54 @@
 import { Router } from 'express';
 import { AdminController } from '../controllers/admin.controller';
-import { authenticate, authorize } from '../middlewares/auth.middleware';
-import { rateLimit } from 'express-rate-limit';
+import { authenticate } from '@shared/middlewares/auth';
+import { createServiceRateLimit } from '@shared/middlewares/rateLimit';
+import type { RequestHandler } from 'express';
 
 const router = Router();
 const adminController = new AdminController();
 
-// Rate limiting for admin endpoints
-const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per 15 minutes
-  message: 'Too many requests from this IP, please try again later',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// Apply admin auth and rate limiting
+const adminMiddleware = [
+    authenticate({ roles: ['admin'] }) as unknown as RequestHandler,
+    createServiceRateLimit('admin') as unknown as RequestHandler
+];
 
-// Apply admin auth middleware to all routes
-router.use(authenticate);
-router.use(authorize(['admin']));
-router.use(adminLimiter);
+router.use(adminMiddleware);
 
 // Dashboard overview
 router.get(
-  '/dashboard',
-  adminController.getDashboardStats.bind(adminController)
+    '/dashboard',
+    adminController.getDashboardStats.bind(adminController)
 );
 
 // Blog analytics routes
 router.get(
-  '/analytics/blog/:blogId',
-  adminController.getBlogAnalytics.bind(adminController)
+    '/analytics/blog/:blogId',
+    adminController.getBlogAnalytics.bind(adminController)
 );
 
 // User analytics routes
 router.get(
-  '/analytics/user/:userId',
-  adminController.getUserAnalytics.bind(adminController)
+    '/analytics/user/:userId',
+    adminController.getUserAnalytics.bind(adminController)
 );
 
 // Trending content
 router.get(
-  '/analytics/trending',
-  adminController.getTrendingContent.bind(adminController)
+    '/analytics/trending',
+    adminController.getTrendingContent.bind(adminController)
 );
 
 // Tag analytics
 router.get(
-  '/analytics/tags',
-  adminController.getTagAnalytics.bind(adminController)
+    '/analytics/tags',
+    adminController.getTagAnalytics.bind(adminController)
 );
 
 // Blog visibility control
 router.put(
-  '/blog/:blogId/visibility',
-  adminController.updateBlogVisibility.bind(adminController)
+    '/blog/:blogId/visibility',
+    adminController.updateBlogVisibility.bind(adminController)
 );
 
 export default router;

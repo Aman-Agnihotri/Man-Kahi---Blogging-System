@@ -4,12 +4,12 @@ import helmet from 'helmet'
 import dotenv from 'dotenv'
 import session from 'express-session'
 import { RedisStore } from 'connect-redis'
-import { logger } from './utils/logger'
+import logger from '@shared/utils/logger'
 import authRoutes from './routes/auth.routes'
 import { oauthRoutes } from './routes/oauth.routes'
 import { passport } from './controllers/passport.controller'
 import { prisma } from './config/prisma'
-import { redis } from './config/redis'
+import { redis } from '@shared/config/redis'
 
 // Load environment variables
 dotenv.config()

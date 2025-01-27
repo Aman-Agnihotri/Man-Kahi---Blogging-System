@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { analyticsClient } from '@utils/analytics';
-import { logger } from '@utils/logger';
+import logger from '@shared/utils/logger';
 
 // Generate visitor ID from request data
 function generateVisitorId(req: Request): string {

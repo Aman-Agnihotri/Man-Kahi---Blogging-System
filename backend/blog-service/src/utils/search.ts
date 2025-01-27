@@ -1,6 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client'
-import { logger } from './logger'
-import { redis } from '../config/redis'
+import logger from '@shared/utils/logger'
+import { redis } from '@shared/config/redis'
 
 const prisma = new PrismaClient()
 

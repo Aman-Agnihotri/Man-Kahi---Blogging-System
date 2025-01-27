@@ -1,5 +1,5 @@
 import * as argon2 from 'argon2'
-import { logger } from './logger'
+import logger from '@shared/utils/logger'
 
 // Configure argon2 with secure defaults
 const hashingConfig = {

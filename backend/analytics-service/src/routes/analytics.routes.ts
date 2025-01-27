@@ -1,50 +1,45 @@
 import { Router } from 'express';
-import { AnalyticsController } from '@controllers/analytics.controller';
-import { rateLimit } from 'express-rate-limit';
+import { AnalyticsController } from '../controllers/analytics.controller';
+import { authenticate } from '@shared/middlewares/auth';
+import type { RequestHandler } from 'express-serve-static-core';
 
 const router = Router();
 const analyticsController = new AnalyticsController();
 
-// Rate limiting configuration
-const analyticsLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 60, // 60 requests per minute
-  message: 'Too many requests from this IP, please try again later',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Routes with rate limiting
+// Public analytics tracking routes with built-in rate limiting
 router.post(
   '/event',
-  analyticsLimiter,
+  authenticate({
+    rateLimit: { windowMs: 1 * 60 * 1000, max: 60 }
+  }) as unknown as RequestHandler,
   analyticsController.trackEvent.bind(analyticsController)
 );
 
 router.post(
   '/progress',
-  analyticsLimiter,
+  authenticate({
+    rateLimit: { windowMs: 1 * 60 * 1000, max: 60 }
+  }) as unknown as RequestHandler,
   analyticsController.trackProgress.bind(analyticsController)
 );
 
 router.post(
   '/link',
-  analyticsLimiter,
+  authenticate({
+    rateLimit: { windowMs: 1 * 60 * 1000, max: 60 }
+  }) as unknown as RequestHandler,
   analyticsController.trackLink.bind(analyticsController)
 );
 
-// Analytics retrieval routes (higher rate limit for admin dashboard)
-const dashboardLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 300, // 300 requests per minute
-  message: 'Too many requests from this IP, please try again later',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
+// Protected analytics retrieval routes with different rate limits
+// Requires authentication and higher rate limits for admin dashboard
 router.get(
   '/blog/:blogId',
-  dashboardLimiter,
+  authenticate({
+    strategy: ['jwt'],
+    roles: ['admin', 'analyst'],
+    rateLimit: { windowMs: 1 * 60 * 1000, max: 300 }
+  }) as unknown as RequestHandler,
   analyticsController.getBlogAnalytics.bind(analyticsController)
 );
 

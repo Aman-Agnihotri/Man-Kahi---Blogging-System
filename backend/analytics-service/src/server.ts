@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { PrismaClient } from '@prisma/client';
-import { logger } from '@utils/logger';
+import logger from '@shared/utils/logger';
 import analyticsRoutes from '@routes/analytics.routes';
 
 const app = express();

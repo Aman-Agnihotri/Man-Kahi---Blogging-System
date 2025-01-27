@@ -2,8 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { PrismaClient } from '@prisma/client';
-import { logger } from './utils/logger';
-import adminRoutes from './routes/admin.routes';
+import logger from '@shared/utils/logger';
+import adminRoutes from '@routes/admin.routes';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -35,7 +35,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 });
 
 // Start server
-const PORT = process.env.PORT || 3004;
+const PORT = process.env.PORT ?? 3004;
 app.listen(PORT, () => {
   logger.info(`Admin service running on port ${PORT}`);
 });

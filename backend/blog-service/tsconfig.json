@@ -3,8 +3,8 @@
     "target": "es2020",
     "module": "commonjs",
     "lib": ["ES2020"],
-    "outDir": "dist",
-    "rootDir": "..",
+    "outDir": "./dist",
+    "rootDir": "../",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,12 +14,13 @@
     "baseUrl": "..",
     "paths": {
       "@/*": ["blog-service/src/*"],
+      "@shared/*": ["shared/*"],
       "@config/*": ["blog-service/src/config/*"],
-      "@utils/*": ["blog-service/src/utils/*"],
       "@controllers/*": ["blog-service/src/controllers/*"],
       "@middlewares/*": ["blog-service/src/middlewares/*"],
-      "@types/*": ["blog-service/src/types/*"],
-      "@shared/*": ["shared/*"]
+      "@routes/*": ["blog-service/src/routes/*"],
+      "@utils/*": ["blog-service/src/utils/*"],
+      "@types/*": ["blog-service/src/types/*"]
     }
   },
   "include": ["src/**/*", "../shared/**/*"],

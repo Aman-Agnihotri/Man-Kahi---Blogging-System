@@ -1,9 +1,9 @@
 import { PrismaClient } from '@prisma/client'
-import { hashPassword, verifyPassword } from '@/utils/password'
-import { generateToken, getTokenExpiryInSeconds, TokenPayload } from '@shared/utils/jwt'
-import { addToBlacklist } from '@/config/redis'
-import { logger } from '@/utils/logger'
-import { prisma } from '@/config/prisma'
+import { hashPassword, verifyPassword } from '@utils/password'
+import { generateToken, getTokenExpiryInSeconds } from '@shared/utils/jwt'
+import { tokenBlacklist } from '@shared/config/redis'
+import logger from '@shared/utils/logger'
+import { prisma } from '@config/prisma'
 import { RegisterInput, LoginResponse, AuthUser, UserWithRoles } from '@/types/auth.types'
 
 interface LoginInput {
@@ -157,11 +157,12 @@ export class AuthService {
         const userRoles = user.UserRole.map(ur => ur.role.name)
 
         return generateToken({
+            id: user.id,
             userId: user.id,
             email: user.email,
             roles: userRoles,
             type: 'access'
-        } as TokenPayload)
+        })
     }
 
     async generateRefreshToken(userId: string): Promise<string> {
@@ -175,18 +176,19 @@ export class AuthService {
 
         // Generate a longer-lived token for refresh
         return generateToken({
+            id: user.id,
             userId: user.id,
             email: user.email,
             roles: [],  // Refresh tokens don't need roles
             type: 'refresh'
-        } as TokenPayload)
+        })
     }
 
     async logout(token: string): Promise<void> {
         try {
             const expiryInSeconds = getTokenExpiryInSeconds(token)
             if (expiryInSeconds > 0) {
-                await addToBlacklist(token, expiryInSeconds)
+                await tokenBlacklist.add(token, expiryInSeconds)
             }
         } catch (error) {
             logger.error('Logout error:', error)

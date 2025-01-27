@@ -9,17 +9,32 @@ datasource db {
 
 model User {
     id        String    @id @default(cuid())
-    username  String    @db.VarChar(50)
+    username  String    @unique @db.VarChar(50)
     email     String    @unique @db.VarChar(100)
     password  String?   @db.VarChar(255) // Nullable for OAuth users
     createdAt DateTime  @default(now()) @db.Timestamp(6)
     updatedAt DateTime  @updatedAt @db.Timestamp(6)
     deletedAt DateTime? @db.Timestamp(6)
 
-    blogs Blog[] // Relation to blogs authored by the user
-    roles UserRole[] // Relation to user roles
+    blogs          Blog[] // Relation to blogs authored by the user
+    roles          UserRole[] // Relation to user roles
+    oAuthProviders OAuthProvider[] // Relation to OAuth providers
 
     @@map("users")
+}
+
+model OAuthProvider {
+    id         String   @id @default(cuid())
+    provider   String // e.g. 'google', 'github'
+    providerId String // ID from the provider
+    user       User     @relation(fields: [userId], references: [id])
+    userId     String
+    createdAt  DateTime @default(now()) @db.Timestamp(6)
+    updatedAt  DateTime @updatedAt @db.Timestamp(6)
+
+    @@unique([provider, providerId])
+    @@unique([provider, userId])
+    @@map("oauth_providers")
 }
 
 model Blog {

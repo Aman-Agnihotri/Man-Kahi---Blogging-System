@@ -1,5 +1,5 @@
 import { Client } from 'minio'
-import { logger } from '@utils/logger'
+import logger from '@shared/utils/logger'
 import { env } from '@config/env'
 
 const minioClient = new Client({

@@ -75,4 +75,17 @@ const logger = (() => {
     }
 })();
 
+// Export a type-safe error logging function
+export const logError = (message: string, error: unknown): void => {
+  if (error instanceof Error) {
+    logger.error(`${message}: ${error.message}`)
+    if (error.stack) {
+      logger.debug(error.stack)
+    }
+  } else {
+    logger.error(`${message}: Unknown error type`, { error })
+  }
+}
+
+
 export default logger;

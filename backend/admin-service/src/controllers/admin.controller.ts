@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { PrismaClient, Prisma } from '@prisma/client';
-import { logger } from '../utils/logger';
+import logger from '@shared/utils/logger';
 import axios from 'axios';
 
 type BlogWithRelations = Prisma.BlogGetPayload<{

@@ -1,5 +1,5 @@
 import { Client, estypes } from '@elastic/elasticsearch'
-import { logger } from './logger'
+import logger from '@shared/utils/logger'
 import { PrismaClient } from '@prisma/client'
 import { env } from '@config/env'
 

@@ -1,18 +1,14 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
-import { logger } from '@utils/logger'
+import logger from '@shared/utils/logger'
 import { processMarkdown, validateMarkdown } from '@utils/markdown'
 import { processImage } from '@config/upload'
-import { searchBlogsElastic, indexBlog, updateBlogIndex, removeBlogFromIndex } from '@utils/elasticsearch'
+import { searchBlogsElastic, indexBlog, updateBlogIndex } from '@utils/elasticsearch'
 import { 
-  cacheBlog, 
-  getBlogFromCache, 
-  invalidateBlogCache,
-  incrementBlogViews,
-  cacheSearchResults,
-  getSearchFromCache
-} from '@config/redis'
+  blogCache,
+  searchCache
+} from '@shared/config/redis'
 import slugify from 'slugify'
 
 const prisma = new PrismaClient()
@@ -76,6 +72,7 @@ export class BlogController {
           description,
           published,
           authorId: req.user!.id,
+          ...(imageUrl && { imageUrl }),
           ...(categoryId && { categoryId }),
           ...(tags && {
             tags: {
@@ -129,7 +126,7 @@ export class BlogController {
       })
 
       // Cache the blog
-      await cacheBlog(slug, JSON.stringify(blog))
+      await blogCache.set(slug, JSON.stringify(blog))
 
       return res.status(201).json(blog)
     } catch (error) {
@@ -150,7 +147,7 @@ export class BlogController {
       const { slug } = req.params
 
       // Try to get from cache first
-      const cachedBlog = await getBlogFromCache(slug)
+      const cachedBlog = await blogCache.get(slug)
       if (cachedBlog) {
         const blog = JSON.parse(cachedBlog)
         // Check visibility
@@ -158,7 +155,7 @@ export class BlogController {
           return res.status(404).json({ message: 'Blog not found' })
         }
         // Increment views in background
-        incrementBlogViews(blog.id).catch(error => 
+        blogCache.incrementViews(blog.id).catch((error: Error) => 
           logger.error('Error incrementing views:', error)
         )
         return res.json(blog)
@@ -187,13 +184,13 @@ export class BlogController {
       }
 
       // Cache the blog
-      await cacheBlog(slug, JSON.stringify(blog))
+      await blogCache.set(slug, JSON.stringify(blog))
 
       // Increment views in background and update Elasticsearch
       Promise.all([
-        incrementBlogViews(blog.id),
+        blogCache.incrementViews(blog.id),
         updateBlogIndex(blog.id, { views: (blog.analytics?.views ?? 0) + 1 })
-      ]).catch(error => logger.error('Error updating views:', error))
+      ]).catch((error: Error) => logger.error('Error updating views:', error))
 
       return res.json(blog)
     } catch (error) {
@@ -298,9 +295,9 @@ export class BlogController {
 
       // Invalidate old cache and cache updated blog
       await Promise.all([
-        invalidateBlogCache(blog.slug),
-        title ? invalidateBlogCache(slugify(title, { lower: true, strict: true })) : null,
-        cacheBlog(updatedBlog.slug, JSON.stringify(updatedBlog)),
+        blogCache.invalidate(blog.slug),
+        title ? blogCache.invalidate(slugify(title, { lower: true, strict: true })) : null,
+        blogCache.set(updatedBlog.slug, JSON.stringify(updatedBlog)),
       ])
 
       return res.json(updatedBlog)
@@ -344,7 +341,7 @@ export class BlogController {
           where: { id },
           data: { deletedAt: new Date() },
         }),
-        invalidateBlogCache(blog.slug),
+        blogCache.invalidate(blog.slug),
         updateBlogIndex(id, { deletedAt: new Date() })
       ])
 
@@ -362,7 +359,7 @@ export class BlogController {
       
       // Try to get from cache first
       const cacheKey = JSON.stringify(params)
-      const cachedResults = await getSearchFromCache(cacheKey)
+      const cachedResults = await searchCache.get(cacheKey)
       if (cachedResults) {
         return res.json(JSON.parse(cachedResults))
       }
@@ -373,7 +370,7 @@ export class BlogController {
       })
 
       // Cache results
-      await cacheSearchResults(cacheKey, JSON.stringify(results))
+      await searchCache.set(cacheKey, JSON.stringify(results))
 
       return res.json(results)
     } catch (error) {

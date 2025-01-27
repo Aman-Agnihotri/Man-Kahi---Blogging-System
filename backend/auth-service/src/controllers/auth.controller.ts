@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { AuthService } from '@/services/auth.service'
-import { logger } from '@/utils/logger'
-import { AuthRequest } from '@shared/middlewares/authenticateUser'
+import { AuthService } from '../services/auth.service'
+import logger from '@shared/utils/logger'
+import { AuthenticatedRequest } from '@shared/middlewares/auth'
 import { RequestHandler } from 'express-serve-static-core'
 
 // Input validation schemas
@@ -119,8 +119,10 @@ export class AuthController {
       const validatedInput = addRoleSchema.parse(req.body)
 
       // Check if user has admin role
-      const authReq = req as AuthRequest
-      if (!authReq.user?.roles.includes('admin')) {
+      const authReq = req as AuthenticatedRequest
+      const hasAdminRole = authReq.user.roles.some(role => role.name === 'admin')
+      
+      if (!hasAdminRole) {
         res.status(403).json({ message: 'Unauthorized' })
         return
       }

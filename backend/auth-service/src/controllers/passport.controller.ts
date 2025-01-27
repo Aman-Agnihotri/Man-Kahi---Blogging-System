@@ -1,8 +1,8 @@
 import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { PrismaClient } from '@prisma/client'
-import { verifyToken } from '../utils/jwt'
-import { logger } from '../utils/logger'
+import { verifyToken } from '@shared/utils/jwt'
+import logger from '@shared/utils/logger'
 import {
   OAuthProvider,
   PROVIDERS,
@@ -156,6 +156,7 @@ function setupGoogleStrategy() {
         clientSecret: getClientSecret('google'),
         callbackURL: getAuthCallbackURL('google'),
         passReqToCallback: true,
+        scope: providerScopes.google
       },
       async (req: any, accessToken: string, refreshToken: string, profile: any, done: Function) => {
         try {

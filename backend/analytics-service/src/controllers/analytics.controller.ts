@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
-import { logger } from '@utils/logger';
-import { analyticsRedis, CACHE_TTL } from '@config/redis';
+import logger from '@shared/utils/logger';
+import { analytics as analyticsRedis } from '@shared/config/redis';
 import crypto from 'crypto';
 
 const prisma = new PrismaClient();
@@ -32,7 +32,7 @@ const getAnalyticsSchema = z.object({
 });
 
 export class AnalyticsController {
-  // Track generic analytics event
+  // Track generic analyticsRedis event
   async trackEvent(req: Request, res: Response): Promise<Response> {
     try {
       const validatedInput = trackEventSchema.parse(req.body);
@@ -47,6 +47,7 @@ export class AnalyticsController {
           blogId,
           type,
           metadata: metadata || {},
+          visitorId: visitor,
         },
       });
 
@@ -76,10 +77,19 @@ export class AnalyticsController {
       const validatedInput = trackProgressSchema.parse(req.body);
       const { blogId, progress, visitorId } = validatedInput;
 
+      // Store progress in Redis for real-time tracking
       await analyticsRedis.trackReadProgress(blogId, progress);
 
-      // If progress is 90% or more, count it as a read
+      // If progress is 90% or more, count it as a read and store with visitor info
       if (progress >= 90) {
+        await prisma.analyticsEvent.create({
+          data: {
+            blogId,
+            type: 'read',
+            metadata: { progress },
+            visitorId,
+          },
+        });
         await this.updateBlogAnalytics(blogId, 'reads');
       }
 
@@ -99,7 +109,22 @@ export class AnalyticsController {
       const validatedInput = trackLinkSchema.parse(req.body);
       const { blogId, url } = validatedInput;
 
+      // Generate visitor ID for link clicks
+      const visitorId = this.generateVisitorId(req);
+
+      // Store event in Redis for real-time tracking
       await analyticsRedis.trackLinkClick(blogId, url);
+      
+      // Store in database for historical tracking with visitor info
+      await prisma.analyticsEvent.create({
+        data: {
+          blogId,
+          type: 'click',
+          metadata: { url },
+          visitorId,
+        },
+      });
+      
       await this.updateBlogAnalytics(blogId, 'linkClicks');
 
       return res.status(200).json({ success: true });
@@ -112,7 +137,7 @@ export class AnalyticsController {
     }
   }
 
-  // Get blog analytics
+  // Get blog analyticsRedis
   async getBlogAnalytics(req: Request, res: Response): Promise<Response> {
     try {
       const validatedInput = getAnalyticsSchema.parse(req.query);
@@ -129,7 +154,7 @@ export class AnalyticsController {
         historical: historicalData,
       });
     } catch (error) {
-      logger.error('Error fetching analytics:', error);
+      logger.error('Error fetching analyticsRedis:', error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
       }
