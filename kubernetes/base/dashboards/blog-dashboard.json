@@ -1,0 +1,347 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Service Overview",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "title": "Active Blog Posts",
+      "type": "gauge",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "blog_active_total",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "title": "Operation Rate by Service",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(blog_operations_total[5m])) by (service, operation, status)",
+          "legendFormat": "{{service}} {{operation}} - {{status}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": ["sum", "max"],
+          "displayMode": "table",
+          "placement": "right"
+        }
+      }
+    },
+    {
+      "title": "Performance by Service",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      }
+    },
+    {
+      "title": "Operation Latency by Service",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(blog_operation_duration_seconds_bucket[5m])) by (service, operation, le))",
+          "legendFormat": "p95 {{service}} {{operation}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(blog_operation_duration_seconds_bucket[5m])) by (service, operation, le))",
+          "legendFormat": "p50 {{service}} {{operation}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "title": "Elasticsearch Latency by Service",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(blog_elasticsearch_operation_seconds_bucket[5m])) by (service, operation, le))",
+          "legendFormat": "p95 {{service}} {{operation}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "title": "Cache Performance",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(blog_cache_hits_total[5m])) by (service, cache_type, operation)",
+          "legendFormat": "{{service}} {{cache_type}} {{operation}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "title": "Search Performance by Operation",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(blog_search_operations_total[5m])) by (service, operation, status)",
+          "legendFormat": "{{service}} {{operation}} - {{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Search Response Time",
+      "type": "timeseries", 
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(blog_search_duration_seconds_bucket[5m])) by (service, operation, le))",
+          "legendFormat": "p95 {{service}} {{operation}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(blog_search_duration_seconds_bucket[5m])) by (service, operation, le))",
+          "legendFormat": "p50 {{service}} {{operation}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "title": "Storage",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      }
+    },
+    {
+      "title": "Storage Operations by Service",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 35
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(blog_storage_operations_total[5m])) by (service, storage_type, operation, status)",
+          "legendFormat": "{{service}} {{storage_type}} {{operation}} - {{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Storage Latency by Service",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 35
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(blog_storage_operation_seconds_bucket[5m])) by (service, storage_type, operation, le))",
+          "legendFormat": "p95 {{service}} {{storage_type}} {{operation}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "title": "Database Operations by Service",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(blog_database_operations_total[5m])) by (service, operation, status)",
+          "legendFormat": "{{service}} {{operation}} - {{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Database Latency by Service",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(blog_database_operation_seconds_bucket[5m])) by (service, operation, le))",
+          "legendFormat": "p95 {{service}} {{operation}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(blog_database_operation_seconds_bucket[5m])) by (service, operation, le))",
+          "legendFormat": "p50 {{service}} {{operation}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "title": "Cache Operations by Service",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 51
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(blog_cache_operations_total[5m])) by (service, cache_type, operation, status)",
+          "legendFormat": "{{service}} {{cache_type}} {{operation}} - {{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Cache Latency by Service",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 51
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(blog_cache_operation_seconds_bucket[5m])) by (service, cache_type, operation, le))",
+          "legendFormat": "p95 {{service}} {{cache_type}} {{operation}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(blog_cache_operation_seconds_bucket[5m])) by (service, cache_type, operation, le))",
+          "legendFormat": "p50 {{service}} {{cache_type}} {{operation}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 33,
+  "style": "dark",
+  "tags": ["blog", "monitoring"],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Blog Service Dashboard",
+  "uid": "blog-service",
+  "version": 1
+}

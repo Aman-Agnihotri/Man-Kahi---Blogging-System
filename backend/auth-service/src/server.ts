@@ -10,6 +10,8 @@ import { oauthRoutes } from './routes/oauth.routes'
 import { passport } from './controllers/passport.controller'
 import { prisma } from '@shared/utils/prismaClient'
 import { redis } from '@shared/config/redis'
+import { metricsHandler } from './config/metrics'
+import { updateResourceUsage, trackRedisOperation } from './middlewares/metrics.middleware'
 
 // Load environment variables
 dotenv.config()
@@ -42,10 +44,30 @@ app.use(session({
 app.use(passport.initialize())
 app.use(passport.session())
 
-// Request logging
+// Resource monitoring
+const monitorResources = () => {
+  setInterval(() => {
+    const used = process.memoryUsage();
+    updateResourceUsage('memory', 'heapUsed', used.heapUsed);
+    updateResourceUsage('memory', 'heapTotal', used.heapTotal);
+    updateResourceUsage('memory', 'rss', used.rss);
+    updateResourceUsage('memory', 'external', used.external);
+    
+    const cpuUsage = process.cpuUsage();
+    updateResourceUsage('cpu', 'user', cpuUsage.user);
+    updateResourceUsage('cpu', 'system', cpuUsage.system);
+  }, 5000); // Update every 5 seconds
+};
+
+// Start resource monitoring
+monitorResources();
+
+// Request logging with basic metrics
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.url}`)
-  next()
+  logger.info(`${req.method} ${req.url}`);
+  const redisTimer = trackRedisOperation('session_check');
+  redisTimer.end();
+  next();
 })
 
 // Health check
@@ -56,6 +78,9 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString(),
   })
 })
+
+// Metrics endpoint
+app.get('/metrics', metricsHandler)
 
 // Routes
 app.use('/api/auth', authRoutes)
@@ -79,9 +104,11 @@ const shutdown = async () => {
     await prisma.$disconnect()
     logger.info('Database connection closed')
 
-    // Close Redis connection
-    await redis.quit()
-    logger.info('Redis connection closed')
+    // Close Redis connection with metrics
+    const redisTimer = trackRedisOperation('shutdown');
+    await redis.quit();
+    redisTimer.end();
+    logger.info('Redis connection closed');
 
     process.exit(0)
   } catch (error) {
@@ -101,9 +128,11 @@ const startServer = async () => {
     await prisma.$connect()
     logger.info('Database connection established')
 
-    // Verify Redis connection
-    await redis.ping()
-    logger.info('Redis connection established')
+    // Verify Redis connection with metrics
+    const redisTimer = trackRedisOperation('startup');
+    await redis.ping();
+    redisTimer.end();
+    logger.info('Redis connection established');
 
     // Start listening
     app.listen(PORT, () => {
@@ -114,4 +143,3 @@ const startServer = async () => {
     process.exit(1)
   }
 }
-

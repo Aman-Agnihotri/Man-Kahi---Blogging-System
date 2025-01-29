@@ -4,6 +4,13 @@ import { generateToken, getTokenExpiryInSeconds } from '@shared/utils/jwt'
 import { tokenBlacklist } from '@shared/config/redis'
 import logger from '@shared/utils/logger'
 import { RegisterInput, LoginResponse, AuthUser, UserWithRoles } from '@/types/auth.types'
+import { 
+    trackDbOperation, 
+    trackAuthMetrics, 
+    trackAuthError,
+    updateActiveTokens,
+    trackRedisOperation 
+} from '../middlewares/metrics.middleware'
 
 interface LoginInput {
     email: string
@@ -12,6 +19,7 @@ interface LoginInput {
 
 export class AuthService {
     async register(input: RegisterInput): Promise<LoginResponse> {
+        const dbTimer = trackDbOperation('insert', 'user');
         try {
             // Check if user already exists
             const existingUser = await prisma.user.findFirst({
@@ -24,6 +32,8 @@ export class AuthService {
             })
 
             if (existingUser) {
+                dbTimer.end();
+                trackAuthError('user_exists', 'register');
                 throw new Error('User with this email or username already exists')
             }
 
@@ -31,6 +41,7 @@ export class AuthService {
             const hashedPassword = await hashPassword(input.password)
 
             // Create user with default reader role
+            const roleTimer = trackDbOperation('insert', 'user_roles');
             const user = await prisma.user.create({
                 data: {
                     username: input.username,
@@ -63,8 +74,14 @@ export class AuthService {
             const userRoles = user.roles.map(ur => ur.role.name)
 
             // Generate tokens
+            roleTimer.end();
+            dbTimer.end();
+
             const token = await this.generateToken(user.id)
             const refreshToken = await this.generateRefreshToken(user.id)
+            updateActiveTokens(2); // One for access token, one for refresh token
+
+            trackAuthMetrics('registration_success', 'local');
 
             const authUser: AuthUser = {
                 id: user.id,
@@ -85,6 +102,7 @@ export class AuthService {
     }
 
     async login(input: LoginInput): Promise<LoginResponse> {
+        const dbTimer = trackDbOperation('select', 'user');
         try {
             // Find user
             const user = await prisma.user.findUnique({
@@ -99,20 +117,29 @@ export class AuthService {
             })
 
             if (!user?.password) {
+                dbTimer.end();
+                trackAuthError('invalid_credentials', 'login');
                 throw new Error('Invalid credentials')
             }
 
             // Verify password
             const isValid = await verifyPassword(input.password, user.password)
             if (!isValid) {
+                dbTimer.end();
+                trackAuthError('invalid_password', 'login');
                 throw new Error('Invalid credentials')
             }
 
             const userRoles = user.roles.map(ur => ur.role.name)
 
+            dbTimer.end();
+
             // Generate tokens
             const token = await this.generateToken(user.id)
             const refreshToken = await this.generateRefreshToken(user.id)
+            updateActiveTokens(2); // One for access token, one for refresh token
+
+            trackAuthMetrics('login_success', 'local');
 
             const authUser: AuthUser = {
                 id: user.id,
@@ -133,6 +160,7 @@ export class AuthService {
     }
 
     async generateToken(userId: string): Promise<string> {
+        const dbTimer = trackDbOperation('select', 'user');
         const user = await prisma.user.findUnique({
             where: { id: userId },
             include: {
@@ -144,7 +172,9 @@ export class AuthService {
             }
         })
 
+        dbTimer.end();
         if (!user) {
+            trackAuthError('user_not_found', 'token_generation');
             throw new Error('User not found')
         }
 
@@ -160,11 +190,14 @@ export class AuthService {
     }
 
     async generateRefreshToken(userId: string): Promise<string> {
+        const dbTimer = trackDbOperation('select', 'user');
         const user = await prisma.user.findUnique({
             where: { id: userId }
         })
 
+        dbTimer.end();
         if (!user) {
+            trackAuthError('user_not_found', 'refresh_token_generation');
             throw new Error('User not found')
         }
 
@@ -179,11 +212,15 @@ export class AuthService {
     }
 
     async logout(token: string): Promise<void> {
+        const redisTimer = trackRedisOperation('blacklist');
         try {
             const expiryInSeconds = getTokenExpiryInSeconds(token)
             if (expiryInSeconds > 0) {
                 await tokenBlacklist.add(token, expiryInSeconds)
             }
+            redisTimer.end();
+            updateActiveTokens(-1);
+            trackAuthMetrics('logout_success', 'local');
         } catch (error) {
             logger.error('Logout error:', error)
             throw error
@@ -191,6 +228,7 @@ export class AuthService {
     }
 
     async addRole(userId: string, roleName: string): Promise<UserWithRoles> {
+        const dbTimer = trackDbOperation('update', 'user_roles');
         try {
             // Check if user exists
             const user = await prisma.user.findUnique({
@@ -205,6 +243,8 @@ export class AuthService {
             })
 
             if (!user) {
+                dbTimer.end();
+                trackAuthError('user_not_found', 'add_role');
                 throw new Error('User not found')
             }
 
@@ -236,6 +276,9 @@ export class AuthService {
                 }
             })
 
+            dbTimer.end();
+            trackAuthMetrics('role_added', 'local');
+            
             return {
                 ...updatedUser,
                 roles: updatedUser.roles.map(ur => ur.role)
@@ -247,6 +290,7 @@ export class AuthService {
     }
 
     async unlinkProvider(userId: string, provider: string): Promise<void> {
+        const dbTimer = trackDbOperation('delete', 'oauth_provider');
         try {
             // Check if user has other login methods before unlinking
             const user = await prisma.user.findUnique({
@@ -257,11 +301,15 @@ export class AuthService {
             })
 
             if (!user) {
+                dbTimer.end();
+                trackAuthError('user_not_found', 'unlink_provider');
                 throw new Error('User not found')
             }
 
             // If this is the only login method and user has no password, prevent unlinking
             if (!user.password && user.oAuthProviders.length <= 1) {
+                dbTimer.end();
+                trackAuthError('last_auth_method', 'unlink_provider');
                 throw new Error('Cannot unlink the only authentication method')
             }
 
@@ -273,6 +321,8 @@ export class AuthService {
                 }
             })
 
+            dbTimer.end();
+            trackAuthMetrics('provider_unlinked', provider);
             logger.info(`Unlinked provider ${provider} from user ${userId}`)
         } catch (error) {
             logger.error('Error unlinking provider:', error)

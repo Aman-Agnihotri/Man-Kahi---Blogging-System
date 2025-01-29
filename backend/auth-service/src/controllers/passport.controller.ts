@@ -13,6 +13,12 @@ import {
   providerScopes,
 } from '../config/oauth'
 import { AuthService } from '../services/auth.service'
+import { 
+  trackDbOperation, 
+  trackAuthMetrics, 
+  trackAuthError,
+  updateActiveTokens 
+} from '../middlewares/metrics.middleware'
 
 const authService = new AuthService()
 
@@ -20,11 +26,13 @@ const authService = new AuthService()
  * Links an OAuth provider to a user's account
  */
 async function linkProvider(token: string, profile: any): Promise<any> {
+  const dbTimer = trackDbOperation('link', 'oauth_provider');
   try {
     const decodedToken = verifyToken(token)
     const userId = typeof decodedToken === 'object' ? decodedToken.userId : null
 
     if (!userId) {
+      trackAuthError('invalid_token', 'link_provider');
       throw new Error('Invalid token')
     }
 
@@ -34,6 +42,7 @@ async function linkProvider(token: string, profile: any): Promise<any> {
     })
 
     if (!user) {
+      trackAuthError('user_not_found', 'link_provider');
       throw new Error('User not found')
     }
 
@@ -46,12 +55,14 @@ async function linkProvider(token: string, profile: any): Promise<any> {
     })
 
     if (existingProvider) {
+      trackAuthError('provider_already_linked', 'link_provider');
       throw new Error('Provider already linked to this account')
     }
 
     // Verify email matches
     const profileEmail = profile.emails?.[0]?.value
     if (user.email !== profileEmail) {
+      trackAuthError('email_mismatch', 'link_provider');
       throw new Error('Email mismatch between accounts')
     }
 
@@ -68,17 +79,21 @@ async function linkProvider(token: string, profile: any): Promise<any> {
       },
       include: { roles: true },
     })
+    dbTimer.end();
 
     // Generate new tokens
     const accessToken = await authService.generateToken(user.id)
     const refreshToken = await authService.generateRefreshToken(user.id)
+    updateActiveTokens(1);
 
+    trackAuthMetrics('link_success', profile.provider);
     return { 
       user: updatedUser, 
       token: accessToken,
       refreshToken 
     }
   } catch (error) {
+    dbTimer.end();
     logger.error('Error linking provider:', error)
     throw error
   }
@@ -88,9 +103,11 @@ async function linkProvider(token: string, profile: any): Promise<any> {
  * Handles OAuth authentication
  */
 async function handleOAuthAuthentication(profile: any) {
+  const dbTimer = trackDbOperation('auth', 'user');
   try {
     const email = profile.emails?.[0]?.value
     if (!email) {
+      trackAuthError('missing_email', profile.provider);
       throw new Error('Email not provided by OAuth provider')
     }
 
@@ -108,8 +125,11 @@ async function handleOAuthAuthentication(profile: any) {
         (p) => p.provider === profile.provider
       )
       if (!hasProvider) {
+        trackAuthError('account_exists', profile.provider);
         throw new Error('Account exists with different credentials')
       }
+      dbTimer.end();
+      trackAuthMetrics('login_success', profile.provider);
       return existingUser
     }
 
@@ -118,6 +138,7 @@ async function handleOAuthAuthentication(profile: any) {
       where: { name: DEFAULT_ROLE },
     })
     if (!defaultRole) {
+      trackAuthError('default_role_missing', profile.provider);
       throw new Error('Default role not found')
     }
 
@@ -138,9 +159,12 @@ async function handleOAuthAuthentication(profile: any) {
       },
       include: { roles: true },
     })
+    dbTimer.end();
 
+    trackAuthMetrics('registration_success', profile.provider);
     return newUser
   } catch (error) {
+    dbTimer.end();
     logger.error('Error in OAuth authentication:', error)
     throw error
   }
@@ -172,12 +196,14 @@ function setupGoogleStrategy() {
           // Handle normal OAuth login/registration
           const user = await handleOAuthAuthentication(profile)
           const authToken = await authService.generateToken(user.id)
-          const newRefreshToken = await authService.generateRefreshToken(user.id)
+          const refreshToken = await authService.generateRefreshToken(user.id)
+          updateActiveTokens(1);
           return done(null, user, { 
             token: authToken,
-            refreshToken: newRefreshToken 
+            refreshToken 
           })
         } catch (error) {
+          trackAuthError('oauth_strategy', 'google');
           return done(error)
         }
       }
@@ -199,13 +225,17 @@ passport.serializeUser((user: any, done) => {
 
 // Deserialize user from session
 passport.deserializeUser(async (id: string, done) => {
+  const dbTimer = trackDbOperation('deserialize', 'user');
   try {
     const user = await prisma.user.findUnique({
       where: { id },
       include: { roles: true },
     })
+    dbTimer.end();
     done(null, user)
   } catch (error) {
+    dbTimer.end();
+    trackAuthError('session_deserialize', 'oauth');
     done(error)
   }
 })

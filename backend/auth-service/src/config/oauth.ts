@@ -1,4 +1,5 @@
 import logger from '@shared/utils/logger'
+import { trackAuthError } from '../middlewares/metrics.middleware'
 
 export type OAuthProvider = 'google'
 
@@ -15,6 +16,7 @@ export function getClientId(provider: OAuthProvider): string {
   const clientId = process.env[envVar]
   if (!clientId) {
     logger.error(`${envVar} is not set`)
+    trackAuthError('missing_config', `oauth_${provider}_client_id`)
     throw new Error(`${envVar} is not set`)
   }
   return clientId
@@ -25,6 +27,7 @@ export function getClientSecret(provider: OAuthProvider): string {
   const clientSecret = process.env[envVar]
   if (!clientSecret) {
     logger.error(`${envVar} is not set`)
+    trackAuthError('missing_config', `oauth_${provider}_client_secret`)
     throw new Error(`${envVar} is not set`)
   }
   return clientSecret
@@ -32,5 +35,9 @@ export function getClientSecret(provider: OAuthProvider): string {
 
 export function getAuthCallbackURL(provider: OAuthProvider): string {
   const baseURL = process.env.AUTH_SERVICE_URL ?? 'http://localhost:3000'
+  if (!process.env.AUTH_SERVICE_URL) {
+    trackAuthError('missing_config', 'oauth_callback_url')
+    logger.warn('AUTH_SERVICE_URL not set, using default: http://localhost:3000')
+  }
   return `${baseURL}/auth/${provider}/callback`
 }

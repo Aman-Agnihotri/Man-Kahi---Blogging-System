@@ -18,6 +18,7 @@
       "@config/*": ["blog-service/src/config/*"],
       "@controllers/*": ["blog-service/src/controllers/*"],
       "@middlewares/*": ["blog-service/src/middlewares/*"],
+      "@services/*": ["blog-service/src/services/*"],
       "@routes/*": ["blog-service/src/routes/*"],
       "@utils/*": ["blog-service/src/utils/*"],
       "@types/*": ["blog-service/src/types/*"]

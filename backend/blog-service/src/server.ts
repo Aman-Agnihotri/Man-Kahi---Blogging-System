@@ -10,6 +10,7 @@ import { prisma } from '@shared/utils/prismaClient'
 import { redis } from '@shared/config/redis'
 import { setupElasticsearch } from '@utils/elasticsearch'
 import blogRoutes from './routes/blog.routes'
+import { metricsHandler } from './config/metrics'
 
 // Load environment variables
 dotenv.config()
@@ -39,6 +40,9 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString(),
   })
 })
+
+// Metrics endpoint
+app.get('/metrics', metricsHandler)
 
 // Routes
 app.use('/api/blogs', blogRoutes)

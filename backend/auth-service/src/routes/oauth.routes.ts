@@ -5,6 +5,12 @@ import logger from '@shared/utils/logger';
 import { authenticate, AuthenticatedRequest } from '@shared/middlewares/auth';
 import { createEndpointRateLimit } from '@shared/middlewares/rateLimit';
 import type { RequestHandler } from 'express';
+import { 
+    trackAuthMetrics,
+    trackAuthError,
+    trackDbOperation,
+    updateActiveTokens
+} from '../middlewares/metrics.middleware';
 
 interface OAuthUser {
     id: string;
@@ -30,6 +36,7 @@ const authService = new AuthService();
 router.get(
     '/google',
     createEndpointRateLimit('auth:oauth') as unknown as RequestHandler,
+    trackAuthMetrics('oauth_initiate', 'google'),
     (req: Request, res: Response, next: NextFunction) => {
         const state = req.query.linkToken as string | undefined; // For account linking
         passport.authenticate('google', {
@@ -50,8 +57,13 @@ router.get(
             }
 
             // Generate tokens
+            // Track DB operation for OAuth user
+            const dbTimer = trackDbOperation('select', 'oauth_users');
             const accessToken = await authService.generateToken(req.user.id);
             const refreshToken = await authService.generateRefreshToken(req.user.id);
+            dbTimer.end();
+
+            updateActiveTokens(1); // Increment active tokens
 
             // For account linking, token is in authInfo
             const linkToken = req.authInfo?.token;
@@ -67,6 +79,7 @@ router.get(
             res.redirect(`${frontendURL}/auth/callback?${params.toString()}`);
         } catch (error) {
             logger.error('OAuth callback error:', error);
+            trackAuthError('oauth_callback', 'google');
             const frontendURL = process.env.FRONTEND_URL ?? 'http://localhost:3000';
             res.redirect(
                 `${frontendURL}/auth/callback?error=Authentication failed`
@@ -83,6 +96,7 @@ router.post(
     (async (req: AuthenticatedRequest, res: Response) => {
         try {
             const { provider } = req.params;
+            trackAuthMetrics('oauth_link', provider);
             const { token } = req.body;
 
             if (!token) {
@@ -94,7 +108,9 @@ router.post(
             const authURL = `/auth/${provider}?linkToken=${token}`;
             res.json({ url: authURL });
         } catch (error) {
+            const { provider } = req.params;
             logger.error('Link provider error:', error);
+            trackAuthError('oauth_link', provider);
             res.status(500).json({ message: 'Failed to initiate provider linking' });
         }
     }) as unknown as RequestHandler
@@ -108,12 +124,15 @@ router.delete(
     (async (req: AuthenticatedRequest, res: Response) => {
         try {
             const { provider } = req.params;
+            trackAuthMetrics('oauth_unlink', provider);
             const userId = req.user.id;
 
             await authService.unlinkProvider(userId, provider);
             res.json({ message: 'Provider unlinked successfully' });
         } catch (error) {
+            const { provider } = req.params;
             logger.error('Unlink provider error:', error);
+            trackAuthError('oauth_unlink', provider);
             res.status(500).json({ message: 'Failed to unlink provider' });
         }
     }) as unknown as RequestHandler

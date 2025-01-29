@@ -9,6 +9,8 @@ import {
   trackLinkClick,
   addAnalyticsHeaders
 } from '../middlewares/analytics.middleware';
+import { trackOperationMetrics } from '../middlewares/metrics.middleware';
+import { metricsHandler } from '../config/metrics';
 
 const router = Router();
 const blogController = new BlogController();
@@ -17,10 +19,14 @@ const blogController = new BlogController();
 router.use(addAnalyticsHeaders);
 router.use(createServiceRateLimit('blog') as unknown as RequestHandler);
 
+// Metrics endpoint
+router.get('/metrics', metricsHandler);
+
 // Analytics tracking routes
 router.post(
   '/analytics/progress',
   createEndpointRateLimit('blog:progress') as unknown as RequestHandler,
+  trackOperationMetrics('blog', 'track_progress'),
   trackReadProgress,
   ((_req, res) => { res.json({ success: true }); }) as RequestHandler
 );
@@ -28,6 +34,7 @@ router.post(
 router.post(
   '/analytics/link',
   createEndpointRateLimit('blog:progress') as unknown as RequestHandler,
+  trackOperationMetrics('blog', 'track_link'),
   trackLinkClick,
   ((_req, res) => { res.json({ success: true }); }) as RequestHandler
 );
@@ -36,19 +43,36 @@ router.post(
 router.get(
   '/search',
   createEndpointRateLimit('blog:search') as unknown as RequestHandler,
-  blogController.search
+  trackOperationMetrics('search', 'search'),
+  (req, res, next) => {
+    blogController.search(req, res).catch(next);
+  }
 );
 
-router.get('/tags/popular', blogController.getPopularTags);
+router.get(
+  '/tags/popular',
+  trackOperationMetrics('search', 'get_popular_tags'),
+  (req, res, next) => {
+    blogController.getPopularTags(req, res).catch(next);
+  }
+);
+
 router.get(
   '/suggested/:blogId',
+  trackOperationMetrics('search', 'get_suggested_blogs'),
   trackBlogView,
-  blogController.getSuggestedBlogs
+  (req, res, next) => {
+    blogController.getSuggestedBlogs(req, res).catch(next);
+  }
 );
+
 router.get(
   '/:slug',
+  trackOperationMetrics('blog', 'get_blog'),
   trackBlogView,
-  blogController.getBySlug
+  (req, res, next) => {
+    blogController.getBySlug(req, res).catch(next);
+  }
 );
 
 // Auth required routes
@@ -57,7 +81,10 @@ router.post(
   authenticate() as unknown as RequestHandler,
   createEndpointRateLimit('blog:create') as unknown as RequestHandler,
   upload.single('image'),
-  blogController.create
+  trackOperationMetrics('blog', 'create_blog'),
+  (req, res, next) => {
+    blogController.create(req, res).catch(next);
+  }
 );
 
 router.put(
@@ -65,20 +92,29 @@ router.put(
   authenticate() as unknown as RequestHandler,
   createEndpointRateLimit('blog:update') as unknown as RequestHandler,
   upload.single('image'),
-  blogController.update
+  trackOperationMetrics('blog', 'update_blog'),
+  (req, res, next) => {
+    blogController.update(req, res).catch(next);
+  }
 );
 
 router.delete(
   '/:id',
   authenticate() as unknown as RequestHandler,
   createEndpointRateLimit('blog:delete') as unknown as RequestHandler,
-  blogController.delete
+  trackOperationMetrics('blog', 'delete_blog'),
+  (req, res, next) => {
+    blogController.delete(req, res).catch(next);
+  }
 );
 
 // Get user's blogs (auth optional) with analytics
 router.get(
   '/user/:userId?',
-  blogController.getUserBlogs
+  trackOperationMetrics('blog', 'get_user_blogs'),
+  (req, res, next) => {
+    blogController.getUserBlogs(req, res).catch(next);
+  }
 );
 
 // Get blog analytics (auth required)
@@ -86,6 +122,7 @@ router.get(
   '/:id/analytics',
   authenticate() as unknown as RequestHandler,
   createEndpointRateLimit('blog:analytics') as unknown as RequestHandler,
+  trackOperationMetrics('blog', 'get_blog_analytics'),
   (async (req, res) => {
     const { analyticsClient } = await import('../utils/analytics');
     try {
@@ -102,7 +139,10 @@ router.put(
   '/:id/visibility',
   authenticate({ roles: ['admin'] }) as unknown as RequestHandler,
   createServiceRateLimit('admin') as unknown as RequestHandler,
-  blogController.update
+  trackOperationMetrics('blog', 'update_blog_visibility'),
+  (req, res, next) => {
+    blogController.update(req, res).catch(next);
+  }
 );
 
 export default router;
