@@ -115,13 +115,44 @@ export class AdminController {
       logger.error('Error fetching dashboard stats:', error);
       if (error instanceof z.ZodError) {
         trackAdminError('dashboard_stats_validation_error');
-        return res.status(400).json({ error: 'Invalid time parameters' });
-      } else if (axios.isAxiosError(error)) {
-        trackAdminError('analytics_service_error');
-        return res.status(502).json({ error: 'Analytics service unavailable' });
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        });
       }
+      
+      if (axios.isAxiosError(error)) {
+        trackAdminError('analytics_service_error');
+        return res.status(502).json({
+          message: 'Service unavailable',
+          details: 'Analytics service is not responding'
+        });
+      }
+      
+      if (error instanceof Error) {
+        switch (error.message) {
+          case 'Invalid date range':
+            return res.status(400).json({
+              message: 'Invalid date range',
+              details: 'The specified date range is invalid or too large'
+            });
+          case 'Data unavailable':
+            return res.status(503).json({
+              message: 'Data temporarily unavailable',
+              details: 'Dashboard statistics are being generated'
+            });
+        }
+      }
+      
       trackAdminError('dashboard_stats_fetch_error');
-      return res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
+      logger.error('Unexpected error fetching dashboard stats:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch dashboard statistics'
+      });
     }
   }
 
@@ -149,13 +180,44 @@ export class AdminController {
       logger.error('Error fetching blog analytics:', error);
       if (error instanceof z.ZodError) {
         trackAdminError('blog_analytics_validation_error');
-        return res.status(400).json({ error: 'Invalid time parameters' });
-      } else if (axios.isAxiosError(error)) {
-        trackAdminError('analytics_service_error');
-        return res.status(502).json({ error: 'Analytics service unavailable' });
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        });
       }
+      
+      if (axios.isAxiosError(error)) {
+        trackAdminError('analytics_service_error');
+        return res.status(502).json({
+          message: 'Service unavailable',
+          details: 'Analytics service is not responding'
+        });
+      }
+      
+      if (error instanceof Error) {
+        switch (error.message) {
+          case 'Blog not found':
+            return res.status(404).json({
+              message: 'Blog not found',
+              details: 'The specified blog does not exist'
+            });
+          case 'Invalid timeframe':
+            return res.status(400).json({
+              message: 'Invalid timeframe',
+              details: 'The specified timeframe is not supported'
+            });
+        }
+      }
+      
       trackAdminError('blog_analytics_fetch_error');
-      return res.status(500).json({ error: 'Failed to fetch blog analytics' });
+      logger.error('Unexpected error fetching blog analytics:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch blog analytics'
+      });
     }
   }
 
@@ -206,17 +268,51 @@ export class AdminController {
       logger.error('Error fetching user analytics:', error);
       if (error instanceof z.ZodError) {
         trackAdminError('user_analytics_validation_error');
-        return res.status(400).json({ error: 'Invalid time parameters' });
-      } else if (axios.isAxiosError(error)) {
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        });
+      }
+      
+      if (axios.isAxiosError(error)) {
         if (error.response?.status === 404) {
           trackAdminError('user_not_found_error');
-          return res.status(404).json({ error: 'User not found' });
+          return res.status(404).json({
+            message: 'User not found',
+            details: 'The specified user does not exist'
+          });
         }
         trackAdminError('analytics_service_error');
-        return res.status(502).json({ error: 'Analytics service unavailable' });
+        return res.status(502).json({
+          message: 'Service unavailable',
+          details: 'Analytics service is not responding'
+        });
       }
+      
+      if (error instanceof Error) {
+        switch (error.message) {
+          case 'Invalid user ID':
+            return res.status(400).json({
+              message: 'Invalid user ID',
+              details: 'The provided user ID is not valid'
+            });
+          case 'No published blogs':
+            return res.status(404).json({
+              message: 'No analytics available',
+              details: 'User has no published blogs to analyze'
+            });
+        }
+      }
+      
       trackAdminError('user_analytics_fetch_error');
-      return res.status(500).json({ error: 'Failed to fetch user analytics' });
+      logger.error('Unexpected error fetching user analytics:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch user analytics'
+      });
     }
   }
 
@@ -364,13 +460,44 @@ export class AdminController {
       logger.error('Error fetching tag analytics:', error);
       if (error instanceof z.ZodError) {
         trackAdminError('tag_analytics_validation_error');
-        return res.status(400).json({ error: 'Invalid time parameters' });
-      } else if (axios.isAxiosError(error)) {
-        trackAdminError('analytics_service_error');
-        return res.status(502).json({ error: 'Analytics service unavailable' });
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        });
       }
+      
+      if (axios.isAxiosError(error)) {
+        trackAdminError('analytics_service_error');
+        return res.status(502).json({
+          message: 'Service unavailable',
+          details: 'Analytics service is not responding'
+        });
+      }
+      
+      if (error instanceof Error) {
+        switch (error.message) {
+          case 'Tag not found':
+            return res.status(404).json({
+              message: 'Tag not found',
+              details: 'The specified tag does not exist'
+            });
+          case 'No tagged blogs':
+            return res.status(404).json({
+              message: 'No analytics available',
+              details: 'Tag has no associated published blogs'
+            });
+        }
+      }
+      
       trackAdminError('tag_analytics_fetch_error');
-      return res.status(500).json({ error: 'Failed to fetch tag analytics' });
+      logger.error('Unexpected error fetching tag analytics:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch tag analytics'
+      });
     }
   }
 
@@ -399,12 +526,35 @@ export class AdminController {
       return res.json(blog);
     } catch (error) {
       logger.error('Error updating blog visibility:', error);
-      if (error instanceof Error && error.name === 'PrismaClientKnownRequestError') {
-        trackAdminError('blog_not_found_error');
-        return res.status(404).json({ error: 'Blog not found' });
+      if (error instanceof Error) {
+        if (error.name === 'PrismaClientKnownRequestError') {
+          trackAdminError('blog_not_found_error');
+          return res.status(404).json({
+            message: 'Blog not found',
+            details: 'The specified blog does not exist'
+          });
+        }
+        
+        switch (error.message) {
+          case 'Not authorized':
+            return res.status(403).json({
+              message: 'Not authorized',
+              details: 'You do not have permission to update this blog'
+            });
+          case 'Invalid visibility state':
+            return res.status(400).json({
+              message: 'Invalid visibility state',
+              details: 'The visibility value must be true or false'
+            });
+        }
       }
+      
       trackAdminError('blog_visibility_update_error');
-      return res.status(500).json({ error: 'Failed to update blog visibility' });
+      logger.error('Unexpected error updating blog visibility:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to update blog visibility'
+      });
     }
   }
 }

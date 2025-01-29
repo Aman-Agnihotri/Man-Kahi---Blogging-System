@@ -91,9 +91,40 @@ export class AnalyticsController {
       analyticsMetrics.eventProcessed.inc({ event_type: req.body.type || 'unknown', status: 'error' });
       logger.error('Error tracking event:', error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        });
       }
-      return res.status(500).json({ error: 'Internal server error' });
+      
+      if (error instanceof Error) {
+        switch (error.message) {
+          case 'Blog not found':
+            return res.status(404).json({
+              message: 'Blog not found',
+              details: 'The specified blog does not exist'
+            });
+          case 'Redis connection failed':
+            return res.status(503).json({
+              message: 'Service temporarily unavailable',
+              details: 'Unable to connect to analytics storage'
+            });
+          case 'Queue full':
+            return res.status(503).json({
+              message: 'Service busy',
+              details: 'Analytics queue is full, please try again later'
+            });
+        }
+      }
+      
+      logger.error('Unexpected error in event tracking:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to process analytics event'
+      });
     }
   }
 
@@ -143,9 +174,40 @@ export class AnalyticsController {
       analyticsMetrics.eventProcessed.inc({ event_type: 'progress', status: 'error' });
       logger.error('Error tracking progress:', error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        });
       }
-      return res.status(500).json({ error: 'Internal server error' });
+      
+      if (error instanceof Error) {
+        switch (error.message) {
+          case 'Blog not found':
+            return res.status(404).json({
+              message: 'Blog not found',
+              details: 'The specified blog does not exist'
+            });
+          case 'Invalid progress value':
+            return res.status(400).json({
+              message: 'Invalid progress value',
+              details: 'Progress must be between 0 and 100'
+            });
+          case 'Storage error':
+            return res.status(503).json({
+              message: 'Service temporarily unavailable',
+              details: 'Unable to store analytics data'
+            });
+        }
+      }
+      
+      logger.error('Unexpected error in progress tracking:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to track reading progress'
+      });
     }
   }
 
@@ -195,9 +257,40 @@ export class AnalyticsController {
       analyticsMetrics.eventProcessed.inc({ event_type: 'click', status: 'error' });
       logger.error('Error tracking link click:', error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        });
       }
-      return res.status(500).json({ error: 'Internal server error' });
+      
+      if (error instanceof Error) {
+        switch (error.message) {
+          case 'Blog not found':
+            return res.status(404).json({
+              message: 'Blog not found',
+              details: 'The specified blog does not exist'
+            });
+          case 'Invalid URL':
+            return res.status(400).json({
+              message: 'Invalid URL',
+              details: 'The provided URL is not valid'
+            });
+          case 'Storage error':
+            return res.status(503).json({
+              message: 'Service temporarily unavailable',
+              details: 'Unable to store analytics data'
+            });
+        }
+      }
+      
+      logger.error('Unexpected error in link tracking:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to track link click'
+      });
     }
   }
 
@@ -231,9 +324,40 @@ export class AnalyticsController {
       analyticsMetrics.aggregationOperations.inc({ operation_type: 'total', status: 'error' });
       logger.error('Error fetching analyticsRedis:', error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        });
       }
-      return res.status(500).json({ error: 'Internal server error' });
+      
+      if (error instanceof Error) {
+        switch (error.message) {
+          case 'Blog not found':
+            return res.status(404).json({
+              message: 'Blog not found',
+              details: 'The specified blog does not exist'
+            });
+          case 'Invalid timeframe':
+            return res.status(400).json({
+              message: 'Invalid timeframe',
+              details: 'The specified timeframe is not supported'
+            });
+          case 'Data unavailable':
+            return res.status(503).json({
+              message: 'Service temporarily unavailable',
+              details: 'Analytics data is currently unavailable'
+            });
+        }
+      }
+      
+      logger.error('Unexpected error fetching analytics:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch analytics data'
+      });
     }
   }
 

@@ -36,9 +36,17 @@ export const authenticate = (options: AuthOptions = {}) => {
                 : results.some(result => result);
 
             if (!isAuthenticated) {
+                logger.warn('Authentication failed:', {
+                    strategies,
+                    requireAll,
+                    results: results.map((r, i) => ({ strategy: strategies[i], success: r }))
+                });
                 return res.status(401).json({
                     success: false,
-                    message: "Authentication failed"
+                    message: "Authentication failed",
+                    details: requireAll 
+                        ? "All authentication strategies must succeed"
+                        : "At least one authentication strategy must succeed"
                 });
             }
 
@@ -47,9 +55,13 @@ export const authenticate = (options: AuthOptions = {}) => {
             if (token) {
                 const isBlacklisted = await tokenBlacklist.check(token);
                 if (isBlacklisted) {
+                    logger.warn('Attempt to use blacklisted token:', {
+                        tokenPrefix: token.substring(0, 10) + '...'
+                    });
                     return res.status(401).json({
                         success: false,
-                        message: "Token has been revoked"
+                        message: "Token has been revoked",
+                        details: "This token is no longer valid. Please obtain a new token."
                     });
                 }
             }
@@ -64,16 +76,43 @@ export const authenticate = (options: AuthOptions = {}) => {
                 );
 
                 if (!hasRequiredRole) {
+                    logger.warn('Insufficient permissions:', {
+                        userId: user.id,
+                        requiredRoles: options.roles,
+                        userRoles: user.roles.map(r => r.name)
+                    });
                     return res.status(403).json({
                         success: false,
-                        message: "Insufficient permissions"
+                        message: "Insufficient permissions",
+                        details: `Required roles: ${options.roles.join(', ')}`
                     });
                 }
             }
 
             next();
         } catch (error) {
-            logger.error('Authentication error:', error);
+            logger.error('Authentication error:', {
+                error,
+                strategies: options.strategy,
+                requireAll: options.requireAllStrategies
+            });
+            
+            if (error instanceof TokenExpiredError) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Token expired",
+                    details: "Please obtain a new access token"
+                });
+            }
+            
+            if (error instanceof JsonWebTokenError) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Invalid token",
+                    details: "The provided authentication token is malformed or invalid"
+                });
+            }
+            
             next(error);
         }
     });
@@ -153,11 +192,17 @@ async function handleJwtStrategy(req: Request): Promise<boolean> {
         return true;
     } catch (error) {
         if (error instanceof TokenExpiredError) {
-            logger.info('Token expired');
+            logger.info('Token expired', { tokenPrefix: token.substring(0, 10) + '...' });
         } else if (error instanceof JsonWebTokenError) {
-            logger.info('Invalid token');
+            logger.info('Invalid token', { 
+                error: error.message,
+                tokenPrefix: token.substring(0, 10) + '...'
+            });
         } else {
-            logger.error('JWT verification error:', error);
+            logger.error('JWT verification error:', {
+                error,
+                tokenPrefix: token.substring(0, 10) + '...'
+            });
         }
         return false;
     }
