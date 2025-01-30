@@ -8,6 +8,7 @@ import dotenv from 'dotenv'
 import logger from '@shared/utils/logger'
 import { prisma } from '@shared/utils/prismaClient'
 import { redis } from '@shared/config/redis'
+import { setupSwagger } from '@shared/config/swagger'
 import { setupElasticsearch } from '@utils/elasticsearch'
 import blogRoutes from './routes/blog.routes'
 import { metricsHandler } from './config/metrics'
@@ -43,6 +44,11 @@ app.get('/', (req, res) => {
 
 // Metrics endpoint
 app.get('/metrics', metricsHandler)
+
+// Setup Swagger documentation
+setupSwagger(app, 'Blog Service', [
+  path.resolve(__dirname, './routes/blog.routes.ts')
+]);
 
 // Routes
 app.use('/api/blogs', blogRoutes)

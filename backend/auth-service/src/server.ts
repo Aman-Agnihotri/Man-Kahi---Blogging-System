@@ -12,6 +12,8 @@ import { prisma } from '@shared/utils/prismaClient'
 import { redis } from '@shared/config/redis'
 import { metricsHandler } from './config/metrics'
 import { updateResourceUsage, trackRedisOperation } from './middlewares/metrics.middleware'
+import { setupSwagger } from '@shared/config/swagger'
+import path from 'path'
 
 // Load environment variables
 dotenv.config()
@@ -82,6 +84,12 @@ app.get('/', (req, res) => {
 // Metrics endpoint
 app.get('/metrics', metricsHandler)
 
+// Setup Swagger documentation
+setupSwagger(app, 'Auth Service', [
+  path.resolve(__dirname, './routes/auth.routes.ts'),
+  path.resolve(__dirname, './routes/oauth.routes.ts')
+]);
+
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/oauth', oauthRoutes)
@@ -143,3 +151,5 @@ const startServer = async () => {
     process.exit(1)
   }
 }
+
+startServer()

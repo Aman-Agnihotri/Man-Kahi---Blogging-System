@@ -3,8 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
+import { setupSwagger } from '@shared/config/swagger';
 import adminRoutes from '@routes/admin.routes';
 import dotenv from 'dotenv';
+import path from 'path';
 import { metricsHandler, metricsEnabled } from './config/metrics';
 import { trackRequest, updateResourceUsage, trackAdminError } from './middlewares/metrics.middleware';
 
@@ -17,6 +19,11 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+
+// Setup Swagger documentation
+setupSwagger(app as any, 'Admin Service', [
+  path.resolve(__dirname, './routes/admin.routes.ts')
+]);
 
 // Metrics middleware
 app.use(trackRequest());

@@ -1,8 +1,10 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import path from 'path';
 import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
+import { setupSwagger } from '@shared/config/swagger';
 import analyticsRoutes from '@routes/analytics.routes';
 import { metricsHandler, analyticsMetrics, register } from './config/metrics';
 import { redis } from '@shared/config/redis';
@@ -13,12 +15,17 @@ if (!['error', 'warn', 'info', 'debug'].includes(LOG_LEVEL)) {
   throw new Error(`Invalid LOG_LEVEL: ${LOG_LEVEL}. Must be one of: error, warn, info, debug`);
 }
 
-const app = express();
+const app: Application = express();
 
 // Middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+
+// Setup Swagger documentation
+setupSwagger(app as any, 'Analytics Service', [
+  path.resolve(__dirname, './routes/analytics.routes.ts')
+]);
 
 // Health check endpoint with metrics
 app.get('/health', async (req: Request, res: Response) => {

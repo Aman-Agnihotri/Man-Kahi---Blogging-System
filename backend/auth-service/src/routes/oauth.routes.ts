@@ -12,6 +12,51 @@ import {
     updateActiveTokens
 } from '../middlewares/metrics.middleware';
 
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     OAuthUser:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         email:
+ *           type: string
+ *         profile:
+ *           type: object
+ *           properties:
+ *             name:
+ *               type: string
+ *             picture:
+ *               type: string
+ *         provider:
+ *           type: string
+ *     OAuthLinkRequest:
+ *       type: object
+ *       required:
+ *         - token
+ *       properties:
+ *         token:
+ *           type: string
+ *     OAuthLinkResponse:
+ *       type: object
+ *       properties:
+ *         url:
+ *           type: string
+ *           description: URL to redirect to for OAuth provider authentication
+ *     OAuthCallbackResponse:
+ *       type: object
+ *       properties:
+ *         accessToken:
+ *           type: string
+ *         refreshToken:
+ *           type: string
+ *         linkToken:
+ *           type: string
+ *           description: Only present when linking accounts
+ */
+
 interface OAuthUser {
     id: string;
     email: string;
@@ -32,20 +77,59 @@ interface OAuthRequest extends Request {
 const router = Router();
 const authService = new AuthService();
 
-// Google OAuth routes with rate limiting
+/**
+ * @swagger
+ * /oauth/google:
+ *   get:
+ *     tags:
+ *       - OAuth
+ *     summary: Initiate Google OAuth flow
+ *     description: Redirects to Google login page for authentication
+ *     parameters:
+ *       - in: query
+ *         name: linkToken
+ *         schema:
+ *           type: string
+ *         description: Optional token for linking existing account
+ *     responses:
+ *       302:
+ *         description: Redirects to Google authentication page
+ */
 router.get(
     '/google',
     createEndpointRateLimit('auth:oauth') as unknown as RequestHandler,
     trackAuthMetrics('oauth_initiate', 'google'),
     (req: Request, res: Response, next: NextFunction) => {
-        const state = req.query.linkToken as string | undefined; // For account linking
+        const state = req.query.linkToken as string | undefined;
         passport.authenticate('google', {
             scope: ['profile', 'email'],
-            ...(state && { state }), // Pass token as state if linking account
+            ...(state && { state }),
         })(req, res, next);
     }
 );
 
+/**
+ * @swagger
+ * /oauth/google/callback:
+ *   get:
+ *     tags:
+ *       - OAuth
+ *     summary: Google OAuth callback
+ *     description: Handles the callback from Google OAuth and creates/updates user
+ *     responses:
+ *       302:
+ *         description: Redirects to frontend with tokens
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/OAuthCallbackResponse'
+ *       500:
+ *         description: Authentication failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get(
     '/google/callback',
     createEndpointRateLimit('auth:oauth') as unknown as RequestHandler,
@@ -56,19 +140,14 @@ router.get(
                 throw new Error('Authentication failed');
             }
 
-            // Generate tokens
-            // Track DB operation for OAuth user
             const dbTimer = trackDbOperation('select', 'oauth_users');
             const accessToken = await authService.generateToken(req.user.id);
             const refreshToken = await authService.generateRefreshToken(req.user.id);
             dbTimer.end();
 
-            updateActiveTokens(1); // Increment active tokens
+            updateActiveTokens(1);
 
-            // For account linking, token is in authInfo
             const linkToken = req.authInfo?.token;
-
-            // Redirect URL with tokens
             const frontendURL = process.env.FRONTEND_URL ?? 'http://localhost:3000';
             const params = new URLSearchParams({
                 accessToken,
@@ -88,7 +167,50 @@ router.get(
     }) as unknown) as RequestHandler
 );
 
-// Link OAuth provider to existing account
+/**
+ * @swagger
+ * /oauth/link/{provider}:
+ *   post:
+ *     tags:
+ *       - OAuth
+ *     summary: Link OAuth provider to existing account
+ *     description: Initiates the process of linking an OAuth provider to an existing account
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: provider
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [google]
+ *         description: OAuth provider to link
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/OAuthLinkRequest'
+ *     responses:
+ *       200:
+ *         description: Successfully initiated linking process
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/OAuthLinkResponse'
+ *       400:
+ *         description: Token is required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post(
     '/link/:provider',
     authenticate({ strategy: ['jwt'] }) as unknown as RequestHandler,
@@ -104,7 +226,6 @@ router.post(
                 return;
             }
 
-            // Redirect to OAuth provider with token in state
             const authURL = `/auth/${provider}?linkToken=${token}`;
             res.json({ url: authURL });
         } catch (error) {
@@ -116,7 +237,47 @@ router.post(
     }) as unknown as RequestHandler
 );
 
-// Unlink OAuth provider from account
+/**
+ * @swagger
+ * /oauth/unlink/{provider}:
+ *   delete:
+ *     tags:
+ *       - OAuth
+ *     summary: Unlink OAuth provider from account
+ *     description: Removes the connection between an OAuth provider and the user's account
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: provider
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [google]
+ *         description: OAuth provider to unlink
+ *     responses:
+ *       200:
+ *         description: Provider successfully unlinked
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Failed to unlink provider
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.delete(
     '/unlink/:provider',
     authenticate({ strategy: ['jwt'] }) as unknown as RequestHandler,
