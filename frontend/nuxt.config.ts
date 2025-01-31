@@ -5,11 +5,14 @@ export default defineNuxtConfig({
     compatibilityVersion: 4,
   },
   devtools: { enabled: true },
+  pages: true,
   modules: [
     '@nuxtjs/tailwindcss',
     '@vueuse/nuxt'
   ],
   app: {
+    pageTransition: false,
+    layoutTransition: false,
     head: {
       title: 'ManKahi - Share Your Stories',
       link: [{ rel: 'icon', type: 'image/png', href: '/favicon.png' }],

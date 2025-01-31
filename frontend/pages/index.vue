@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="root">
     <section class="text-center py-16 bg-gradient-to-b from-primary-100 to-primary-50">
       <h1 class="text-5xl font-bold text-primary-900 mb-6">
         Share Your Stories with the World
@@ -133,7 +133,14 @@
   const selectedTag = ref('')
   const loading = ref(false)
 
-  // Dummy data
+  // Simulate async data load naturally
+  const { data: asyncData } = await useAsyncData('initial-data', async () => {
+    // In a real app, this would be an API call
+    // Using timeout to simulate network request
+    await new Promise(resolve => setTimeout(resolve, 100))
+    return true
+  })
+
   const categories = ref([
     { id: 1, name: 'Article' },
     { id: 2, name: 'Project' },
