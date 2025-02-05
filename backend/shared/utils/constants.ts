@@ -36,7 +36,7 @@ export const LOG_LEVEL = getEnvVar('LOG_LEVEL', 'info');
 
 export const NODE_ENV = getEnvVar('NODE_ENV');
 
-if (NODE_ENV !== 'test' && NODE_ENV !== 'dev' && NODE_ENV !== 'prod') {
+if (NODE_ENV !== 'test' && NODE_ENV !== 'development' && NODE_ENV !== 'production') {
     console.error(`Invalid NODE_ENV: ${NODE_ENV}`);
     throw new Error(`Invalid NODE_ENV: ${NODE_ENV}`);
 }

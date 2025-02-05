@@ -3,8 +3,9 @@ import { RateLimiter } from './limiter';
 import { MemoryRateLimiter } from './memoryLimiter';
 import { RateLimitOptions, RateLimitInfo, IRateLimiter } from './types';
 import logger from '../../utils/logger';
-import { AuthenticatedRequest } from '../auth';
+import { isAuthenticatedRequest } from '../auth/types';
 import { getClientIp, generateErrorMessage } from './utils';
+import { createServiceMetrics } from '../../config/metrics';
 import { 
     SERVICE_CONFIGS, 
     ROLE_CONFIGS, 
@@ -14,6 +15,9 @@ import {
 
 // Store limiters to avoid recreating them
 const limiters = new Map<string, IRateLimiter>();
+
+// Initialize shared metrics
+const metrics = createServiceMetrics('shared');
 
 /**
  * Check if IP is in bypass list
@@ -26,13 +30,12 @@ const shouldBypassRateLimit = (ip: string): boolean => {
  * Get or create a limiter instance
  */
 const getLimiter = (config: RateLimitOptions, useMemory: boolean = false): IRateLimiter => {
-    const key = `${config.keyPrefix}:${useMemory ? 'mem' : 'redis'}`;
+    const keyPrefix = config.keyPrefix ?? 'rate_limit';
+    const key = `${keyPrefix}:${useMemory ? 'mem' : 'redis'}`;
     
     if (!limiters.has(key)) {
-        limiters.set(key, useMemory 
-            ? new MemoryRateLimiter(config)
-            : new RateLimiter(config)
-        );
+        const limiter = useMemory ? new MemoryRateLimiter(config) : new RateLimiter(config);
+        limiters.set(key, limiter);
     }
     
     return limiters.get(key)!;
@@ -60,10 +63,22 @@ const handleRateLimitError = (
     req: Request,
     res: Response,
     config: RateLimitOptions,
-    error: any
+    error: any,
+    limitType: string
 ): void => {
-    logger.warn(`Rate limit exceeded for IP: ${getClientIp(req)}`);
+    const ip = getClientIp(req);
+    
+    // Include user ID in log if authenticated
+    const userId = isAuthenticatedRequest(req) ? req.user.id : undefined;
+    const userPart = userId ? ' (user: ' + userId + ')' : '';
+    logger.warn(`Rate limit exceeded for IP: ${ip}` + userPart);
     const retryAfter = error.msBeforeNext || config.duration * 1000;
+    
+    // Track rate limit using shared metrics
+    const baseUrl = req.baseUrl || '';
+    const serviceName = baseUrl.split('/')[1] ?? 'unknown';
+    const metricName = `${serviceName}_service`;
+    metrics.trackRateLimit(metricName, limitType);
     
     res.status(429).json({
         success: false,
@@ -80,7 +95,10 @@ const handleRateLimitError = (
  * Create middleware for basic rate limiting
  */
 export const createRateLimit = (options: Partial<RateLimitOptions> = {}, useMemory: boolean = false) => {
-    const config = { ...DEFAULT_CONFIGS.redis, ...options };
+    const config: RateLimitOptions = {
+        ...DEFAULT_CONFIGS.redis,
+        ...options
+    };
     const limiter = getLimiter(config, useMemory);
 
     return async (req: Request, res: Response, next: NextFunction) => {
@@ -115,7 +133,7 @@ export const createRateLimit = (options: Partial<RateLimitOptions> = {}, useMemo
 
             next();
         } catch (error) {
-            handleRateLimitError(req, res, config, error);
+            handleRateLimitError(req, res, config, error, 'generic');
         }
     };
 };
@@ -124,8 +142,9 @@ export const createRateLimit = (options: Partial<RateLimitOptions> = {}, useMemo
  * Create middleware for service-specific rate limiting
  */
 export const createServiceRateLimit = (serviceName: string, options: Partial<RateLimitOptions> = {}) => {
-    const config = {
-        ...SERVICE_CONFIGS[serviceName] || DEFAULT_CONFIGS.redis,
+    const baseConfig = SERVICE_CONFIGS[serviceName] || DEFAULT_CONFIGS.redis;
+    const config: RateLimitOptions = {
+        ...baseConfig,
         ...options
     };
     const limiter = getLimiter(config);
@@ -143,7 +162,7 @@ export const createServiceRateLimit = (serviceName: string, options: Partial<Rat
             setRateLimitHeaders(res, info);
             next();
         } catch (error) {
-            handleRateLimitError(req, res, config, error);
+            handleRateLimitError(req, res, config, error, 'service');
         }
     };
 };
@@ -152,6 +171,10 @@ export const createServiceRateLimit = (serviceName: string, options: Partial<Rat
  * Create middleware for role-based rate limiting
  */
 export const createRoleRateLimit = (options: Partial<RateLimitOptions> = {}) => {
+    const defaultConfig: RateLimitOptions = {
+        ...DEFAULT_CONFIGS.redis,
+        ...options
+    };
     const limiters = new Map<string, IRateLimiter>();
 
     return async (req: Request, res: Response, next: NextFunction) => {
@@ -162,27 +185,36 @@ export const createRoleRateLimit = (options: Partial<RateLimitOptions> = {}) => 
         }
 
         try {
-            const authReq = req as AuthenticatedRequest;
-            const role = authReq.user?.roles?.[0]?.name || 'reader';
+            // Get user's primary role or default to reader
+            const role = isAuthenticatedRequest(req) && req.user.roles.length > 0 
+                ? req.user.roles[0] 
+                : 'reader';
 
             // Get or create limiter for this role
-            if (!limiters.has(role)) {
-                const roleConfig = {
-                    ...ROLE_CONFIGS[role] || ROLE_CONFIGS.reader,
-                    ...options
+            const limiterKey = role ?? 'reader';
+            if (!limiters.has(limiterKey)) {
+                const baseConfig = ROLE_CONFIGS[limiterKey] || ROLE_CONFIGS['reader'];
+                const roleConfig: RateLimitOptions = {
+                    ...defaultConfig,
+                    ...baseConfig
                 };
-                limiters.set(role, new RateLimiter(roleConfig));
+                const limiter = new RateLimiter(roleConfig);
+                limiters.set(limiterKey, limiter);
             }
 
-            const limiter = limiters.get(role)!;
-            const key = RateLimiter.createKey(role, ip);
+            const limiter = limiters.get(limiterKey)!;
+            const key = RateLimiter.createKey(limiterKey, ip);
             const info = await limiter.consume(key);
             
             setRateLimitHeaders(res, info);
             next();
         } catch (error) {
-            const config = { ...ROLE_CONFIGS.reader, ...options };
-            handleRateLimitError(req, res, config, error);
+            const baseConfig = ROLE_CONFIGS['reader'];
+            const config: RateLimitOptions = {
+                ...defaultConfig,
+                ...baseConfig
+            };
+            handleRateLimitError(req, res, config, error, 'role');
         }
     };
 };
@@ -191,8 +223,10 @@ export const createRoleRateLimit = (options: Partial<RateLimitOptions> = {}) => 
  * Create middleware for endpoint-specific rate limiting
  */
 export const createEndpointRateLimit = (endpointKey: string, options: Partial<RateLimitOptions> = {}) => {
-    const config = {
-        ...SERVICE_CONFIGS[endpointKey] || DEFAULT_CONFIGS.redis,
+    const baseConfig = SERVICE_CONFIGS[endpointKey] || DEFAULT_CONFIGS.redis;
+    const config: RateLimitOptions = {
+        ...DEFAULT_CONFIGS.redis,
+        ...baseConfig,
         ...options
     };
     const limiter = getLimiter(config);
@@ -210,7 +244,7 @@ export const createEndpointRateLimit = (endpointKey: string, options: Partial<Ra
             setRateLimitHeaders(res, info);
             next();
         } catch (error) {
-            handleRateLimitError(req, res, config, error);
+            handleRateLimitError(req, res, config, error, 'endpoint');
         }
     };
 };

@@ -1,26 +1,34 @@
 import { Request } from 'express';
-import { Role } from '@prisma/client';
 
-// Extend Express Request to include isAuthenticated for Passport
+// Express module augmentation
 declare global {
     namespace Express {
         interface Request {
-            isAuthenticated(): boolean;
+            user?: AuthenticatedUser;
+            isAuthenticated(): this is { user: AuthenticatedUser };
         }
     }
 }
 
+// Authenticated request with guaranteed user property
 export interface AuthenticatedRequest extends Request {
     user: AuthenticatedUser;
+}
+
+// Type guard to check if request is authenticated
+export function isAuthenticatedRequest(req: Request): req is AuthenticatedRequest {
+    return req.isAuthenticated() && req.user !== undefined;
 }
 
 export interface AuthenticatedUser {
     id: string;
     email: string;
     username: string;
-    roles: Role[];
+    roles: string[];
     createdAt: Date;
     updatedAt: Date;
+    // Support dynamic properties
+    [key: string]: unknown;
 }
 
 export interface TokenPayload {

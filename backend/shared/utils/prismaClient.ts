@@ -61,7 +61,7 @@ interface ExtendedPrismaClient extends PrismaClient {
  */
 function createPrismaClient(config: PrismaClientConfig = {}): ExtendedPrismaClient {
     const {
-        log = process.env.NODE_ENV !== "production",
+        log = process.env['NODE_ENV'] !== "production",
         connectionRetries = 3,
         connectionTimeout = 5000,
         queryTimeout = 30000
@@ -80,7 +80,7 @@ function createPrismaClient(config: PrismaClientConfig = {}): ExtendedPrismaClie
         errorFormat: 'minimal',
         datasources: {
             db: {
-                url: process.env.DATABASE_URL,
+                url: process.env['DATABASE_URL'],
             },
         },
     }) as ExtendedPrismaClient;
@@ -191,10 +191,10 @@ class PrismaClientSingleton {
 
 // Configuration for Prisma Client
 const prismaConfig: PrismaClientConfig = {
-    log: process.env.NODE_ENV !== "production",
-    connectionRetries: Number(process.env.PRISMA_CONNECTION_RETRIES) || 3,
-    connectionTimeout: Number(process.env.PRISMA_CONNECTION_TIMEOUT) || 5000,
-    queryTimeout: Number(process.env.PRISMA_QUERY_TIMEOUT) || 30000,
+    log: process.env['NODE_ENV'] !== "production",
+    connectionRetries: Number(process.env['PRISMA_CONNECTION_RETRIES']) || 3,
+    connectionTimeout: Number(process.env['PRISMA_CONNECTION_TIMEOUT']) || 5000,
+    queryTimeout: Number(process.env['PRISMA_QUERY_TIMEOUT']) || 30000,
 };
 
 // Export singleton instance

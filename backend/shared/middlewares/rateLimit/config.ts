@@ -8,7 +8,7 @@ export const RATE_LIMIT_BYPASS = {
         '127.0.0.1',
         'localhost',
         '::1',
-        process.env.RATE_LIMIT_BYPASS_IP
+        process.env['RATE_LIMIT_BYPASS_IP']
     ].filter(Boolean))
 };
 

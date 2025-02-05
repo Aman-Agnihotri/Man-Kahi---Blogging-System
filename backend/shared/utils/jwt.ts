@@ -51,9 +51,10 @@ export const generateToken = (payload: TokenPayload, expiresIn?: string): string
             tokenExpiry = payload.type === 'refresh' ? JWT_REFRESH_EXPIRES_IN : JWT_ACCESS_EXPIRES_IN;
         }
         
-        return jwt.sign(sanitizedPayload, JWT_SECRET, { 
+        // Cast expiresIn to appropriate type for jsonwebtoken
+        return jwt.sign(sanitizedPayload, JWT_SECRET as jwt.Secret, {
             algorithm: "HS512",
-            expiresIn: tokenExpiry,
+            expiresIn: tokenExpiry as jwt.SignOptions["expiresIn"],
             notBefore: 0 // Token is valid immediately
         });
     } catch (error) {
@@ -81,7 +82,7 @@ export const verifyToken = (token: string): TokenPayload => {
             throw new TokenValidationError('Invalid token structure');
         }
 
-        const decoded = jwt.verify(token, JWT_SECRET, {
+        const decoded = jwt.verify(token, JWT_SECRET as jwt.Secret, {
             algorithms: ['HS512'] // Explicitly specify allowed algorithms
         }) as TokenPayload;
 

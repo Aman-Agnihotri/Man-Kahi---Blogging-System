@@ -1,136 +1,140 @@
-import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
+import { RateLimitInfo, RateLimitOptions, IRateLimiter } from './types';
 import { redis } from '../../config/redis';
-import { RateLimitConfig, RateLimitInfo, IRateLimiter } from './types';
-import logger from '../../utils/logger';
-import { formatDuration } from './utils';
+
+const BLOCK_KEY_SUFFIX = ':blocked';
+const POINTS_KEY_SUFFIX = ':points';
 
 export class RateLimiter implements IRateLimiter {
-    private readonly limiter: RateLimiterRedis;
-    private readonly config: RateLimitConfig;
+    private readonly keyPrefix: string;
 
-    constructor(config: RateLimitConfig) {
-        this.config = {
-            ...config,
-            keyPrefix: config.keyPrefix ?? 'rl',
-        };
-
-        this.limiter = new RateLimiterRedis({
-            storeClient: redis,
-            points: config.points,
-            duration: config.duration,
-            blockDuration: config.blockDuration,
-            keyPrefix: this.config.keyPrefix,
-        });
+    constructor(private readonly config: RateLimitOptions) {
+        this.keyPrefix = config.keyPrefix ?? 'rate_limit';
     }
 
-    /**
-     * Consume points from the rate limiter
-     */
+    static sanitizeKey(key: string): string {
+        return key.replace(/[^a-zA-Z0-9]/g, '_');
+    }
+
+    static createKey(prefix: string, key: string): string {
+        return `${RateLimiter.sanitizeKey(prefix)}:${RateLimiter.sanitizeKey(key)}`;
+    }
+
+    private getPointsKey(key: string): string {
+        return `${this.keyPrefix}:${key}${POINTS_KEY_SUFFIX}`;
+    }
+
+    private getBlockKey(key: string): string {
+        return `${this.keyPrefix}:${key}${BLOCK_KEY_SUFFIX}`;
+    }
+
     async consume(key: string, points: number = 1): Promise<RateLimitInfo> {
-        try {
-            const res = await this.limiter.consume(key, points);
-            return this.formatResponse(res);
-        } catch (rateLimiterRes) {
-            if (rateLimiterRes instanceof Error) {
-                throw rateLimiterRes;
+        const pointsKey = this.getPointsKey(key);
+        const blockKey = this.getBlockKey(key);
+
+        // Check if blocked
+        const isBlocked = await this.isBlocked(key);
+        if (isBlocked) {
+            const ttl = await redis.ttl(blockKey);
+            return {
+                remaining: 0,
+                reset: new Date(Date.now() + (ttl * 1000)),
+                total: this.config.points,
+                blocked: true,
+                retryAfter: ttl * 1000
+            };
+        }
+
+        // Get current points
+        const currentPoints = parseInt(await redis.get(pointsKey) ?? '0');
+        const remainingPoints = this.config.points - (currentPoints + points);
+
+        if (remainingPoints < 0) {
+            // Block if configured
+            if (this.config.blockDuration) {
+                await this.block(key, this.config.blockDuration);
             }
-            // When consumption fails due to rate limiting
-            return this.formatResponse(rateLimiterRes as RateLimiterRes, true);
-        }
-    }
 
-    /**
-     * Get rate limit info without consuming points
-     */
-    async get(key: string): Promise<RateLimitInfo | null> {
-        try {
-            const res = await this.limiter.get(key);
-            return res ? this.formatResponse(res) : null;
-        } catch (error) {
-            logger.error('Error getting rate limit info:', error);
-            return null;
+            const resetTime = new Date(Date.now() + (this.config.duration * 1000));
+            return {
+                remaining: 0,
+                reset: resetTime,
+                total: this.config.points,
+                blocked: true,
+                retryAfter: this.config.duration * 1000
+            };
         }
-    }
 
-    /**
-     * Block a key for a specified duration
-     */
-    async block(key: string, duration?: number): Promise<void> {
-        try {
-            const blockDuration = duration ?? this.config.blockDuration ?? this.config.duration;
-            await this.limiter.block(key, blockDuration);
-            logger.info(`Blocked key ${key} for ${formatDuration(blockDuration * 1000)}`);
-        } catch (error) {
-            logger.error('Error blocking key:', error);
-            throw error;
-        }
-    }
+        // Increment points
+        await redis.multi()
+            .incrby(pointsKey, points)
+            .expire(pointsKey, this.config.duration)
+            .exec();
 
-    /**
-     * Reset rate limit for a key
-     */
-    async reset(key: string): Promise<void> {
-        try {
-            await this.limiter.delete(key);
-            logger.info(`Reset rate limit for key ${key}`);
-        } catch (error) {
-            logger.error('Error resetting rate limit:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Check if a key is currently blocked
-     */
-    async isBlocked(key: string): Promise<boolean> {
-        try {
-            const res = await this.limiter.get(key);
-            return res ? res.remainingPoints <= 0 : false;
-        } catch (error) {
-            logger.error('Error checking blocked status:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Force set points consumed for a key
-     */
-    async set(key: string, points: number): Promise<void> {
-        try {
-            const duration = Math.ceil(this.config.duration);
-            await this.limiter.set(key, points, duration);
-            logger.debug(`Set points for key ${key} to ${points}`);
-        } catch (error) {
-            logger.error('Error setting points:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Format the rate limiter response
-     */
-    private formatResponse(res: RateLimiterRes, consumed: boolean = false): RateLimitInfo {
-        const remainingPoints = Math.max(0, res.remainingPoints);
         return {
             remaining: remainingPoints,
-            reset: new Date(Date.now() + res.msBeforeNext),
+            reset: new Date(Date.now() + (this.config.duration * 1000)),
             total: this.config.points,
-            retryAfter: consumed ? res.msBeforeNext : undefined,
-            blocked: remainingPoints <= 0
+            blocked: false
         };
     }
 
-    /**
-     * Get clean key from potentially dirty input
-     */
-    static sanitizeKey(key: string): string {
-        return key.replace(/[^a-zA-Z0-9:-]/g, '');
+    async get(key: string): Promise<RateLimitInfo | null> {
+        const pointsKey = this.getPointsKey(key);
+        const blockKey = this.getBlockKey(key);
+
+        const [points, blockTTL] = await Promise.all([
+            redis.get(pointsKey),
+            redis.ttl(blockKey)
+        ]);
+
+        if (!points && blockTTL <= 0) {
+            return null;
+        }
+
+        const currentPoints = parseInt(points ?? '0');
+        const isBlocked = blockTTL > 0;
+        const ttl = isBlocked ? blockTTL : await redis.ttl(pointsKey);
+
+        return {
+            remaining: Math.max(0, this.config.points - currentPoints),
+            reset: new Date(Date.now() + (ttl * 1000)),
+            total: this.config.points,
+            blocked: isBlocked,
+            ...(isBlocked && { retryAfter: blockTTL * 1000 })
+        };
     }
 
-    /**
-     * Create a composite key
-     */
-    static createKey(...parts: string[]): string {
-        return parts.map(part => this.sanitizeKey(part)).join(':');
+    async block(key: string, duration?: number): Promise<void> {
+        const blockKey = this.getBlockKey(key);
+        const blockDuration = duration ?? this.config.blockDuration ?? this.config.duration;
+        
+        await redis.multi()
+            .set(blockKey, '1')
+            .expire(blockKey, blockDuration)
+            .exec();
+    }
+
+    async reset(key: string): Promise<void> {
+        const pointsKey = this.getPointsKey(key);
+        const blockKey = this.getBlockKey(key);
+
+        await redis.multi()
+            .del(pointsKey)
+            .del(blockKey)
+            .exec();
+    }
+
+    async isBlocked(key: string): Promise<boolean> {
+        const blockKey = this.getBlockKey(key);
+        const result = await redis.exists(blockKey);
+        return result === 1;
+    }
+
+    async set(key: string, points: number): Promise<void> {
+        const pointsKey = this.getPointsKey(key);
+        await redis.multi()
+            .set(pointsKey, points.toString())
+            .expire(pointsKey, this.config.duration)
+            .exec();
     }
 }

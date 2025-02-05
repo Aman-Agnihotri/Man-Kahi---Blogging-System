@@ -1,4 +1,4 @@
-import IORedis from 'ioredis';
+import * as IORedis from 'ioredis';
 import logger from '../utils/logger';
 
 /**
@@ -84,11 +84,11 @@ const BATCH_SIZE = 1000;
 /**
  * Redis Configuration
  */
-const REDIS_NODES = (process.env.REDIS_NODES ?? 'localhost:6379')
+const REDIS_NODES: RedisNode[] = (process.env['REDIS_NODES'] ?? 'localhost:6379')
   .split(',')
   .map(node => {
-    const [host, port] = node.split(':');
-    return { host, port: parseInt(port) };
+    const [host = 'localhost', portStr = '6379'] = node.split(':');
+    return { host, port: parseInt(portStr, 10) };
   });
 
 const REDIS_CONFIG: RedisConfig = {
@@ -99,7 +99,7 @@ const REDIS_CONFIG: RedisConfig = {
     retryDelayOnFailover: 100,
     retryDelayOnClusterDown: 100,
     retryDelayOnTryAgain: 100,
-    password: process.env.REDIS_PASSWORD,
+    password: process.env['REDIS_PASSWORD'],
     enableOfflineQueue: true,
     enableReadyCheck: true,
     redisOptions: {
@@ -114,17 +114,18 @@ const REDIS_CONFIG: RedisConfig = {
  * Redis Client Factory
  */
 export class RedisClient {
-  private static instance: any;
+  private static instance: IORedis.Redis | IORedis.Cluster | null = null;
   private static isCluster: boolean;
 
-  static getInstance(): any {
+  static getInstance(): IORedis.Redis | IORedis.Cluster {
     if (!RedisClient.instance) {
       RedisClient.isCluster = REDIS_NODES.length > 1;
       
       if (RedisClient.isCluster) {
         RedisClient.instance = new IORedis.Cluster(REDIS_CONFIG.nodes, REDIS_CONFIG.options);
       } else {
-        RedisClient.instance = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+        const redisUrl = process.env['REDIS_URL'];
+        RedisClient.instance = new IORedis.Redis(redisUrl ?? 'redis://localhost:6379', {
           retryStrategy: REDIS_CONFIG.options.redisOptions.retryStrategy,
           maxRetriesPerRequest: REDIS_CONFIG.options.redisOptions.maxRetriesPerRequest
         });

@@ -33,11 +33,11 @@ export const rateLimit = (windowMs: number, maxRequests: number) => {
                 });
             }
 
-            next();
+            return next();
         } catch (error) {
             logger.error('Rate limiting error:', error);
             // Continue despite rate limiting errors
-            next();
+            return next();
         }
     };
 };
