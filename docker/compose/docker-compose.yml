@@ -1,18 +1,31 @@
 services:
+    # Database Initialization Service
+    init-db:
+        build:
+            context: ../../backend
+            dockerfile: init-service/Dockerfile
+        container_name: mankahi-init-db
+        depends_on:
+            postgres:
+                condition: service_healthy
+        env_file:
+            - .env.development
+        volumes:
+            - ../../backend/shared:/app/shared
+
     # PostgreSQL
     postgres:
         image: postgres:16-alpine
         container_name: mankahi-postgres
         env_file:
-            - ../../.env
-            - ../../.env.development
+            - .env.development
         ports:
             - "5432:5432"
         volumes:
             - postgres-data:/var/lib/postgresql/data
-            - ../postgres:/docker-entrypoint-initdb.d
+            - ../postgres/init-db.sh:/docker-entrypoint-initdb.d/init.sh
         healthcheck:
-            test: ["CMD-SHELL", "pg_isready -U hunterhhh412"]
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
             interval: 10s
             timeout: 5s
             retries: 5
@@ -40,8 +53,7 @@ services:
             - "9000:9000"
             - "9001:9001"
         env_file:
-            - ../../.env
-            - ../../.env.development
+            - .env.development
         volumes:
             - minio-data:/data
         command: server /data --console-address ":9001"
@@ -56,11 +68,10 @@ services:
         image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
         container_name: mankahi-elasticsearch
         env_file:
-            - ../../.env
-            - ../../.env.development
+            - .env.development
         environment:
             - discovery.type=single-node
-            - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+            - ES_JAVA_OPTS=-Xms512m -Xmx512m
             - xpack.security.enabled=false
         ports:
             - "9200:9200"
@@ -81,35 +92,44 @@ services:
         build:
             context: ../../backend
             dockerfile: auth-service/Dockerfile
-            target: ${NODE_ENV}
+            target: development
         container_name: mankahi-auth
         ports:
             - "3001:3001"
         depends_on:
+            init-db:
+                condition: service_completed_successfully
             postgres:
                 condition: service_healthy
             redis:
                 condition: service_healthy
         env_file:
-            - ../../.env
-            - ../../.env.development
+            - .env.development
         volumes:
             - ../../backend/auth-service:/app/auth-service
             - ../../backend/shared:/app/shared
             - /app/auth-service/node_modules
         command: npm run dev
         working_dir: /app/auth-service
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
 
     # Blog Service
     blog-service:
         build:
             context: ../../backend
             dockerfile: blog-service/Dockerfile
-            target: ${NODE_ENV}
+            target: development
         container_name: mankahi-blog
         ports:
             - "3002:3002"
         depends_on:
+            init-db:
+                condition: service_completed_successfully
             postgres:
                 condition: service_healthy
             redis:
@@ -117,8 +137,7 @@ services:
             elasticsearch:
                 condition: service_healthy
         env_file:
-            - ../../.env
-            - ../../.env.development
+            - .env.development
         environment:
             - PORT=3002
         volumes:
@@ -128,12 +147,18 @@ services:
             - blog-uploads:/app/blog-service/uploads
         command: npm run dev
         working_dir: /app/blog-service
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
 
     # Frontend (Nuxt)
     frontend:
         build:
             context: ../../frontend
-            target: ${NODE_ENV}
+            target: development
         container_name: mankahi-frontend
         ports:
             - "3000:3000"
@@ -141,8 +166,7 @@ services:
             - auth-service
             - blog-service
         env_file:
-            - ../../.env
-            - ../../.env.development
+            - .env.development
         environment:
             - NUXT_PUBLIC_API_URL=http://localhost:80
         volumes:
@@ -175,18 +199,19 @@ services:
         build:
             context: ../../backend
             dockerfile: analytics-service/Dockerfile
-            target: ${NODE_ENV}
+            target: development
         container_name: mankahi-analytics
         ports:
             - "3003:3003"
         depends_on:
+            init-db:
+                condition: service_completed_successfully
             postgres:
                 condition: service_healthy
             redis:
                 condition: service_healthy
         env_file:
-            - ../../.env
-            - ../../.env.development
+            - .env.development
         environment:
             - PORT=3003
         volumes:
@@ -194,28 +219,35 @@ services:
             - ../../backend/shared:/app/shared
             - /app/analytics-service/node_modules
             - analytics-logs:/app/analytics-service/logs
-        command: npm run dev
+        command: npx ts-node-dev -r tsconfig-paths/register --respawn --transpile-only src/server.ts
         working_dir: /app/analytics-service
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
 
     # Admin Service
     admin-service:
         build:
             context: ../../backend
             dockerfile: admin-service/Dockerfile
-            target: ${NODE_ENV}
+            target: development
         container_name: mankahi-admin
         ports:
             - "3004:3004"
         depends_on:
+            init-db:
+                condition: service_completed_successfully
             postgres:
                 condition: service_healthy
             redis:
                 condition: service_healthy
             analytics-service:
-                condition: service_started
+                condition: service_healthy
         env_file:
-            - ../../.env
-            - ../../.env.development
+            - .env.development
         environment:
             - PORT=3004
         volumes:
@@ -225,6 +257,12 @@ services:
             - admin-logs:/app/admin-service/logs
         command: npm run dev
         working_dir: /app/admin-service
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
 
 volumes:
     postgres-data:

@@ -1,5 +1,11 @@
 # Use Node.js LTS version as the base image
-FROM node:20-alpine AS builder
+FROM node:22-slim AS builder
+
+# Install required packages
+RUN apt-get update -y && apt-get install -y \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory and create directory structure
 WORKDIR /app
@@ -14,11 +20,22 @@ RUN npm install
 COPY analytics-service/. .
 COPY shared/ ../shared/
 
+# Generate Prisma Client
+WORKDIR /app/shared
+RUN npx prisma generate
+WORKDIR /app/analytics-service
+
 # Build TypeScript code
 RUN npm run build
 
 # Production image
-FROM node:20-alpine AS production
+FROM node:22-slim AS production
+
+# Install required packages
+RUN apt-get update -y && apt-get install -y \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory and create directories
 WORKDIR /app
@@ -46,7 +63,7 @@ EXPOSE 3003
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3003/ || exit 1
+    CMD ["curl", "-f", "http://localhost:3003/health"]
 
 # Start the server
 CMD ["node", "dist/server.js"]

@@ -1,8 +1,11 @@
 # Use Node.js LTS version as the base image
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
-# Install OpenSSL for JWT operations
-RUN apt-get update -y && apt-get install -y openssl
+# Install required packages
+RUN apt-get update -y && apt-get install -y \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -19,14 +22,22 @@ RUN npm install
 COPY auth-service/. .
 COPY shared/ ../shared/
 
+# Generate Prisma Client
+WORKDIR /app/shared
+RUN npx prisma generate
+WORKDIR /app/auth-service
+
 # Build TypeScript code
 RUN npm run build
 
 # Production image
-FROM node:20-slim AS production
+FROM node:22-slim AS production
 
 # Install OpenSSL for JWT operations
-RUN apt-get update -y && apt-get install -y openssl
+RUN apt-get update -y && apt-get install -y \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory and create directories
 WORKDIR /app
@@ -46,12 +57,15 @@ COPY --from=builder /app/shared/node_modules ../shared/node_modules
 # Set environment variables
 ENV NODE_ENV=production
 
+# Create logs directory
+RUN mkdir -p logs
+
 # Expose port
 EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:3001/health || exit 1
+    CMD ["curl", "-f", "http://localhost:3001/health"]
 
 # Start the server
 CMD ["node", "dist/server.js"]

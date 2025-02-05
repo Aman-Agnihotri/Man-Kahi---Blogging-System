@@ -3,17 +3,19 @@ services:
     postgres:
         image: postgres:16-alpine
         container_name: mankahi-postgres-prod
-        environment:
-            POSTGRES_USER: ${POSTGRES_USER}
-            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-            POSTGRES_MULTIPLE_DATABASES: mankahi_auth,mankahi_blog,mankahi_analytics
+        env_file:
+            - .env
         ports:
             - "5432:5432"
         volumes:
             - postgres-data:/var/lib/postgresql/data
             - ../postgres:/docker-entrypoint-initdb.d
         healthcheck:
-            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+            test:
+                [
+                    "CMD-SHELL",
+                    "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+                ]
             interval: 10s
             timeout: 5s
             retries: 5
@@ -63,9 +65,8 @@ services:
         ports:
             - "9000:9000"
             - "9001:9001"
-        environment:
-            MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-            MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+        env_file:
+            - .env
         volumes:
             - minio-data:/data
         command: server /data --console-address ":9001"
@@ -84,14 +85,15 @@ services:
     elasticsearch:
         image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
         container_name: mankahi-elasticsearch-prod
+        env_file:
+            - .env
         environment:
             - node.name=es01
             - cluster.name=mankahi-es-cluster
             - discovery.type=single-node
             - bootstrap.memory_lock=true
-            - "ES_JAVA_OPTS=-Xms4g -Xmx4g"
+            - ES_JAVA_OPTS=-Xms4g -Xmx4g
             - xpack.security.enabled=true
-            - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
         ports:
             - "9200:9200"
         volumes:
@@ -121,23 +123,19 @@ services:
     # Auth Service
     auth-service:
         build:
-            context: ../../backend/auth-service
+            context: ../../backend
+            dockerfile: auth-service/Dockerfile
             target: production
         container_name: mankahi-auth-prod
         restart: unless-stopped
         working_dir: /app/auth-service
+        env_file:
+            - .env
         environment:
-            NODE_ENV: production
-            PORT: 3001
-            DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mankahi_auth
-            REDIS_URL: redis://redis:6379
-            JWT_SECRET: ${JWT_SECRET}
-            JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
-            GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-            GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-            RATE_LIMIT_WINDOW: 900
-            RATE_LIMIT_MAX_REQUESTS: 100
-            CORS_ORIGIN: ${CORS_ORIGIN}
+            - NODE_ENV=production
+            - PORT=3001
+            - RATE_LIMIT_WINDOW=900
+            - RATE_LIMIT_MAX_REQUESTS=100
         volumes:
             - ../../backend/shared:/app/shared
         deploy:
@@ -158,31 +156,27 @@ services:
     # Blog Service
     blog-service:
         build:
-            context: ../../backend/blog-service
+            context: ../../backend
+            dockerfile: blog-service/Dockerfile
             target: production
         container_name: mankahi-blog-prod
         restart: unless-stopped
         working_dir: /app/blog-service
+        env_file:
+            - .env
         environment:
-            NODE_ENV: production
-            PORT: 3002
-            DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mankahi_blog
-            REDIS_URL: redis://redis:6379
-            ELASTICSEARCH_URL: https://elastic:${ELASTIC_PASSWORD}@elasticsearch:9200
-            ELASTICSEARCH_INDEX_SHARDS: 3
-            ELASTICSEARCH_INDEX_REPLICAS: 1
-            MINIO_ENDPOINT: minio
-            MINIO_PORT: 9000
-            MINIO_USE_SSL: "true"
-            MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-            MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-            AUTH_SERVICE_URL: http://auth-service:3001
-            RATE_LIMIT_WINDOW: 900
-            RATE_LIMIT_MAX_REQUESTS: 100
-            CORS_ORIGIN: ${CORS_ORIGIN}
-            BLOG_CACHE_TTL: 3600
-            SEARCH_CACHE_TTL: 300
-            MAX_FILE_SIZE: 5242880
+            - NODE_ENV=production
+            - PORT=3002
+            - ELASTICSEARCH_INDEX_SHARDS=3
+            - ELASTICSEARCH_INDEX_REPLICAS=1
+            - MINIO_ENDPOINT=minio
+            - MINIO_PORT=9000
+            - MINIO_USE_SSL=true
+            - RATE_LIMIT_WINDOW=900
+            - RATE_LIMIT_MAX_REQUESTS=100
+            - BLOG_CACHE_TTL=3600
+            - SEARCH_CACHE_TTL=300
+            - MAX_FILE_SIZE=5242880
         volumes:
             - ../../backend/shared:/app/shared
             - blog-uploads:/app/blog-service/uploads
@@ -204,21 +198,21 @@ services:
     # Analytics Service
     analytics-service:
         build:
-            context: ../../backend/analytics-service
+            context: ../../backend
+            dockerfile: analytics-service/Dockerfile
             target: production
         container_name: mankahi-analytics-prod
         restart: unless-stopped
         working_dir: /app/analytics-service
+        env_file:
+            - .env
         environment:
-            NODE_ENV: production
-            PORT: 3003
-            DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mankahi_analytics
-            REDIS_URL: redis://redis:6379
-            LOG_LEVEL: info
-            RATE_LIMIT_WINDOW: 60000
-            RATE_LIMIT_MAX: 60
-            DASHBOARD_RATE_LIMIT_MAX: 300
-            CORS_ORIGIN: ${CORS_ORIGIN}
+            - NODE_ENV=production
+            - PORT=3003
+            - LOG_LEVEL=info
+            - RATE_LIMIT_WINDOW=60000
+            - RATE_LIMIT_MAX=60
+            - DASHBOARD_RATE_LIMIT_MAX=300
         volumes:
             - ../../backend/shared:/app/shared
             - analytics-logs:/app/analytics-service/logs
@@ -240,22 +234,20 @@ services:
     # Admin Service
     admin-service:
         build:
-            context: ../../backend/admin-service
+            context: ../../backend
+            dockerfile: admin-service/Dockerfile
             target: production
         container_name: mankahi-admin-prod
         restart: unless-stopped
         working_dir: /app/admin-service
+        env_file:
+            - .env
         environment:
-            NODE_ENV: production
-            PORT: 3004
-            DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mankahi_blog
-            JWT_SECRET: ${JWT_SECRET}
-            JWT_EXPIRES_IN: 1d
-            ANALYTICS_SERVICE_URL: http://analytics-service:3003
-            ADMIN_RATE_LIMIT_WINDOW: 900000
-            ADMIN_RATE_LIMIT_MAX: 100
-            LOG_LEVEL: info
-            CORS_ORIGIN: ${CORS_ORIGIN}
+            - NODE_ENV=production
+            - PORT=3004
+            - ADMIN_RATE_LIMIT_WINDOW=900000
+            - ADMIN_RATE_LIMIT_MAX=100
+            - LOG_LEVEL=info
         volumes:
             - ../../backend/shared:/app/shared
             - admin-logs:/app/admin-service/logs
@@ -281,9 +273,10 @@ services:
             target: production
         container_name: mankahi-frontend-prod
         restart: unless-stopped
+        env_file:
+            - .env
         environment:
-            NODE_ENV: production
-            NUXT_PUBLIC_API_BASE: ${API_BASE_URL}
+            - NODE_ENV=production
         deploy:
             replicas: 3
             update_config:

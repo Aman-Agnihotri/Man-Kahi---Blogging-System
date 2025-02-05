@@ -1,8 +1,11 @@
 # Use Node.js LTS version as the base image
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
-# Install OpenSSL
-RUN apt-get update -y && apt-get install -y openssl
+# Install required packages
+RUN apt-get update -y && apt-get install -y \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -19,14 +22,22 @@ RUN npm install
 COPY admin-service/. .
 COPY shared/ ../shared/
 
+# Generate Prisma Client
+WORKDIR /app/shared
+RUN npx prisma generate
+WORKDIR /app/admin-service
+
 # Build TypeScript code
 RUN npm run build
 
 # Production image
-FROM node:20-slim AS production
+FROM node:22-slim AS production
 
-# Install OpenSSL
-RUN apt-get update -y && apt-get install -y openssl
+# Install required packages
+RUN apt-get update -y && apt-get install -y \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory and create directories
 WORKDIR /app
@@ -54,7 +65,7 @@ EXPOSE 3004
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:3004/health || exit 1
+    CMD ["curl", "-f", "http://localhost:3004/health"]
 
 # Start the server
 CMD ["node", "dist/server.js"]

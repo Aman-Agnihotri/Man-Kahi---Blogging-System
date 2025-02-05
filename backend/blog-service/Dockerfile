@@ -1,8 +1,11 @@
 # Use Node.js LTS version as the base image
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
-# Install OpenSSL
-RUN apt-get update -y && apt-get install -y openssl
+# Install required packages
+RUN apt-get update -y && apt-get install -y \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -19,14 +22,22 @@ RUN npm install
 COPY blog-service/. .
 COPY shared/ ../shared/
 
+# Generate Prisma Client
+WORKDIR /app/shared
+RUN npx prisma generate
+WORKDIR /app/blog-service
+
 # Build TypeScript code
 RUN npm run build
 
 # Production image
-FROM node:20-slim AS production
+FROM node:22-slim AS production
 
-# Install OpenSSL
-RUN apt-get update -y && apt-get install -y openssl
+# Install required packages
+RUN apt-get update -y && apt-get install -y \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory and create directories
 WORKDIR /app
@@ -43,8 +54,8 @@ COPY --from=builder /app/blog-service/node_modules ./node_modules
 COPY --from=builder /app/shared/. ../shared/
 COPY --from=builder /app/shared/node_modules ../shared/node_modules
 
-# Create uploads directory
-RUN mkdir -p uploads/images
+# Create uploads and logs directories
+RUN mkdir -p uploads/images && mkdir -p logs
 
 # Set environment variables
 ENV NODE_ENV=production
@@ -54,7 +65,7 @@ EXPOSE 3002
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:3002/ || exit 1
+    CMD ["curl", "-f", "http://localhost:3002/health"]
 
 # Start the server
 CMD ["node", "dist/server.js"]
@@ -62,8 +73,8 @@ CMD ["node", "dist/server.js"]
 # Development image
 FROM builder AS development
 
-# Create uploads directory
-RUN mkdir -p uploads/images
+# Create uploads and logs directories
+RUN mkdir -p uploads/images && mkdir -p logs
 
 # Keep the container running for development
 CMD ["npm", "run", "dev"]
