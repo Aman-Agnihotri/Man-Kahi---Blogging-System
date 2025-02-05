@@ -6,119 +6,121 @@ import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
 import { setupSwagger } from '@shared/config/swagger';
 import analyticsRoutes from '@routes/analytics.routes';
-import { metricsHandler, analyticsMetrics, register } from './config/metrics';
 import { redis } from '@shared/config/redis';
+import { metricsHandler, metricsEnabled } from '@config/metrics';
+import { 
+  trackRequest,
+  setupResourceMonitoring,
+  trackError 
+} from '@middlewares/metrics.middleware';
 
-// Validate essential environment variables
-const LOG_LEVEL = process.env.LOG_LEVEL ?? 'info';
-if (!['error', 'warn', 'info', 'debug'].includes(LOG_LEVEL)) {
-  throw new Error(`Invalid LOG_LEVEL: ${LOG_LEVEL}. Must be one of: error, warn, info, debug`);
-}
+// Enhanced startup logging
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+});
+
+logger.info('Initializing Analytics Service...');
+
+// Enhanced environment validation
+const validateEnvironment = () => {
+  logger.info('Validating environment configuration...');
+  const requiredEnvVars = {
+    LOG_LEVEL: process.env['LOG_LEVEL'] ?? 'info',
+    PORT: process.env['PORT'],
+    DATABASE_URL: process.env['DATABASE_URL'],
+    REDIS_URL: process.env['REDIS_URL'],
+  };
+
+  for (const [key, value] of Object.entries(requiredEnvVars)) {
+    if (!value) {
+      const error = new Error(`Missing required environment variable: ${key}`);
+      logger.error(error);
+      throw error;
+    }
+    logger.info(`Environment variable ${key} is set`);
+  }
+
+  if (!['error', 'warn', 'info', 'debug'].includes(requiredEnvVars.LOG_LEVEL)) {
+    const error = new Error(`Invalid LOG_LEVEL: ${requiredEnvVars.LOG_LEVEL}. Must be one of: error, warn, info, debug`);
+    logger.error(error);
+    throw error;
+  }
+
+  logger.info('Environment validation completed successfully');
+};
+
+validateEnvironment();
 
 const app: Application = express();
+logger.info('Express application instance created');
 
-// Middleware
+// Middleware setup with logging
+logger.info('Setting up middleware...');
 app.use(helmet());
+logger.info('Helmet security middleware configured');
+
 app.use(cors());
+logger.info('CORS middleware configured');
+
 app.use(express.json());
+logger.info('JSON body parser configured');
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  logger.debug(`${req.method} ${req.url}`, {
+    headers: req.headers,
+    query: req.query,
+    body: req.body,
+  });
+  next();
+});
+logger.info('Request logging middleware configured');
 
 // Setup Swagger documentation
+logger.info('Setting up Swagger documentation...');
 setupSwagger(app as any, 'Analytics Service', [
-  path.resolve(__dirname, './routes/analytics.routes.ts')
+  path.resolve(__dirname, '@routes/analytics.routes.ts')
 ]);
+logger.info('Swagger documentation configured');
 
-// Health check endpoint with metrics
-app.get('/health', async (req: Request, res: Response) => {
-  try {
-    // Check database connectivity
-    await prisma.$queryRaw`SELECT 1`;
-    
-    // Check Redis connectivity
-    await redis.ping();
+import { createHealthCheck } from '@shared/middlewares/health';
 
-    // Track resource usage
-    const used = process.memoryUsage();
-    analyticsMetrics.resourceUsage.set({ resource: 'memory', type: 'heapUsed' }, used.heapUsed);
-    analyticsMetrics.resourceUsage.set({ resource: 'memory', type: 'heapTotal' }, used.heapTotal);
-    analyticsMetrics.resourceUsage.set({ resource: 'memory', type: 'rss' }, used.rss);
-    analyticsMetrics.resourceUsage.set({ resource: 'memory', type: 'external' }, used.external);
-
-    // Track CPU usage
-    const cpuUsage = process.cpuUsage();
-    analyticsMetrics.resourceUsage.set({ resource: 'cpu', type: 'user' }, cpuUsage.user);
-    analyticsMetrics.resourceUsage.set({ resource: 'cpu', type: 'system' }, cpuUsage.system);
-
-    // Get queue sizes
-    // Get current metric values
-    let eventQueueSize = 0;
-    let aggregationQueueSize = 0;
-
-    // Get queue metrics from registry
+// Custom health check that includes queue metrics
+const analyticsHealthCheck = createHealthCheck({
+  serviceName: 'analytics-service',
+  onSuccess: async (metrics) => {
+    // Add queue metrics
     try {
-      const allMetrics = await register.getMetricsAsJSON();
-      const queueMetric = allMetrics.find(m => m.name === 'analytics_queue_size');
-      if (queueMetric && Array.isArray(queueMetric.values)) {
-        eventQueueSize = queueMetric.values.find(
-          v => v.labels?.queue_type === 'events'
-        )?.value ?? 0;
-        aggregationQueueSize = queueMetric.values.find(
-          v => v.labels?.queue_type === 'aggregation'
-        )?.value ?? 0;
-      }
-    } catch (err) {
-      logger.error('Error fetching queue metrics:', err);
-    }
-
-    res.json({
-      status: 'ok',
-      service: 'analytics',
-      timestamp: new Date().toISOString(),
-      metrics: {
-        memory: used,
-        cpu: cpuUsage,
+      const eventQueueSize = await redis.llen('analytics:events') || 0;
+      const aggregationQueueSize = await redis.llen('analytics:aggregation') || 0;
+      return {
+        ...metrics,
         queues: {
           events: eventQueueSize,
           aggregation: aggregationQueueSize
-        },
-        database: 'connected',
-        redis: 'connected'
-      }
-    });
-  } catch (error) {
-      logger.error('Health check failed:', error);
-
-    // Determine which dependency failed
-    const dependencies = {
-      database: false,
-      redis: false
-    };
-    
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-      dependencies.database = true;
-    } catch (e) {
-      logger.error('Database health check failed:', e);
+        }
+      };
+    } catch (err) {
+      logger.error('Error fetching queue sizes:', err);
+      trackError('health', 'queue_check_failed', 'analytics-service');
+      return metrics;
     }
-    
-    try {
-      await redis.ping();
-      dependencies.redis = true;
-    } catch (e) {
-      logger.error('Redis health check failed:', e);
-    }
-
-    res.status(503).json({
-      status: 'error',
-      service: 'analytics',
-      timestamp: new Date().toISOString(),
-      error: 'Service unhealthy',
-      dependencies
-    });
   }
 });
 
+app.get('/health', analyticsHealthCheck);
+
 // Metrics endpoint
-app.get('/metrics', metricsHandler);
+// Track HTTP requests
+app.use(trackRequest());
+
+// Start resource monitoring
+setupResourceMonitoring();
+
+app.get('/metrics', metricsEnabled, metricsHandler);
 
 // Routes
 app.use('/api/analytics', analyticsRoutes);
@@ -126,63 +128,82 @@ app.use('/api/analytics', analyticsRoutes);
 // Error handling
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   logger.error('Unhandled error:', err);
+  trackError('server', 'unhandled_error', 'analytics-service');
+  
+  const correlationId = (req.headers['x-correlation-id'] || 'unknown').toString();
   res.status(500).json({
     error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    message: process.env['NODE_ENV'] === 'development' ? err.message : undefined,
+    correlationId
   });
 });
 
 // Start server
-const PORT = process.env.PORT ?? 3003;
-// Initialize monitoring
-const initMonitoring = () => {
-  setInterval(() => {
-    const used = process.memoryUsage();
-    analyticsMetrics.resourceUsage.set({ resource: 'memory', type: 'heapUsed' }, used.heapUsed);
-    analyticsMetrics.resourceUsage.set({ resource: 'memory', type: 'heapTotal' }, used.heapTotal);
-    analyticsMetrics.resourceUsage.set({ resource: 'memory', type: 'rss' }, used.rss);
-    analyticsMetrics.resourceUsage.set({ resource: 'memory', type: 'external' }, used.external);
+const startServer = async () => {
+  logger.info('Starting analytics service...');
+  
+  try {
+    // Test database connection
+    logger.info('Establishing database connection...');
+    await prisma.$connect();
+    const dbResult = await prisma.$queryRaw`SELECT 1`;
+    logger.info('Database connection test successful:', dbResult);
 
-    const cpuUsage = process.cpuUsage();
-    analyticsMetrics.resourceUsage.set({ resource: 'cpu', type: 'user' }, cpuUsage.user);
-    analyticsMetrics.resourceUsage.set({ resource: 'cpu', type: 'system' }, cpuUsage.system);
-  }, 5000); // Update every 5 seconds
+    // Test Redis connection
+    logger.info('Testing Redis connection...');
+    const redisResult = await redis.ping();
+    logger.info('Redis connection test successful:', redisResult);
+
+    // Initialize metrics
+    logger.info('Initializing metrics collection...');
+    setupResourceMonitoring();
+    logger.info('Resource monitoring initialized');
+
+    // Start the server
+    const PORT = process.env['PORT'] ?? 3003;
+    app.listen(PORT, () => {
+      logger.info(`Analytics service running on port ${PORT}`);
+      logger.info('Server startup sequence completed successfully');
+    });
+
+  } catch (error) {
+    logger.error('Failed to start server:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+      details: error
+    });
+    console.error('Full error details:', error);
+    trackError('server', 'startup_error', 'analytics-service');
+    process.exit(1);
+  }
 };
 
-// Start server with monitoring
-app.listen(PORT, () => {
-  initMonitoring();
-  logger.info(`Analytics service running on port ${PORT}`);
-});
-
 // Handle shutdown gracefully
-process.on('SIGTERM', async () => {
-  logger.info('Received SIGTERM signal, shutting down gracefully');
+const shutdown = async () => {
+  logger.info('Received shutdown signal, shutting down gracefully');
   try {
     await Promise.all([
       prisma.$disconnect(),
       redis.quit(),
     ]);
-    analyticsMetrics.resourceUsage.reset();
     process.exit(0);
   } catch (error) {
     logger.error('Error during shutdown:', error);
+    trackError('server', 'shutdown_error', 'analytics-service');
     process.exit(1);
   }
-});
+};
 
-process.on('SIGINT', async () => {
-  logger.info('Received SIGINT signal, shutting down gracefully');
-  await Promise.all([
-    prisma.$disconnect(),
-    redis.quit(),
-  ]);
-  process.exit(0);
-});
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason: any) => {
   logger.error('Unhandled Promise rejection:', reason);
+  trackError('server', 'unhandled_rejection', 'analytics-service');
 });
+
+startServer();
 
 export default app;

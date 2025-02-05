@@ -1,8 +1,38 @@
 import { Router } from 'express';
-import { AnalyticsController } from '../controllers/analytics.controller';
+import { AnalyticsController } from '@controllers/analytics.controller';
 import { authenticate } from '@shared/middlewares/auth';
-import type { RequestHandler } from 'express-serve-static-core';
-import { trackEventProcessing, trackAggregation } from '../middlewares/metrics.middleware';
+import type { Request, Response, NextFunction, RequestHandler } from 'express-serve-static-core';
+import { trackEventProcessing, trackAggregation } from '@middlewares/metrics.middleware';
+import logger from '@shared/utils/logger';
+
+// Enhanced request logging middleware
+const logRequest = (routeName: string) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const start = process.hrtime();
+    const requestId = req.headers['x-request-id'] || Math.random().toString(36).substring(7);
+    
+    logger.info(`[${requestId}] Starting ${routeName}`, {
+      method: req.method,
+      path: req.path,
+      query: req.query,
+      body: req.body,
+      headers: req.headers
+    });
+
+    res.on('finish', () => {
+      const [seconds, nanoseconds] = process.hrtime(start);
+      const duration = seconds * 1000 + nanoseconds / 1000000;
+      
+      logger.info(`[${requestId}] Completed ${routeName}`, {
+        duration: `${duration.toFixed(2)}ms`,
+        statusCode: res.statusCode,
+        headers: res.getHeaders()
+      });
+    });
+
+    next();
+  };
+};
 
 /**
  * @swagger
@@ -165,8 +195,16 @@ router.post(
   authenticate({
     rateLimit: { windowMs: 1 * 60 * 1000, max: 60 }
   }) as unknown as RequestHandler,
+  logRequest('Track Event'),
   trackEventProcessing('track_event'),
-  analyticsController.trackEvent.bind(analyticsController)
+  (req, res, next) => {
+    logger.debug('Processing event tracking request', {
+      blogId: req.body.blogId,
+      type: req.body.type,
+      deviceId: req.body.deviceId
+    });
+    analyticsController.trackEvent(req, res).catch(next);
+  }
 );
 
 /**
@@ -213,8 +251,16 @@ router.post(
   authenticate({
     rateLimit: { windowMs: 1 * 60 * 1000, max: 60 }
   }) as unknown as RequestHandler,
+  logRequest('Track Progress'),
   trackEventProcessing('track_progress'),
-  analyticsController.trackProgress.bind(analyticsController)
+  (req, res, next) => {
+    logger.debug('Processing progress tracking request', {
+      blogId: req.body.blogId,
+      progress: req.body.progress,
+      deviceId: req.body.deviceId
+    });
+    analyticsController.trackProgress(req, res).catch(next);
+  }
 );
 
 /**
@@ -261,8 +307,15 @@ router.post(
   authenticate({
     rateLimit: { windowMs: 1 * 60 * 1000, max: 60 }
   }) as unknown as RequestHandler,
+  logRequest('Track Link'),
   trackEventProcessing('track_link'),
-  analyticsController.trackLink.bind(analyticsController)
+  (req, res, next) => {
+    logger.debug('Processing link tracking request', {
+      blogId: req.body.blogId,
+      url: req.body.url
+    });
+    analyticsController.trackLink(req, res).catch(next);
+  }
 );
 
 /**
@@ -320,8 +373,16 @@ router.get(
     roles: ['admin', 'analyst'],
     rateLimit: { windowMs: 1 * 60 * 1000, max: 300 }
   }) as unknown as RequestHandler,
+  logRequest('Get Blog Analytics'),
   trackAggregation('get_blog_analytics'),
-  analyticsController.getBlogAnalytics.bind(analyticsController)
+  (req, res, next) => {
+    logger.debug('Processing blog analytics request', {
+      blogId: req.params['blogId'],
+      timeframe: req.query['timeframe'],
+      userId: (req as any).user?.id
+    });
+    analyticsController.getBlogAnalytics(req, res).catch(next);
+  }
 );
 
 export default router;

@@ -1,33 +1,44 @@
 import { Request, Response, NextFunction } from 'express';
-import { analyticsMetrics } from '../config/metrics';
+import { metrics, analyticsMetrics } from '@config/metrics';
+
+// Track all HTTP requests using shared metrics
+export const trackRequest = () => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        const tracker = metrics.trackHttpRequest(req.method, req.path, parseInt(req.headers['content-length'] ?? '0', 10));
+        
+        res.on('finish', () => {
+            const responseSize = parseInt(res.getHeader('content-length')?.toString() ?? '0', 10);
+            tracker.end(res.statusCode, responseSize);
+        });
+
+        next();
+    };
+};
 
 // Track event processing with timing
 export const trackEventProcessing = (eventType: string) => {
     return async (req: Request, res: Response, next: NextFunction) => {
+        // Start tracking with shared HTTP metrics
+        const httpTracker = metrics.trackHttpRequest(req.method, req.path, parseInt(req.headers['content-length'] ?? '0', 10));
+        
+        // Start analytics-specific timing
         const endTimer = analyticsMetrics.eventProcessingTime.startTimer({ event_type: eventType });
         
-        // Track request in queue
-        analyticsMetrics.queueSize.inc({ queue_type: eventType });
-        
         try {
-            // Ensure cleanup happens even if next() throws
             res.on('finish', () => {
                 const status = res.statusCode < 400 ? 'success' : 'failure';
+                const responseSize = parseInt(res.getHeader('content-length')?.toString() ?? '0', 10);
+                
+                // Complete shared metrics tracking
+                httpTracker.end(res.statusCode, responseSize);
+                
+                // Track analytics-specific metrics
                 analyticsMetrics.eventProcessed.inc({ event_type: eventType, status });
-                // Request completed, decrease queue size
-                analyticsMetrics.queueSize.dec({ queue_type: eventType });
-                endTimer();
-            });
-
-            res.on('error', () => {
-                analyticsMetrics.queueSize.dec({ queue_type: eventType });
                 endTimer();
             });
 
             next();
         } catch (error) {
-            // Ensure cleanup if middleware throws
-            analyticsMetrics.queueSize.dec({ queue_type: eventType });
             endTimer();
             throw error;
         }
@@ -37,30 +48,27 @@ export const trackEventProcessing = (eventType: string) => {
 // Track data aggregation operations
 export const trackAggregation = (operationType: string) => {
     return async (req: Request, res: Response, next: NextFunction) => {
+        // Start tracking with shared HTTP metrics
+        const httpTracker = metrics.trackHttpRequest(req.method, req.path, parseInt(req.headers['content-length'] ?? '0', 10));
+        
+        // Start analytics-specific timing
         const endTimer = analyticsMetrics.aggregationDuration.startTimer({ operation_type: operationType });
         
-        // Track aggregation request in queue
-        analyticsMetrics.queueSize.inc({ queue_type: 'aggregation' });
-        
         try {
-            // Ensure cleanup happens even if next() throws
             res.on('finish', () => {
                 const status = res.statusCode < 400 ? 'success' : 'failure';
+                const responseSize = parseInt(res.getHeader('content-length')?.toString() ?? '0', 10);
+                
+                // Complete shared metrics tracking
+                httpTracker.end(res.statusCode, responseSize);
+                
+                // Track analytics-specific metrics
                 analyticsMetrics.aggregationOperations.inc({ operation_type: operationType, status });
-                // Request completed, decrease queue size
-                analyticsMetrics.queueSize.dec({ queue_type: 'aggregation' });
-                endTimer();
-            });
-
-            res.on('error', () => {
-                analyticsMetrics.queueSize.dec({ queue_type: 'aggregation' });
                 endTimer();
             });
 
             next();
         } catch (error) {
-            // Ensure cleanup if middleware throws
-            analyticsMetrics.queueSize.dec({ queue_type: 'aggregation' });
             endTimer();
             throw error;
         }
@@ -69,64 +77,34 @@ export const trackAggregation = (operationType: string) => {
 
 // Track storage operations
 export const trackStorageOperation = (operation: string, isSuccess: boolean) => {
+    // Use shared database metrics for storage operations
+    const dbTracker = metrics.trackDatabaseOperation(operation, 'analytics_storage');
     analyticsMetrics.dataStorageOperations.inc({
         operation,
         status: isSuccess ? 'success' : 'failure'
     });
+    dbTracker.end(isSuccess ? 'success' : 'failure');
 };
 
-// Track error occurrences
-export const trackError = (errorType: string) => {
-    analyticsMetrics.errorCount.inc({ error_type: errorType });
+// Track errors using shared metrics
+export const trackError = (errorType: string, errorCode: string, component: string, correlationId?: string) => {
+    metrics.trackError(errorType, errorCode, component, correlationId);
 };
 
-// Update queue metrics
-export const updateQueueMetrics = (queueType: string, size: number) => {
-    analyticsMetrics.queueSize.set({ queue_type: queueType }, size);
-};
-
-// Track queue processing time
-export const trackQueueLatency = (queueType: string) => {
-    return analyticsMetrics.queueLatency.startTimer({ queue_type: queueType });
-};
-
-// Update active users count
+// Update active users count (analytics-specific metric)
 export const updateActiveUsers = (count: number) => {
     analyticsMetrics.activeUsers.set(count);
 };
 
-// Middleware to track overall analytics API performance
-export const trackAnalyticsEndpoint = (operationType: string) => {
-    return async (req: Request, res: Response, next: NextFunction) => {
-        const endTimer = analyticsMetrics.eventProcessingTime.startTimer({ event_type: operationType });
-        
-        // Track API request in queue
-        analyticsMetrics.queueSize.inc({ queue_type: 'api' });
-        
-        try {
-            // Ensure cleanup happens even if next() throws
-            res.on('finish', () => {
-                const status = res.statusCode < 400 ? 'success' : 'failure';
-                analyticsMetrics.eventProcessed.inc({
-                    event_type: operationType,
-                    status
-                });
-                // Request completed, decrease queue size
-                analyticsMetrics.queueSize.dec({ queue_type: 'api' });
-                endTimer();
-            });
+// Queue tracking using shared metrics
+export const trackQueue = (queueType: string) => metrics.trackQueue(queueType);
 
-            res.on('error', () => {
-                analyticsMetrics.queueSize.dec({ queue_type: 'api' });
-                endTimer();
-            });
-
-            next();
-        } catch (error) {
-            // Ensure cleanup if middleware throws
-            analyticsMetrics.queueSize.dec({ queue_type: 'api' });
-            endTimer();
-            throw error;
-        }
-    };
+// Setup resource monitoring with analytics-specific tracking
+export const setupResourceMonitoring = (interval = 5000) => {
+    const resourceTracker = metrics.trackResource('system', 'analytics');
+    
+    setInterval(() => {
+        const usage = process.memoryUsage();
+        resourceTracker.setUsage(usage.heapUsed / 1024 / 1024, 'MB');
+    }, interval);
 };

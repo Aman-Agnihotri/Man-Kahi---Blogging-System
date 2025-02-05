@@ -4,7 +4,7 @@ import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
 import { analytics as analyticsRedis } from '@shared/config/redis';
 import crypto from 'crypto';
-import { analyticsMetrics } from '../config/metrics';
+import { metrics, analyticsMetrics } from '@config/metrics';
 
 // Input validation schemas
 const trackEventSchema = z.object({
@@ -36,20 +36,29 @@ const getAnalyticsSchema = z.object({
 export class AnalyticsController {
   // Track generic analyticsRedis event
   async trackEvent(req: Request, res: Response): Promise<Response> {
+    const requestId = req.headers['x-request-id'] || Math.random().toString(36).substring(7);
+    logger.info(`[${requestId}] Starting event tracking`);
+
     try {
       const startTime = process.hrtime();
+      logger.debug(`[${requestId}] Validating event input`, { body: req.body });
       const validatedInput = trackEventSchema.parse(req.body);
+      logger.debug(`[${requestId}] Input validation successful`);
       const { blogId, type, metadata, deviceId, path } = validatedInput;
 
       // Generate device ID if not provided
       const device = deviceId ?? this.generateDeviceId(req);
+      logger.debug(`[${requestId}] Generated device ID`, { deviceId: device });
 
-      // Increment queue size
-      analyticsMetrics.queueSize.inc({ queue_type: 'events' });
+      // Track queue metrics
+      const queueTracker = metrics.trackQueue('events');
+      queueTracker.setSize(1);
+      logger.debug(`[${requestId}] Queue metrics initialized`);
       
       // Store event in database
       const dbStartTime = process.hrtime();
-      await prisma.analyticsEvent.create({
+      logger.debug(`[${requestId}] Starting database operation`);
+      const event = await prisma.analyticsEvent.create({
         data: {
           blogId,
           type,
@@ -60,11 +69,17 @@ export class AnalyticsController {
       });
       
       const [dbSecs, dbNanos] = process.hrtime(dbStartTime);
+      logger.debug(`[${requestId}] Database operation completed`, { 
+        eventId: event.id,
+        duration: `${dbSecs + dbNanos / 1e9}s` 
+      });
+
       analyticsMetrics.dataStorageOperations.inc({ operation: 'create', status: 'success' });
       analyticsMetrics.eventProcessingTime.observe({ event_type: type }, dbSecs + dbNanos / 1e9);
 
       // Update real-time stats in Redis
-      const redisStartTime = process.hrtime();
+      logger.debug(`[${requestId}] Starting Redis operations`);
+      const redisTimer = metrics.trackQueue('redis').trackLatency();
       switch (type) {
         case 'view':
           await analyticsRedis.trackView(blogId, device);
@@ -75,21 +90,39 @@ export class AnalyticsController {
           analyticsMetrics.eventProcessed.inc({ event_type: 'read', status: 'success' });
           break;
       }
+      redisTimer.end();
 
-      const [redisSecs, redisNanos] = process.hrtime(redisStartTime);
-      analyticsMetrics.queueLatency.observe({ queue_type: 'redis' }, redisSecs + redisNanos / 1e9);
-
-      // Decrement queue size
-      analyticsMetrics.queueSize.dec({ queue_type: 'events' });
+      // Update queue metrics
+      queueTracker.setSize(0);
 
       const [totalSecs, totalNanos] = process.hrtime(startTime);
-      analyticsMetrics.eventProcessingTime.observe({ event_type: 'total' }, totalSecs + totalNanos / 1e9);
+      const totalDuration = totalSecs + totalNanos / 1e9;
+      analyticsMetrics.eventProcessingTime.observe({ event_type: 'total' }, totalDuration);
+
+      logger.info(`[${requestId}] Event tracking completed successfully`, {
+        type,
+        blogId,
+        duration: `${totalDuration}s`
+      });
 
       return res.status(200).json({ success: true });
     } catch (error) {
-      analyticsMetrics.errorCount.inc({ error_type: error instanceof z.ZodError ? 'validation' : 'processing' });
+      const errorType = error instanceof z.ZodError ? 'validation' : 'processing';
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
+
+      logger.error(`[${requestId}] Error tracking event:`, {
+        errorType,
+        errorMessage,
+        error: error instanceof Error ? error.stack : String(error),
+        body: req.body
+      });
+
+      metrics.trackError(
+        errorType,
+        errorMessage,
+        'analytics_event_tracking'
+      );
       analyticsMetrics.eventProcessed.inc({ event_type: req.body.type || 'unknown', status: 'error' });
-      logger.error('Error tracking event:', error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           message: 'Invalid input data',
@@ -135,14 +168,14 @@ export class AnalyticsController {
       const validatedInput = trackProgressSchema.parse(req.body);
       const { blogId, progress, deviceId, path } = validatedInput;
 
-      // Increment queue size
-      analyticsMetrics.queueSize.inc({ queue_type: 'progress' });
+      // Track queue metrics
+      const queueTracker = metrics.trackQueue('progress');
+      queueTracker.setSize(1);
 
       // Store progress in Redis for real-time tracking
-      const redisStartTime = process.hrtime();
+      const redisTimer = metrics.trackQueue('redis').trackLatency();
       await analyticsRedis.trackReadProgress(blogId, progress);
-      const [redisSecs, redisNanos] = process.hrtime(redisStartTime);
-      analyticsMetrics.queueLatency.observe({ queue_type: 'redis' }, redisSecs + redisNanos / 1e9);
+      redisTimer.end();
       analyticsMetrics.eventProcessed.inc({ event_type: 'progress', status: 'success' });
 
       // If progress is 90% or more, count it as a read and store with visitor info
@@ -166,11 +199,15 @@ export class AnalyticsController {
 
       const [totalSecs, totalNanos] = process.hrtime(startTime);
       analyticsMetrics.eventProcessingTime.observe({ event_type: 'progress' }, totalSecs + totalNanos / 1e9);
-      analyticsMetrics.queueSize.dec({ queue_type: 'progress' });
+      queueTracker.setSize(0);
 
       return res.status(200).json({ success: true });
     } catch (error) {
-      analyticsMetrics.errorCount.inc({ error_type: error instanceof z.ZodError ? 'validation' : 'processing' });
+      metrics.trackError(
+        error instanceof z.ZodError ? 'validation' : 'processing',
+        error instanceof Error ? error.message : 'unknown',
+        'analytics_progress_tracking'
+      );
       analyticsMetrics.eventProcessed.inc({ event_type: 'progress', status: 'error' });
       logger.error('Error tracking progress:', error);
       if (error instanceof z.ZodError) {
@@ -221,13 +258,14 @@ export class AnalyticsController {
       const deviceId = this.generateDeviceId(req);
 
       const startTime = process.hrtime();
-      analyticsMetrics.queueSize.inc({ queue_type: 'links' });
+      // Track queue metrics
+      const queueTracker = metrics.trackQueue('links');
+      queueTracker.setSize(1);
 
       // Store event in Redis for real-time tracking
-      const redisStartTime = process.hrtime();
+      const redisTimer = metrics.trackQueue('redis').trackLatency();
       await analyticsRedis.trackLinkClick(blogId, url);
-      const [redisSecs, redisNanos] = process.hrtime(redisStartTime);
-      analyticsMetrics.queueLatency.observe({ queue_type: 'redis' }, redisSecs + redisNanos / 1e9);
+      redisTimer.end();
       analyticsMetrics.eventProcessed.inc({ event_type: 'click', status: 'success' });
       
       // Store in database for historical tracking with visitor info
@@ -249,11 +287,15 @@ export class AnalyticsController {
 
       const [secs, nanos] = process.hrtime(startTime);
       analyticsMetrics.eventProcessingTime.observe({ event_type: 'click' }, secs + nanos / 1e9);
-      analyticsMetrics.queueSize.dec({ queue_type: 'links' });
+      queueTracker.setSize(0);
 
       return res.status(200).json({ success: true });
     } catch (error) {
-      analyticsMetrics.errorCount.inc({ error_type: error instanceof z.ZodError ? 'validation' : 'processing' });
+      metrics.trackError(
+        error instanceof z.ZodError ? 'validation' : 'processing',
+        error instanceof Error ? error.message : 'unknown',
+        'analytics_link_tracking'
+      );
       analyticsMetrics.eventProcessed.inc({ event_type: 'click', status: 'error' });
       logger.error('Error tracking link click:', error);
       if (error instanceof z.ZodError) {
@@ -301,7 +343,9 @@ export class AnalyticsController {
       const { blogId, timeframe = '24h' } = validatedInput;
 
       const startTime = process.hrtime();
-      analyticsMetrics.queueSize.inc({ queue_type: 'aggregation' });
+      // Track queue metrics
+      const queueTracker = metrics.trackQueue('aggregation');
+      queueTracker.setSize(1);
 
       // Get real-time stats from Redis
       const realtimeStats = await analyticsRedis.getRealTimeStats(blogId);
@@ -313,14 +357,18 @@ export class AnalyticsController {
 
       const [secs, nanos] = process.hrtime(startTime);
       analyticsMetrics.aggregationDuration.observe({ operation_type: 'total' }, secs + nanos / 1e9);
-      analyticsMetrics.queueSize.dec({ queue_type: 'aggregation' });
+      queueTracker.setSize(0);
 
       return res.status(200).json({
         realtime: realtimeStats,
         historical: historicalData,
       });
     } catch (error) {
-      analyticsMetrics.errorCount.inc({ error_type: error instanceof z.ZodError ? 'validation' : 'aggregation' });
+      metrics.trackError(
+        error instanceof z.ZodError ? 'validation' : 'aggregation',
+        error instanceof Error ? error.message : 'unknown',
+        'analytics_aggregation'
+      );
       analyticsMetrics.aggregationOperations.inc({ operation_type: 'total', status: 'error' });
       logger.error('Error fetching analyticsRedis:', error);
       if (error instanceof z.ZodError) {

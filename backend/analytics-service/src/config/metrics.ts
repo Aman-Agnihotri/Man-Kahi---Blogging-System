@@ -1,20 +1,16 @@
-import { Registry, Counter, Gauge, Histogram, collectDefaultMetrics } from 'prom-client';
-import { Request, Response } from 'express';
-import logger from '@shared/utils/logger';
+import { Counter, Gauge, Histogram } from 'prom-client';
+import { createServiceMetrics, register } from '@shared/config/metrics';
 
-// Create a new registry
-export const register = new Registry();
+// Initialize shared metrics with service name
+export const metrics = createServiceMetrics('analytics');
 
-// Add default metrics
-collectDefaultMetrics({ register });
-
-// Custom metrics
+// Analytics-specific metrics (complementing shared metrics)
 export const analyticsMetrics = {
   // Event tracking
   eventProcessed: new Counter({
     name: 'analytics_events_processed_total',
     help: 'Number of analytics events processed',
-    labelNames: ['event_type', 'status'] as const,
+    labelNames: ['event_type', 'status'],
     registers: [register]
   }),
 
@@ -29,7 +25,7 @@ export const analyticsMetrics = {
   eventProcessingTime: new Histogram({
     name: 'analytics_event_processing_duration_seconds',
     help: 'Time taken to process analytics events',
-    labelNames: ['event_type'] as const,
+    labelNames: ['event_type'],
     buckets: [0.01, 0.05, 0.1, 0.5, 1],
     registers: [register]
   }),
@@ -38,14 +34,14 @@ export const analyticsMetrics = {
   aggregationOperations: new Counter({
     name: 'analytics_aggregation_operations_total',
     help: 'Number of data aggregation operations',
-    labelNames: ['operation_type', 'status'] as const,
+    labelNames: ['operation_type', 'status'],
     registers: [register]
   }),
 
   aggregationDuration: new Histogram({
     name: 'analytics_aggregation_duration_seconds',
     help: 'Time taken for data aggregation operations',
-    labelNames: ['operation_type'] as const,
+    labelNames: ['operation_type'],
     buckets: [0.1, 0.5, 1, 5, 10],
     registers: [register]
   }),
@@ -54,50 +50,18 @@ export const analyticsMetrics = {
   dataStorageOperations: new Counter({
     name: 'analytics_storage_operations_total',
     help: 'Number of data storage operations',
-    labelNames: ['operation', 'status'] as const,
+    labelNames: ['operation', 'status'],
     registers: [register]
   }),
 
-  // Error tracking
-  errorCount: new Counter({
-    name: 'analytics_errors_total',
-    help: 'Number of errors in analytics processing',
-    labelNames: ['error_type'] as const,
-    registers: [register]
-  }),
-
-  // Queue metrics
-  queueSize: new Gauge({
-    name: 'analytics_queue_size',
-    help: 'Current size of analytics processing queue',
-    labelNames: ['queue_type'] as const,
-    registers: [register]
-  }),
-
-  queueLatency: new Histogram({
-    name: 'analytics_queue_latency_seconds',
-    help: 'Time events spend in processing queue',
-    labelNames: ['queue_type'] as const,
-    buckets: [0.1, 0.5, 1, 5, 10],
-    registers: [register]
-  }),
-
-  // Resource usage metrics
-  resourceUsage: new Gauge({
-    name: 'analytics_resource_usage',
-    help: 'Resource usage metrics',
-    labelNames: ['resource', 'type'] as const,
+  // Error recovery metrics - keeping only recovery tracking as it's specific to analytics
+  recoveryAttempts: new Counter({
+    name: 'analytics_recovery_attempts_total',
+    help: 'Number of attempted error recoveries',
+    labelNames: ['error_type', 'status'],
     registers: [register]
   })
 };
 
-// Metrics endpoint handler
-export const metricsHandler = async (_req: Request, res: Response) => {
-  try {
-    res.set('Content-Type', register.contentType);
-    res.end(await register.metrics());
-  } catch (error) {
-    logger.error('Error collecting metrics:', error);
-    res.status(500).send('Error collecting metrics');
-  }
-};
+// Re-export metrics endpoint handlers from shared config
+export { register, metricsHandler, metricsEnabled } from '@shared/config/metrics';
