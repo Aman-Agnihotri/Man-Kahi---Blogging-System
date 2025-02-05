@@ -3,6 +3,14 @@ import { z } from 'zod'
 import logger from '@shared/utils/logger'
 import { BlogService } from '@services/blog.service'
 import { SearchService } from '@services/search.service'
+import { 
+  trackDbOperation,
+  trackSearchOperation,
+  trackError,
+  trackMinioOperation,
+  updateActiveBlogCount,
+  trackBlogView
+} from '@middlewares/metrics.middleware'
 
 // Input validation schemas
 const createBlogSchema = z.object({
@@ -36,19 +44,50 @@ export class BlogController {
 
   // Create new blog
   async create(req: Request, res: Response): Promise<Response> {
+    let fileUploadTimer;
+    let dbTimer;
+    
     try {
       const validatedInput = createBlogSchema.parse(req.body)
+      
+      // Track file upload if exists
+      if (req.file) {
+        fileUploadTimer = trackMinioOperation('upload');
+      }
+      
+      // Track database operation
+      dbTimer = trackDbOperation('create', 'blog');
       const blog = await this.blogService.createBlog({
         ...validatedInput,
         authorId: req.user!.id,
         file: req.file,
       })
+      // End timers
+      dbTimer.end();
+      if (fileUploadTimer) {
+        fileUploadTimer.end();
+      }
+
+      // Update active blog count if published
+      if (blog.published) {
+        updateActiveBlogCount(1);
+      }
+
       return res.status(201).json(blog)
     } catch (error) {
+      // End timers if they exist
+      if (typeof dbTimer !== 'undefined') {
+        dbTimer.end('failure');
+      }
+      if (typeof fileUploadTimer !== 'undefined') {
+        fileUploadTimer.end('failure');
+      }
+
       logger.error('Error creating blog:', error)
       
       // Input validation errors
       if (error instanceof z.ZodError) {
+        trackError('validation', 'create_blog', 'blog-service');
         return res.status(400).json({
           message: 'Invalid input data',
           errors: error.errors.map(e => ({
@@ -60,6 +99,7 @@ export class BlogController {
 
       // Known error types with specific messages
       if (error instanceof Error) {
+        trackError('business_logic', error.message, 'blog-service');
         switch (error.message) {
           case 'Invalid markdown content':
             return res.status(400).json({
@@ -86,6 +126,7 @@ export class BlogController {
 
       // Unexpected errors
       logger.error('Unexpected error in blog creation:', error)
+      trackError('unexpected', 'create_blog', 'blog-service');
       return res.status(500).json({ 
         message: 'Internal server error',
         details: 'Failed to create blog post due to an unexpected error'
@@ -95,10 +136,28 @@ export class BlogController {
 
   // Get blog by slug
   async getBySlug(req: Request, res: Response): Promise<Response> {
+    let dbTimer;
+    
     try {
-      const blog = await this.blogService.getBlogBySlug(req.params.slug, req.user?.id)
-      return res.json(blog)
+      dbTimer = trackDbOperation('read', 'blog');
+      const { slug } = req.params;
+      if (!slug) {
+        return res.status(400).json({
+          message: 'Slug parameter is required',
+          details: 'The slug parameter is missing from the request URL'
+        });
+      }
+      const blog = await this.blogService.getBlogBySlug(slug, req.user?.id)
+      // Track blog view
+      trackBlogView(blog.id);
+      
+      const response = res.json(blog);
+      dbTimer.end();
+      return response;
     } catch (error) {
+      if (typeof dbTimer !== 'undefined') {
+        dbTimer.end('failure');
+      }
       logger.error('Error fetching blog:', error)
       
       if (error instanceof Error) {
@@ -126,15 +185,44 @@ export class BlogController {
 
   // Update blog
   async update(req: Request, res: Response): Promise<Response> {
+    let dbTimer;
+    let fileUploadTimer;
+    
     try {
       const validatedInput = updateBlogSchema.parse(req.body)
-      const blog = await this.blogService.updateBlog(req.params.id, req.user!.id, validatedInput)
+      const { id } = req.params
+      if (!id) {
+        return res.status(400).json({
+          message: 'Blog ID is required',
+          details: 'The blog ID parameter is missing from the request URL'
+        });
+      }
+      // Track file upload if exists
+      if (req.file) {
+        fileUploadTimer = trackMinioOperation('upload');
+      }
+
+      dbTimer = trackDbOperation('update', 'blog');
+      const blog = await this.blogService.updateBlog(id, req.user!.id, validatedInput);
+      dbTimer.end();
+      
+      if (fileUploadTimer) {
+        fileUploadTimer.end();
+      }
+
       return res.json(blog)
     } catch (error) {
+      if (dbTimer) {
+        dbTimer.end('failure');
+      }
+      if (fileUploadTimer) {
+        fileUploadTimer.end('failure');
+      }
       logger.error('Error updating blog:', error)
       
       // Input validation errors
       if (error instanceof z.ZodError) {
+        trackError('validation', 'update_blog', 'blog-service');
         return res.status(400).json({
           message: 'Invalid input data',
           errors: error.errors.map(e => ({
@@ -146,6 +234,7 @@ export class BlogController {
 
       // Known error types with specific messages
       if (error instanceof Error) {
+        trackError('business_logic', error.message, 'blog-service');
         switch (error.message) {
           case 'Blog not found':
             return res.status(404).json({
@@ -196,11 +285,39 @@ export class BlogController {
 
   // Delete blog
   async delete(req: Request, res: Response): Promise<Response> {
+    let dbTimer;
+    const { id } = req.params
+      if (!id) {
+        return res.status(400).json({
+          message: 'Blog ID is required',
+          details: 'The blog ID parameter is missing from the request URL'
+        });
+      }
     try {
-      await this.blogService.deleteBlog(req.params.id, req.user!.id)
+      dbTimer = trackDbOperation('delete', 'blog');
+      // Get blog details first to check if it was published
+      const blog = await this.blogService.getBlogBySlug(id, req.user!.id);
+      const wasPublished = blog.published;
+
+      await this.blogService.deleteBlog(id, req.user!.id);
+      dbTimer.end();
+      
+      // Decrement active blog count if it was published
+      if (wasPublished) {
+        updateActiveBlogCount(-1);
+      }
+
       return res.json({ message: 'Blog deleted successfully' })
     } catch (error) {
+      if (dbTimer) {
+        dbTimer.end('failure');
+      }
       logger.error('Error deleting blog:', error)
+      if (error instanceof Error) {
+        trackError('business_logic', error.message, 'blog-service');
+      } else {
+        trackError('unexpected', 'delete_blog', 'blog-service');
+      }
       
       if (error instanceof Error) {
         switch (error.message) {
@@ -232,14 +349,21 @@ export class BlogController {
 
   // Search blogs
   async search(req: Request, res: Response): Promise<Response> {
+    let searchTimer;
+    
     try {
       const params = searchQuerySchema.parse(req.query)
+      searchTimer = trackSearchOperation('search');
       const results = await this.searchService.searchBlogs({
         ...params,
-        authorId: req.query.author as string,
+        authorId: req.query['author'] as string,
       })
+      searchTimer.end('success');
       return res.json(results)
     } catch (error) {
+      if (typeof searchTimer !== 'undefined') {
+        searchTimer.end('failure');
+      }
       logger.error('Error searching blogs:', error)
       
       if (error instanceof z.ZodError) {
@@ -277,11 +401,19 @@ export class BlogController {
 
   // Get popular tags
   async getPopularTags(req: Request, res: Response): Promise<Response> {
+    let searchTimer;
+    
     try {
+      searchTimer = trackSearchOperation('popular_tags');
       const tags = await this.searchService.getPopularTags()
+      searchTimer.end('success');
       return res.json(tags)
     } catch (error) {
+      if (searchTimer) {
+        searchTimer.end('failure');
+      }
       logger.error('Error fetching popular tags:', error)
+      trackError('search', 'popular_tags', 'blog-service');
       
       if (error instanceof Error) {
         if (error.message === 'Cache error') {
@@ -302,11 +434,25 @@ export class BlogController {
 
   // Get suggested blogs
   async getSuggestedBlogs(req: Request, res: Response): Promise<Response> {
+    let searchTimer;
+    const { id } = req.params
+    if (!id) {
+      return res.status(400).json({
+        message: 'Blog ID is required',
+        details: 'The blog ID parameter is missing from the request URL'
+      });
+    }
     try {
-      const blogs = await this.searchService.getSuggestedBlogs(req.params.blogId)
+      searchTimer = trackSearchOperation('suggestions');
+      const blogs = await this.searchService.getSuggestedBlogs(id)
+      searchTimer.end('success');
       return res.json(blogs)
     } catch (error) {
+      if (searchTimer) {
+        searchTimer.end('failure');
+      }
       logger.error('Error fetching suggested blogs:', error)
+      trackError('search', 'suggested_blogs', 'blog-service');
       
       if (error instanceof Error) {
         switch (error.message) {
@@ -333,16 +479,24 @@ export class BlogController {
 
   // Get user's blogs
   async getUserBlogs(req: Request, res: Response): Promise<Response> {
+    let searchTimer;
+    
     try {
+      searchTimer = trackSearchOperation('user_blogs');
       const result = await this.searchService.getUserBlogs({
-        userId: req.params.userId || req.user!.id,
+        userId: req.params['userId'] ?? req.user!.id,
         currentUserId: req.user!.id,
-        page: parseInt(req.query.page as string),
-        limit: parseInt(req.query.limit as string),
+        page: parseInt(req.query['page'] as string),
+        limit: parseInt(req.query['limit'] as string),
       })
+      searchTimer.end('success');
       return res.json(result)
     } catch (error) {
+      if (searchTimer) {
+        searchTimer.end('failure');
+      }
       logger.error('Error fetching user blogs:', error)
+      trackError('search', 'user_blogs', 'blog-service');
       
       if (error instanceof Error) {
         switch (error.message) {

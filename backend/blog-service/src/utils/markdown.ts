@@ -68,25 +68,26 @@ export const extractMetadata = (content: string) => {
   try {
     const titleRegex = /^#\s+(.+)$/m
     const titleMatch = titleRegex.exec(content)
-    const title = titleMatch ? titleMatch[1].trim() : ''
-
+    const title = titleMatch?.[1]?.trim() ?? ''
     const descriptionRegex = /^>\s*(.+?)\s*$/m
     const descriptionMatch = descriptionRegex.exec(content)
-    const description = descriptionMatch ? descriptionMatch[1].trim() : ''
+    const description = descriptionMatch?.[1]?.trim() ?? ''
 
     // Extract all image URLs
     const imagePattern = /!\[.*?\]\((.*?)\)/g
     const images: string[] = []
     let match
     while ((match = imagePattern.exec(content)) !== null) {
-      images.push(match[1])
+      if (match[1] !== undefined) {
+        images.push(match[1])
+      }
     }
 
     // Extract code block languages
     const codeBlockPattern = /```(\w+)/g
     const codeLanguages = new Set<string>()
     while ((match = codeBlockPattern.exec(content)) !== null) {
-      if (match[1] !== '') {
+      if (match[1] !== undefined && match[1] !== '') {
         codeLanguages.add(match[1])
       }
     }
@@ -111,8 +112,8 @@ export const generateTOC = (content: string) => {
     let match
 
     while ((match = headingPattern.exec(content)) !== null) {
-      const level = match[1].length
-      const text = match[2].trim()
+      const level = (match[1] ?? '').length
+      const text = (match[2] ?? '').trim()
       const slug = text
         .toLowerCase()
         .replace(/[^\w\s-]/g, '')
@@ -154,7 +155,7 @@ export const validateMarkdown = (content: string): ValidationResult => {
         imageLinks.forEach(link => {
           const linkRegex = /!\[.*?\]\((.*?)\)/;
           const matchResult = linkRegex.exec(link);
-          const url = matchResult ? matchResult[1] : '';
+          const url = matchResult?.[1] ?? '';
           if (!/^(http|https|\/)/.exec(url)) {
             errors.push(`Invalid image URL: ${url}`)
           }

@@ -20,7 +20,7 @@ export const trackBlogView = async (
   next: NextFunction
 ) => {
   try {
-    const blogId = req.params.id || req.params.blogId;
+    const blogId = req.params['id'] ?? req.params['blogId'];
     if (!blogId) {
       return next();
     }

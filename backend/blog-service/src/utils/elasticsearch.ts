@@ -3,9 +3,25 @@ import logger from '@shared/utils/logger'
 import { prisma } from '@shared/utils/prismaClient'
 import { env } from '@config/env'
 
-const elasticClient = new Client({
+// Add debug logging
+logger.info(`Attempting to connect to Elasticsearch at ${env.ELASTICSEARCH_URL}`);
+
+export const elasticClient = new Client({
   node: env.ELASTICSEARCH_URL,
-})
+  maxRetries: 5,
+  requestTimeout: 10000
+});
+
+// Validate connection on client creation
+(async () => {
+  try {
+    const info = await elasticClient.info();
+    logger.info('Successfully connected to Elasticsearch:', info);
+  } catch (error) {
+    logger.error('Failed to connect to Elasticsearch:', error);
+    throw error;
+  }
+})();
 
 const BLOG_INDEX = 'blogs'
 

@@ -1,39 +1,44 @@
 import { Request, Response, NextFunction } from 'express';
-import { blogMetrics } from '../config/metrics';
+import { metrics, blogMetrics } from '@config/metrics';
 
-type ServiceType = 'blog' | 'search';
-type OperationStatus = 'success' | 'failure';
-
-// Track service operations timing
-export const trackOperationMetrics = (service: ServiceType, operationType: string) => {
-    return async (req: Request, res: Response, next: NextFunction) => {
-        const endTimer = blogMetrics.operationDuration.startTimer({ 
-            service,
-            operation: operationType 
-        });
-
-        // Track the response after it's sent
+// Track all HTTP requests using shared metrics
+export const trackRequest = () => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        const tracker = metrics.trackHttpRequest(req.method, req.path, parseInt(req.headers['content-length'] ?? '0', 10));
+        
         res.on('finish', () => {
-            const status = res.statusCode < 400 ? 'success' : 'failure';
-            blogMetrics.blogOperations.inc({ 
-                service, 
-                operation: operationType, 
-                status 
-            });
-            endTimer();
+            const responseSize = parseInt(res.getHeader('content-length')?.toString() ?? '0', 10);
+            tracker.end(res.statusCode, responseSize);
         });
 
         next();
     };
 };
 
-// Track cache hits
-export const trackCacheHit = (service: ServiceType, cacheType: string) => {
-    blogMetrics.cacheHits.inc({ 
-        service,
-        cache_type: cacheType,
-        operation: 'hit'
-    });
+// Track blog operations
+export const trackBlogOperation = (operationType: string) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
+        // Start tracking with shared HTTP metrics
+        const httpTracker = metrics.trackHttpRequest(req.method, req.path, parseInt(req.headers['content-length'] ?? '0', 10));
+        
+        try {
+            res.on('finish', () => {
+                const status = res.statusCode < 400 ? 'success' : 'failure';
+                const responseSize = parseInt(res.getHeader('content-length')?.toString() ?? '0', 10);
+                
+                // Complete shared metrics tracking
+                httpTracker.end(res.statusCode, responseSize);
+                
+                // Track blog-specific metrics
+                blogMetrics.blogOperations.inc({ operation: operationType, status });
+            });
+
+            next();
+        } catch (error) {
+            httpTracker.end(500, 0);
+            throw error;
+        }
+    };
 };
 
 // Track blog views
@@ -41,107 +46,86 @@ export const trackBlogView = (blogId: string) => {
     blogMetrics.blogViews.inc({ blog_id: blogId });
 };
 
-// Track search operations
-export const trackSearchOperation = (operation: string) => {
-    return {
-        startTimer: () => {
-            const endTimer = blogMetrics.searchDuration.startTimer({ 
-                service: 'search',
-                operation 
-            });
-            return {
-                end: (status: OperationStatus = 'success') => {
-                    blogMetrics.searchOperations.inc({ 
-                        service: 'search',
-                        operation,
-                        status 
-                    });
-                    endTimer();
-                }
-            };
-        }
-    };
-};
-
-// Track Elasticsearch operation timing
-export const trackElasticsearchOperation = (service: ServiceType, operation: string) => {
-    return blogMetrics.elasticsearchLatency.startTimer({ 
-        service,
-        operation 
-    });
-};
-
 // Update active blog count
 export const updateActiveBlogCount = (delta: number) => {
     blogMetrics.activeBlogCount.inc(delta);
 };
 
-// Track storage operations
-export const trackStorageOperation = (service: ServiceType, operation: string, storageType: string) => {
+// Track search operations
+export const trackSearchOperation = (operation: string) => {
+    // Start tracking with shared external service metrics
+    const externalTracker = metrics.trackExternalCall('elasticsearch', operation);
+    const endTimer = blogMetrics.searchDuration.startTimer({ operation });
+    
     return {
-        startTimer: () => {
-            const endTimer = blogMetrics.storageLatency.startTimer({ 
-                service,
-                operation, 
-                storage_type: storageType 
-            });
-            return {
-                end: (status: OperationStatus = 'success') => {
-                    blogMetrics.storageOperations.inc({ 
-                        service,
-                        operation, 
-                        storage_type: storageType, 
-                        status 
-                    });
-                    endTimer();
-                }
-            };
+        end: (status: 'success' | 'failure' = 'success') => {
+            blogMetrics.searchOperations.inc({ operation, status });
+            endTimer();
+            externalTracker.end(status);
         }
     };
 };
 
-// Track database operations
-export const trackDatabaseOperation = (service: ServiceType, operation: string) => {
+// Track Elasticsearch operations
+export const trackElasticsearchOperation = (operation: string) => {
+    // Track with both shared external metrics and blog-specific metrics
+    const externalTracker = metrics.trackExternalCall('elasticsearch', operation);
+    const endTimer = blogMetrics.elasticsearchLatency.startTimer({ operation });
+    
     return {
-        startTimer: () => {
-            const endTimer = blogMetrics.databaseLatency.startTimer({ 
-                service,
-                operation 
-            });
-            return {
-                end: (status: OperationStatus = 'success') => {
-                    blogMetrics.databaseOperations.inc({ 
-                        service,
-                        operation, 
-                        status 
-                    });
-                    endTimer();
-                }
-            };
+        end: (status: 'success' | 'failure' = 'success') => {
+            endTimer();
+            externalTracker.end(status);
         }
     };
 };
 
-// Track cache operations
-export const trackCacheOperation = (service: ServiceType, cacheType: string, operation: string) => {
+// Track MinIO operations
+export const trackMinioOperation = (operation: string) => {
+    // Track with both shared storage metrics and blog-specific metrics
+    const storageTracker = metrics.trackExternalCall('minio', operation);
+    const endTimer = blogMetrics.minioLatency.startTimer({ operation });
+    
     return {
-        startTimer: () => {
-            const endTimer = blogMetrics.cacheLatency.startTimer({ 
-                service,
-                cache_type: cacheType,
-                operation 
-            });
-            return {
-                end: (status: OperationStatus = 'success') => {
-                    blogMetrics.cacheOperations.inc({ 
-                        service,
-                        cache_type: cacheType,
-                        operation, 
-                        status 
-                    });
-                    endTimer();
-                }
-            };
+        end: (status: 'success' | 'failure' = 'success') => {
+            blogMetrics.minioOperations.inc({ operation, status });
+            endTimer();
+            storageTracker.end(status);
         }
     };
 };
+
+// Track database operations using shared metrics
+export const trackDbOperation = (operation: string, table: string) => 
+    metrics.trackDatabaseOperation(operation, table);
+
+// Track cache operations using shared metrics
+export const trackCacheOperation = (operation: string, cacheType: string = 'memory') => 
+    metrics.trackCacheOperation(operation, cacheType);
+
+// Track errors using shared metrics
+export const trackError = (errorType: string, errorCode: string, component: string, correlationId?: string) => 
+    metrics.trackError(errorType, errorCode, component, correlationId);
+
+// Track resources using shared metrics
+export const trackResource = (resource: string, type: string) => 
+    metrics.trackResource(resource, type);
+
+// Setup resource monitoring
+export const setupResourceMonitoring = (interval = 5000) => {
+    // Set up resource usage tracking
+    const resourceTracker = metrics.trackResource('system', 'blog');
+    
+    setInterval(() => {
+        const usage = process.memoryUsage();
+        resourceTracker.setUsage(usage.heapUsed / 1024 / 1024, 'MB'); // Convert to MB
+    }, interval);
+};
+
+// Track security events
+export const trackSecurityEvent = (eventType: string, severity: string) => 
+    metrics.trackSecurityEvent(eventType, severity);
+
+// Track queue operations
+export const trackQueue = (queueName: string) => 
+    metrics.trackQueue(queueName);
