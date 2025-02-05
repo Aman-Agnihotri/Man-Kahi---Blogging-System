@@ -8,7 +8,8 @@ export default defineNuxtConfig({
   pages: true,
   modules: [
     '@nuxtjs/tailwindcss',
-    '@vueuse/nuxt'
+    '@vueuse/nuxt',
+    '@pinia/nuxt'
   ],
   app: {
     pageTransition: false,
