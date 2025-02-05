@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: mankahi
+data:
+  NODE_ENV: "development"
+  AUTH_SERVICE_URL: "http://auth-service:3001"
+  BLOG_SERVICE_URL: "http://blog-service:3002"
+  ANALYTICS_SERVICE_URL: "http://analytics-service:3003"
+  ADMIN_SERVICE_URL: "http://admin-service:3004"
+  FRONTEND_URL: "http://localhost:3000"
+  RATE_LIMIT_WINDOW: "900000"
+  RATE_LIMIT_MAX_REQUESTS: "1000"
+  DASHBOARD_RATE_LIMIT_MAX: "2000"
+  ADMIN_RATE_LIMIT_WINDOW: "900000"
+  ADMIN_RATE_LIMIT_MAX: "100"
+  BLOG_CACHE_TTL: "3600"
+  SEARCH_CACHE_TTL: "1800"
+  ANALYTICS_CACHE_TTL: "1800"
+  MAX_FILE_SIZE: "5242880"
+  ALLOWED_IMAGE_TYPES: "image/jpeg,image/png,image/gif"
+  ELASTICSEARCH_INDEX_SHARDS: "1"
+  ELASTICSEARCH_INDEX_REPLICAS: "1"
+  MINIO_REGION: "ap-south-1"
+  LOG_LEVEL: "debug"
+  CORS_ORIGIN: "http://localhost:3000"

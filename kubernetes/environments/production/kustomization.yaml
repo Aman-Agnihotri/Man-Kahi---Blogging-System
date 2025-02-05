@@ -1,0 +1,75 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mankahi
+
+resources:
+  - ../../base
+
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    files:
+      - app-config.yaml
+
+secretGenerator:
+  - name: app-secrets
+    behavior: merge
+    files:
+      - secrets.yaml
+  - name: db-secrets
+    behavior: merge
+    files:
+      - secrets.yaml
+  - name: redis-secrets
+    behavior: merge
+    files:
+      - secrets.yaml
+  - name: minio-secrets
+    behavior: merge
+    files:
+      - secrets.yaml
+  - name: elasticsearch-secrets
+    behavior: merge
+    files:
+      - secrets.yaml
+
+patchesStrategicMerge:
+  []
+
+images:
+- name: auth-service
+  newName: registry.mankahi.local/auth-service
+  newTag: stable
+- name: blog-service
+  newName: registry.mankahi.local/blog-service
+  newTag: stable
+- name: analytics-service
+  newName: registry.mankahi.local/analytics-service
+  newTag: stable
+- name: admin-service
+  newName: registry.mankahi.local/admin-service
+  newTag: stable
+
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ".*"
+  patch: |
+    - op: replace
+      path: /spec/replicas
+      value: 3
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: 500m
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: 512Mi
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: 1000m
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: 1024Mi

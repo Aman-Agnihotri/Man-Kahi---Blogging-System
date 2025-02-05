@@ -1,24 +1,23 @@
 # Use Node.js LTS version as the base image
 FROM node:20-slim AS builder
 
-# Install OpenSSL
+# Install OpenSSL for JWT operations
 RUN apt-get update -y && apt-get install -y openssl
 
 # Set working directory
 WORKDIR /app
 
-# Install dependencies first (better caching)
-COPY package*.json ./
-RUN npm ci
+# Create service and shared directories to match source structure
+RUN mkdir -p /app/auth-service /app/shared
 
-# Copy Prisma schema
-COPY prisma ./prisma/
+# Install service dependencies first
+WORKDIR /app/auth-service
+COPY auth-service/package*.json ./
+RUN npm install
 
-# Generate Prisma client
-RUN npx prisma generate
-
-# Copy remaining source code
-COPY . .
+# Copy source code and shared modules
+COPY auth-service/. .
+COPY shared/ ../shared/
 
 # Build TypeScript code
 RUN npm run build
@@ -26,19 +25,23 @@ RUN npm run build
 # Production image
 FROM node:20-slim AS production
 
-# Install OpenSSL
+# Install OpenSSL for JWT operations
 RUN apt-get update -y && apt-get install -y openssl
 
+# Set working directory and create directories
 WORKDIR /app
+RUN mkdir -p /app/auth-service /app/shared
 
-# Install production dependencies only
-COPY package*.json ./
-RUN npm ci --only=production
+# Install service production dependencies
+WORKDIR /app/auth-service
+COPY auth-service/package*.json ./
+RUN npm install --only=production
 
-# Copy built files and Prisma schema
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY prisma ./prisma
+# Copy built files and modules
+COPY --from=builder /app/auth-service/dist ./dist
+COPY --from=builder /app/auth-service/node_modules ./node_modules
+COPY --from=builder /app/shared/. ../shared/
+COPY --from=builder /app/shared/node_modules ../shared/node_modules
 
 # Set environment variables
 ENV NODE_ENV=production
@@ -48,7 +51,7 @@ EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD ["sh", "-c", "curl -f http://localhost:3001/ || exit 1"]
+    CMD curl -f http://localhost:3001/health || exit 1
 
 # Start the server
 CMD ["node", "dist/server.js"]

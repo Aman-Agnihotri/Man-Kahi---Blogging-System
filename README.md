@@ -1,195 +1,206 @@
-# ManKahi - Blogging System
+# Man Kahi - Blogging System
 
-A scalable, microservices-based blogging platform built with Node.js, TypeScript, and modern cloud-native technologies.
+A modern blogging platform built with microservices architecture.
 
-## Architecture
+## System Architecture
 
-The system is built using a microservices architecture with the following components:
+The system consists of the following services:
+- Auth Service: User authentication and authorization
+- Blog Service: Blog post management and content delivery
+- Analytics Service: User behavior and content analytics
+- Admin Service: Administrative operations and monitoring
+- Frontend: Nuxt.js-based user interface
 
-- **Auth Service**: Handles user authentication, roles, and OAuth
-- **Blog Service**: Manages blog content, categories, and tags
-- **Analytics Service**: Tracks user engagement and content performance
-- **Admin Service**: Provides administrative controls and dashboard
-- **Frontend**: Server-side rendered Nuxt.js application
+Supporting infrastructure:
+- PostgreSQL: Primary database
+- Redis: Session management and caching
+- Elasticsearch: Full-text search
+- MinIO: Object storage
+- Nginx: API Gateway
 
-## Technology Stack
+## Prerequisites
 
-- **Backend**: Node.js + TypeScript
-- **Frontend**: Nuxt.js (SSR)
-- **Database**: PostgreSQL with Prisma ORM
-- **Cache**: Redis
-- **Search**: Elasticsearch
-- **Storage**: MinIO (S3-compatible)
-- **Gateway**: Nginx
-- **Containerization**: Docker + Docker Compose
+- Docker and Docker Compose
+- Kubernetes cluster (for K8s deployment)
+- kubectl
+- kustomize
 
-## Pre-Deployment Checklist
+## Development Setup
 
-### 1. Environment Configuration
-
-Each service requires proper environment variables to be set in production. Create `.env` files based on `.env.example` files:
-
+1. Clone the repository:
 ```bash
-# For each service (auth, blog, analytics, admin):
-cp backend/{service}/.env.example backend/{service}/.env
+git clone <repository-url>
+cd man-kahi
 ```
 
-Important variables to configure:
-- `DATABASE_URL`
-- `REDIS_URL`
-- `JWT_SECRET`
-- `CORS_ORIGIN`
-- OAuth credentials
-- Rate limiting settings
-
-### 2. Security Configuration
-
-1. **Nginx SSL/TLS**
-   - Generate SSL certificates
-   - Update nginx.conf with SSL configuration
-   - Configure proper CORS origins
-   - Review security headers
-
-2. **Secrets Management**
-   - Replace all development passwords/keys
-   - Configure proper JWT secrets
-   - Set up proper MinIO credentials
-   - Update database passwords
-
-3. **Service Security**
-   - Configure proper rate limiting
-   - Set up IP whitelisting for admin service
-   - Review CORS settings for each service
-
-### 3. Database Configuration
-
-1. **PostgreSQL**
-   - Configure proper connection pools
-   - Set up regular backups
-   - Configure replication if needed
-   - Set up proper indexes
-
-2. **Redis**
-   - Configure persistence
-   - Set up proper maxmemory policy
-   - Configure backup strategy
-
-3. **Elasticsearch**
-   - Configure proper sharding
-   - Set up index lifecycle management
-   - Configure backups
-   - Optimize for production workloads
-
-### 4. Storage Configuration
-
-1. **MinIO**
-   - Configure backup strategy
-   - Set up proper bucket policies
-   - Configure lifecycle rules
-   - Set up monitoring
-
-### 5. Monitoring & Logging
-
-1. **Logging**
-   - Configure log rotation
-   - Set up log aggregation
-   - Configure error tracking
-   - Set up audit logging
-
-2. **Monitoring**
-   - Set up health checks
-   - Configure resource monitoring
-   - Set up alerting
-   - Configure performance monitoring
-
-### 6. Performance Optimization
-
-1. **Caching Strategy**
-   - Review Redis cache TTLs
-   - Configure browser caching in Nginx
-   - Set up CDN if needed
-
-2. **Database Optimization**
-   - Review and optimize indexes
-   - Configure query caching
-   - Set up connection pooling
-
-### 7. Scaling Configuration
-
-1. **Service Scaling**
-   - Configure service replicas
-   - Set up load balancing
-   - Configure auto-scaling rules
-
-2. **Database Scaling**
-   - Configure connection pools
-   - Set up read replicas if needed
-   - Configure proper sharding
-
-## Deployment Steps
-
-1. Build production images:
+2. Set up environment variables:
 ```bash
-docker-compose -f docker-compose.prod.yml build
+cp .env.example .env.development
+# Edit .env.development with your development settings
 ```
 
-2. Run database migrations:
+3. Start the services using Docker Compose:
 ```bash
-# For each service with a database
-docker-compose -f docker-compose.prod.yml run --rm {service} npx prisma migrate deploy
+cd docker/compose
+docker-compose up -d
 ```
 
-3. Start the services:
+4. Initialize the databases:
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+# Wait for PostgreSQL to be ready
+docker-compose exec postgres bash /docker-entrypoint-initdb.d/init-multiple-dbs.sh
 ```
 
-4. Verify deployments:
+5. Access the services:
+- Frontend: http://localhost:3000
+- API Gateway: http://localhost:80
+- Admin Dashboard: http://localhost:3004
+- MinIO Console: http://localhost:9001
+
+## Kubernetes Deployment
+
+### Development Environment
+
+1. Create required secrets:
 ```bash
-docker-compose -f docker-compose.prod.yml ps
+cd kubernetes/environments/development
+cp secrets.example.yaml secrets.yaml
+# Edit secrets.yaml with your development secrets
 ```
+
+2. Apply the development configuration:
+```bash
+kubectl apply -k kubernetes/environments/development
+```
+
+### Production Environment
+
+1. Set up production secrets:
+```bash
+cd kubernetes/environments/production
+cp secrets.example.yaml secrets.yaml
+# Edit secrets.yaml with your production secrets
+```
+
+2. Update the domain in app-config.yaml:
+```yaml
+FRONTEND_URL: "https://your-domain.com"
+CORS_ORIGIN: "https://your-domain.com"
+```
+
+3. Apply the production configuration:
+```bash
+kubectl apply -k kubernetes/environments/production
+```
+
+## Service URLs
+
+Development URLs:
+- Frontend: http://localhost:3000
+- Auth Service: http://localhost:3001
+- Blog Service: http://localhost:3002
+- Analytics Service: http://localhost:3003
+- Admin Service: http://localhost:3004
+
+Kubernetes URLs:
+- Development: http://mankahi.local
+- Production: https://your-domain.com
+
+## Environment Variables
+
+The system uses two environment files:
+- `.env`: Base configuration shared between environments
+- `.env.development`: Development-specific overrides
+
+For production, use Kubernetes secrets and ConfigMaps located in:
+- `kubernetes/environments/production/app-config.yaml`
+- `kubernetes/environments/production/secrets.yaml`
 
 ## Health Checks
 
-- Auth Service: `http://localhost:3001/health`
-- Blog Service: `http://localhost:3002/health`
-- Analytics Service: `http://localhost:3003/health`
-- Admin Service: `http://localhost:3004/health`
-- Frontend: `http://localhost:3000`
+Monitor service health:
+```bash
+# Docker Compose
+docker-compose ps
 
-## Monitoring
+# Kubernetes
+kubectl get pods -n mankahi
+```
 
-Monitor the following metrics:
-- Service health status
-- API response times
-- Error rates
-- Database connection pool status
-- Cache hit rates
-- Search performance
-- Storage usage
-- System resources (CPU, Memory, Disk)
+## Logs
 
-## Backup Strategy
+View service logs:
+```bash
+# Docker Compose
+docker-compose logs -f [service-name]
 
-1. **Databases**
-   - Full daily backups
-   - Transaction log backups every hour
-   - Test restore procedures regularly
+# Kubernetes
+kubectl logs -f -n mankahi deployment/[service-name]
+```
 
-2. **File Storage**
-   - Regular MinIO bucket backups
-   - Redundant storage configuration
-   - Geographic replication if needed
+## Data Persistence
 
-3. **Configurations**
-   - Version control all configurations
-   - Regular backup of environment files
-   - Document all custom settings
+Volumes are used for:
+- PostgreSQL data
+- Redis data
+- Elasticsearch data
+- MinIO storage
+- Blog uploads
+- Service logs
 
-## Scaling Considerations
+## Security Notes
 
-The system is designed to handle:
-- 5 million daily active readers
-- 10,000 daily active writers
-- High concurrency for popular content
-- Burst traffic during peak hours
+1. Development environment:
+   - Default credentials in .env.development
+   - Services exposed on localhost
+   - Debug logging enabled
+   - CORS configured for local development
+
+2. Production environment:
+   - Use strong, unique secrets
+   - Services not directly exposed
+   - Minimal logging
+   - CORS restricted to your domain
+   - Health checks enabled
+   - Resource limits enforced
+
+## Troubleshooting
+
+1. Database Connection Issues:
+   - Verify PostgreSQL is healthy: `docker-compose ps postgres`
+   - Check database initialization: `docker-compose logs postgres`
+
+2. Service Startup Issues:
+   - Verify dependencies are healthy
+   - Check service logs: `docker-compose logs [service-name]`
+   - Verify environment variables are set correctly
+
+3. Kubernetes Issues:
+   - Check pod status: `kubectl get pods -n mankahi`
+   - View pod logs: `kubectl logs -n mankahi [pod-name]`
+   - Verify secrets: `kubectl get secrets -n mankahi`
+
+## Development Workflow
+
+1. Local Development:
+```bash
+# Start all services
+docker-compose up -d
+
+# Watch service logs
+docker-compose logs -f
+
+# Rebuild a specific service
+docker-compose up -d --build [service-name]
+```
+
+2. Kubernetes Development:
+```bash
+# Apply changes
+kubectl apply -k kubernetes/environments/development
+
+# Watch pods
+kubectl get pods -n mankahi -w
+
+# View logs
+kubectl logs -f -n mankahi deployment/[service-name]

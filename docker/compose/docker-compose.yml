@@ -3,10 +3,9 @@ services:
     postgres:
         image: postgres:16-alpine
         container_name: mankahi-postgres
-        environment:
-            POSTGRES_USER: hunterhhh412
-            POSTGRES_PASSWORD: Ag9696940226
-            POSTGRES_MULTIPLE_DATABASES: mankahi_auth,mankahi_blog,mankahi_analytics
+        env_file:
+            - ../../.env
+            - ../../.env.development
         ports:
             - "5432:5432"
         volumes:
@@ -40,9 +39,9 @@ services:
         ports:
             - "9000:9000"
             - "9001:9001"
-        environment:
-            MINIO_ROOT_USER: minioadmin
-            MINIO_ROOT_PASSWORD: minioadmin
+        env_file:
+            - ../../.env
+            - ../../.env.development
         volumes:
             - minio-data:/data
         command: server /data --console-address ":9001"
@@ -56,6 +55,9 @@ services:
     elasticsearch:
         image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
         container_name: mankahi-elasticsearch
+        env_file:
+            - ../../.env
+            - ../../.env.development
         environment:
             - discovery.type=single-node
             - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
@@ -77,8 +79,9 @@ services:
     # Auth Service
     auth-service:
         build:
-            context: ../../backend/auth-service
-            target: development
+            context: ../../backend
+            dockerfile: auth-service/Dockerfile
+            target: ${NODE_ENV}
         container_name: mankahi-auth
         ports:
             - "3001:3001"
@@ -87,32 +90,22 @@ services:
                 condition: service_healthy
             redis:
                 condition: service_healthy
-        environment:
-            NODE_ENV: development
-            PORT: 3002
-            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_blog
-            REDIS_URL: redis://redis:6379
-            ELASTICSEARCH_URL: http://elasticsearch:9200
-            MINIO_ENDPOINT: minio
-            MINIO_PORT: 9000
-            MINIO_USE_SSL: "false"
-            MINIO_ACCESS_KEY: minioadmin
-            MINIO_SECRET_KEY: minioadmin
-            MINIO_REGION: us-east-1
-            AUTH_SERVICE_URL: http://auth-service:3001
-            RATE_LIMIT_WINDOW: 900
-            RATE_LIMIT_MAX_REQUESTS: 100
-            CORS_ORIGIN: http://localhost:3000
+        env_file:
+            - ../../.env
+            - ../../.env.development
         volumes:
-            - ../../backend/auth-service:/app
-            - /app/node_modules
+            - ../../backend/auth-service:/app/auth-service
+            - ../../backend/shared:/app/shared
+            - /app/auth-service/node_modules
         command: npm run dev
+        working_dir: /app/auth-service
 
     # Blog Service
     blog-service:
         build:
-            context: ../../backend/blog-service
-            target: development
+            context: ../../backend
+            dockerfile: blog-service/Dockerfile
+            target: ${NODE_ENV}
         container_name: mankahi-blog
         ports:
             - "3002:3002"
@@ -123,38 +116,35 @@ services:
                 condition: service_healthy
             elasticsearch:
                 condition: service_healthy
+        env_file:
+            - ../../.env
+            - ../../.env.development
         environment:
-            NODE_ENV: development
-            PORT: 3002
-            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_blog
-            REDIS_URL: redis://redis:6379
-            ELASTICSEARCH_URL: http://elasticsearch:9200
-            ELASTICSEARCH_INDEX_SHARDS: 3
-            ELASTICSEARCH_INDEX_REPLICAS: 1
-            AUTH_SERVICE_URL: http://auth-service:3001
-            RATE_LIMIT_WINDOW: 900
-            RATE_LIMIT_MAX_REQUESTS: 100
-            CORS_ORIGIN: http://localhost:3000
-            BLOG_CACHE_TTL: 3600
-            SEARCH_CACHE_TTL: 300
-            ANALYTICS_CACHE_TTL: 60
-            MAX_FILE_SIZE: 5242880
-            ALLOWED_IMAGE_TYPES: "image/jpeg,image/png,image/webp"
+            - PORT=3002
         volumes:
-            - ../../backend/blog-service:/app
-            - /app/node_modules
-            - blog-uploads:/app/uploads
+            - ../../backend/blog-service:/app/blog-service
+            - ../../backend/shared:/app/shared
+            - /app/blog-service/node_modules
+            - blog-uploads:/app/blog-service/uploads
         command: npm run dev
+        working_dir: /app/blog-service
 
     # Frontend (Nuxt)
     frontend:
-        build: ../../frontend
+        build:
+            context: ../../frontend
+            target: ${NODE_ENV}
         container_name: mankahi-frontend
         ports:
             - "3000:3000"
         depends_on:
             - auth-service
             - blog-service
+        env_file:
+            - ../../.env
+            - ../../.env.development
+        environment:
+            - NUXT_PUBLIC_API_URL=http://localhost:80
         volumes:
             - ../../frontend:/app
             - /app/node_modules
@@ -183,8 +173,9 @@ services:
     # Analytics Service
     analytics-service:
         build:
-            context: ../../backend/analytics-service
-            target: development
+            context: ../../backend
+            dockerfile: analytics-service/Dockerfile
+            target: ${NODE_ENV}
         container_name: mankahi-analytics
         ports:
             - "3003:3003"
@@ -193,28 +184,25 @@ services:
                 condition: service_healthy
             redis:
                 condition: service_healthy
+        env_file:
+            - ../../.env
+            - ../../.env.development
         environment:
-            NODE_ENV: development
-            PORT: 3003
-            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_analytics
-            REDIS_HOST: redis
-            REDIS_PORT: 6379
-            LOG_LEVEL: debug
-            RATE_LIMIT_WINDOW: 60000
-            RATE_LIMIT_MAX: 60
-            DASHBOARD_RATE_LIMIT_MAX: 300
-            CORS_ORIGIN: http://localhost:3000
+            - PORT=3003
         volumes:
-            - ../../backend/analytics-service:/app
-            - /app/node_modules
-            - analytics-logs:/app/logs
+            - ../../backend/analytics-service:/app/analytics-service
+            - ../../backend/shared:/app/shared
+            - /app/analytics-service/node_modules
+            - analytics-logs:/app/analytics-service/logs
         command: npm run dev
+        working_dir: /app/analytics-service
 
     # Admin Service
     admin-service:
         build:
-            context: ../../backend/admin-service
-            target: development
+            context: ../../backend
+            dockerfile: admin-service/Dockerfile
+            target: ${NODE_ENV}
         container_name: mankahi-admin
         ports:
             - "3004:3004"
@@ -225,22 +213,18 @@ services:
                 condition: service_healthy
             analytics-service:
                 condition: service_started
+        env_file:
+            - ../../.env
+            - ../../.env.development
         environment:
-            NODE_ENV: development
-            PORT: 3004
-            DATABASE_URL: postgres://hunterhhh412:Ag9696940226@postgres:5432/mankahi_blog
-            JWT_SECRET: ${JWT_SECRET:-your-secret-key}
-            JWT_EXPIRES_IN: 1d
-            ANALYTICS_SERVICE_URL: http://analytics-service:3003
-            ADMIN_RATE_LIMIT_WINDOW: 900000
-            ADMIN_RATE_LIMIT_MAX: 100
-            LOG_LEVEL: debug
-            CORS_ORIGIN: http://localhost:3000
+            - PORT=3004
         volumes:
-            - ../../backend/admin-service:/app
-            - /app/node_modules
-            - admin-logs:/app/logs
+            - ../../backend/admin-service:/app/admin-service
+            - ../../backend/shared:/app/shared
+            - /app/admin-service/node_modules
+            - admin-logs:/app/admin-service/logs
         command: npm run dev
+        working_dir: /app/admin-service
 
 volumes:
     postgres-data:

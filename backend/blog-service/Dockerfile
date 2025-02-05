@@ -7,18 +7,17 @@ RUN apt-get update -y && apt-get install -y openssl
 # Set working directory
 WORKDIR /app
 
-# Install dependencies first (better caching)
-COPY package*.json ./
-RUN npm ci
+# Create service and shared directories to match source structure
+RUN mkdir -p /app/blog-service /app/shared
 
-# Copy Prisma schema
-COPY prisma ./prisma/
+# Install service dependencies first
+WORKDIR /app/blog-service
+COPY blog-service/package*.json ./
+RUN npm install
 
-# Generate Prisma client
-RUN npx prisma generate
-
-# Copy remaining source code
-COPY . .
+# Copy service source code and shared modules
+COPY blog-service/. .
+COPY shared/ ../shared/
 
 # Build TypeScript code
 RUN npm run build
@@ -29,16 +28,20 @@ FROM node:20-slim AS production
 # Install OpenSSL
 RUN apt-get update -y && apt-get install -y openssl
 
+# Set working directory and create directories
 WORKDIR /app
+RUN mkdir -p /app/blog-service /app/shared
 
-# Install production dependencies only
-COPY package*.json ./
-RUN npm ci --only=production
+# Install service production dependencies
+WORKDIR /app/blog-service
+COPY blog-service/package*.json ./
+RUN npm install --only=production
 
-# Copy built files and Prisma schema
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY prisma ./prisma
+# Copy built files and modules
+COPY --from=builder /app/blog-service/dist ./dist
+COPY --from=builder /app/blog-service/node_modules ./node_modules
+COPY --from=builder /app/shared/. ../shared/
+COPY --from=builder /app/shared/node_modules ../shared/node_modules
 
 # Create uploads directory
 RUN mkdir -p uploads/images

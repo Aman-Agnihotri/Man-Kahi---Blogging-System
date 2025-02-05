@@ -5,8 +5,10 @@ resources:
   - namespace.yaml
   - storage.yaml
   - config.yaml
+  - config/environment.yaml
+  - secrets/services-secrets.yaml
   - infrastructure.yaml
-  - services.yaml
+  - services/auth.yaml
   - ingress.yaml
   - ingress-config.yaml
   - ingress-rbac.yaml
@@ -19,10 +21,7 @@ commonLabels:
 
 namespace: mankahi
 
-secretGenerator:
-  - name: postgres-secret
+configMapGenerator:
+  - name: shared-config
     envs:
-      - secrets/postgres.env
-  - name: services-secret
-    envs:
-      - secrets/services.env
+      - .env
