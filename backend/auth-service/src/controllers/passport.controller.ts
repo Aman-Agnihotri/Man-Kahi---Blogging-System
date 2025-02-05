@@ -11,14 +11,14 @@ import {
   getAuthCallbackURL,
   DEFAULT_ROLE,
   providerScopes,
-} from '../config/oauth'
-import { AuthService } from '../services/auth.service'
+} from '@config/oauth'
+import { AuthService } from '@services/auth.service'
 import { 
   trackDbOperation, 
   trackAuthMetrics, 
-  trackAuthError,
+  trackError,
   updateActiveTokens 
-} from '../middlewares/metrics.middleware'
+} from '@middlewares/metrics.middleware'
 
 const authService = new AuthService()
 
@@ -32,7 +32,7 @@ async function linkProvider(token: string, profile: any): Promise<any> {
     const userId = typeof decodedToken === 'object' ? decodedToken.userId : null
 
     if (!userId) {
-      trackAuthError('invalid_token', 'link_provider');
+      trackError('oauth', 'invalid_token', 'link_provider');
       throw new Error('Invalid token')
     }
 
@@ -42,7 +42,7 @@ async function linkProvider(token: string, profile: any): Promise<any> {
     })
 
     if (!user) {
-      trackAuthError('user_not_found', 'link_provider');
+      trackError('oauth', 'user_not_found', 'link_provider');
       throw new Error('User not found')
     }
 
@@ -55,14 +55,14 @@ async function linkProvider(token: string, profile: any): Promise<any> {
     })
 
     if (existingProvider) {
-      trackAuthError('provider_already_linked', 'link_provider');
+      trackError('oauth', 'provider_already_linked', 'link_provider');
       throw new Error('Provider already linked to this account')
     }
 
     // Verify email matches
     const profileEmail = profile.emails?.[0]?.value
     if (user.email !== profileEmail) {
-      trackAuthError('email_mismatch', 'link_provider');
+      trackError('oauth', 'email_mismatch', 'link_provider');
       throw new Error('Email mismatch between accounts')
     }
 
@@ -107,7 +107,7 @@ async function handleOAuthAuthentication(profile: any) {
   try {
     const email = profile.emails?.[0]?.value
     if (!email) {
-      trackAuthError('missing_email', profile.provider);
+      trackError('oauth', 'missing_email', profile.provider);
       throw new Error('Email not provided by OAuth provider')
     }
 
@@ -125,7 +125,7 @@ async function handleOAuthAuthentication(profile: any) {
         (p) => p.provider === profile.provider
       )
       if (!hasProvider) {
-        trackAuthError('account_exists', profile.provider);
+        trackError('oauth', 'account_exists', profile.provider);
         throw new Error('Account exists with different credentials')
       }
       dbTimer.end();
@@ -138,7 +138,7 @@ async function handleOAuthAuthentication(profile: any) {
       where: { name: DEFAULT_ROLE },
     })
     if (!defaultRole) {
-      trackAuthError('default_role_missing', profile.provider);
+      trackError('oauth', 'default_role_missing', profile.provider);
       throw new Error('Default role not found')
     }
 
@@ -203,7 +203,7 @@ function setupGoogleStrategy() {
             refreshToken 
           })
         } catch (error) {
-          trackAuthError('oauth_strategy', 'google');
+          trackError('oauth', 'oauth_strategy', 'google');
           return done(error)
         }
       }
@@ -235,7 +235,7 @@ passport.deserializeUser(async (id: string, done) => {
     done(null, user)
   } catch (error) {
     dbTimer.end();
-    trackAuthError('session_deserialize', 'oauth');
+    trackError('oauth', 'session_deserialize', 'oauth');
     done(error)
   }
 })

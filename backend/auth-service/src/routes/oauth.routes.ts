@@ -1,16 +1,16 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { passport } from '../controllers/passport.controller';
-import { AuthService } from '../services/auth.service';
+import { passport } from '@controllers/passport.controller';
+import { AuthService } from '@services/auth.service';
 import logger from '@shared/utils/logger';
-import { authenticate, AuthenticatedRequest } from '@shared/middlewares/auth';
+import { authenticate, AuthenticatedRequest, AuthenticatedUser } from '@shared/middlewares/auth';
 import { createEndpointRateLimit } from '@shared/middlewares/rateLimit';
 import type { RequestHandler } from 'express';
 import { 
     trackAuthMetrics,
-    trackAuthError,
+    trackError,
     trackDbOperation,
     updateActiveTokens
-} from '../middlewares/metrics.middleware';
+} from '@middlewares/metrics.middleware';
 
 /**
  * @swagger
@@ -68,9 +68,10 @@ interface OAuthUser {
 }
 
 interface OAuthRequest extends Request {
-    user?: OAuthUser;
+    user?: AuthenticatedUser;
     authInfo?: {
         token?: string;
+        oauthProfile?: OAuthUser;
     };
 }
 
@@ -100,7 +101,7 @@ router.get(
     createEndpointRateLimit('auth:oauth') as unknown as RequestHandler,
     trackAuthMetrics('oauth_initiate', 'google'),
     (req: Request, res: Response, next: NextFunction) => {
-        const state = req.query.linkToken as string | undefined;
+        const state = req.query['linkToken'] as string | undefined;
         passport.authenticate('google', {
             scope: ['profile', 'email'],
             ...(state && { state }),
@@ -136,19 +137,40 @@ router.get(
     passport.authenticate('google', { session: false }) as RequestHandler,
     ((async (req: OAuthRequest, res: Response) => {
         try {
-            if (!req.user) {
+            const oauthProfile = req.authInfo?.oauthProfile;
+            if (!oauthProfile) {
                 throw new Error('Authentication failed');
             }
 
             const dbTimer = trackDbOperation('select', 'oauth_users');
-            const accessToken = await authService.generateToken(req.user.id);
+            
+            // Create authenticated user with multiple fallbacks for username
+            const emailUsername = oauthProfile.email ? oauthProfile.email.split('@')[0] : undefined;
+            const username = oauthProfile.profile.name ?? 
+                           emailUsername ?? 
+                           `user_${oauthProfile.id}`;
+            // Check if email is available
+            if (!oauthProfile.email) {
+                throw new Error('Email is required for authentication');
+            }
+            const user: AuthenticatedUser = {
+                id: oauthProfile.id,
+                email: oauthProfile.email,
+                username,
+                roles: ['user'],
+                createdAt: new Date(),
+                updatedAt: new Date()
+            };
+            req.user = user;
+
+            const accessToken = await authService.generateToken(user.id);
             const refreshToken = await authService.generateRefreshToken(req.user.id);
             dbTimer.end();
 
             updateActiveTokens(1);
 
             const linkToken = req.authInfo?.token;
-            const frontendURL = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+            const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
             const params = new URLSearchParams({
                 accessToken,
                 refreshToken,
@@ -158,8 +180,8 @@ router.get(
             res.redirect(`${frontendURL}/auth/callback?${params.toString()}`);
         } catch (error) {
             logger.error('OAuth callback error:', error);
-            trackAuthError('oauth_callback', 'google');
-            const frontendURL = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+            trackError('oauth', 'callback_failed', 'google');
+            const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
             res.redirect(
                 `${frontendURL}/auth/callback?error=Authentication failed`
             );
@@ -217,7 +239,7 @@ router.post(
     createEndpointRateLimit('auth:oauth:link') as unknown as RequestHandler,
     (async (req: AuthenticatedRequest, res: Response) => {
         try {
-            const { provider } = req.params;
+            const { provider } = req.params as { provider: string };
             trackAuthMetrics('oauth_link', provider);
             const { token } = req.body;
 
@@ -231,7 +253,7 @@ router.post(
         } catch (error) {
             const { provider } = req.params;
             logger.error('Link provider error:', error);
-            trackAuthError('oauth_link', provider);
+            trackError('oauth', 'link_failed', provider ?? 'unknown');
             res.status(500).json({ message: 'Failed to initiate provider linking' });
         }
     }) as unknown as RequestHandler
@@ -284,7 +306,7 @@ router.delete(
     createEndpointRateLimit('auth:oauth:unlink') as unknown as RequestHandler,
     (async (req: AuthenticatedRequest, res: Response) => {
         try {
-            const { provider } = req.params;
+            const { provider } = req.params as { provider: string };
             trackAuthMetrics('oauth_unlink', provider);
             const userId = req.user.id;
 
@@ -293,7 +315,7 @@ router.delete(
         } catch (error) {
             const { provider } = req.params;
             logger.error('Unlink provider error:', error);
-            trackAuthError('oauth_unlink', provider);
+            trackError('oauth', 'unlink_failed', provider ?? 'unknown');
             res.status(500).json({ message: 'Failed to unlink provider' });
         }
     }) as unknown as RequestHandler

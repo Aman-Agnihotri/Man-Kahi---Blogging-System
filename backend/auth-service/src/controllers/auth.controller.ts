@@ -1,14 +1,14 @@
 import { z } from 'zod'
-import { AuthService } from '../services/auth.service'
+import { AuthService } from '@services/auth.service'
 import logger from '@shared/utils/logger'
 import { AuthenticatedRequest } from '@shared/middlewares/auth'
 import { RequestHandler } from 'express-serve-static-core'
 import { 
   updateActiveTokens, 
   trackDbOperation, 
-  trackAuthError, 
+  trackError,
   trackRedisOperation 
-} from '../middlewares/metrics.middleware'
+} from '@middlewares/metrics.middleware'
 
 // Input validation schemas
 const registerSchema = z.object({
@@ -41,7 +41,7 @@ export class AuthController {
     this.authService = new AuthService()
   }
 
-  register: RequestHandler = async (req, res) => {
+  register: RequestHandler<{}, any, z.infer<typeof registerSchema>> = async (req, res, next) => {
     try {
       // Validate input
       const validatedInput = registerSchema.parse(req.body)
@@ -56,7 +56,7 @@ export class AuthController {
       logger.error('Register controller error:', error)
       
       if (error instanceof z.ZodError) {
-        trackAuthError('validation', 'register');
+        trackError('validation', 'register_validation_failed', 'auth');
         res.status(400).json({
           message: 'Invalid input',
           errors: error.errors,
@@ -66,18 +66,18 @@ export class AuthController {
 
       if (error instanceof Error) {
         if (error.message.includes('already exists')) {
-          trackAuthError('duplicate_user', 'register');
+          trackError('duplicate_user', 'user_already_exists', 'auth');
           res.status(409).json({ message: error.message })
           return
         }
       }
 
-      trackAuthError('server', 'register');
+      trackError('server', 'registration_failed', 'auth');
       res.status(500).json({ message: 'Internal server error' })
     }
   }
 
-  login: RequestHandler = async (req, res) => {
+  login: RequestHandler<{}, any, z.infer<typeof loginSchema>> = async (req, res, next) => {
     const redisTimer = trackRedisOperation('session_create');
     try {
       // Validate input
@@ -98,7 +98,7 @@ export class AuthController {
       logger.error('Login controller error:', error)
 
       if (error instanceof z.ZodError) {
-        trackAuthError('validation', 'login');
+        trackError('validation', 'login_validation_failed', 'auth');
         res.status(400).json({
           message: 'Invalid input',
           errors: error.errors,
@@ -108,23 +108,23 @@ export class AuthController {
 
       if (error instanceof Error) {
         if (error.message === 'Invalid credentials') {
-          trackAuthError('invalid_credentials', 'login');
+          trackError('invalid_credentials', 'login_failed', 'auth');
           res.status(401).json({ message: error.message })
           return
         }
       }
 
-      trackAuthError('server', 'login');
+      trackError('server', 'login_failed', 'auth');
       res.status(500).json({ message: 'Internal server error' })
     }
   }
 
-  logout: RequestHandler = async (req, res) => {
+  logout: RequestHandler<{}, any> = async (req, res, next) => {
     const redisTimer = trackRedisOperation('session_destroy');
     try {
       const token = req.headers.authorization?.split(' ')[1]
       if (!token) {
-        trackAuthError('missing_token', 'logout');
+        trackError('missing_token', 'logout_failed', 'auth');
         res.status(400).json({ message: 'No token provided' })
         return
       }
@@ -137,22 +137,22 @@ export class AuthController {
     } catch (error) {
       redisTimer.end()
       logger.error('Logout controller error:', error)
-      trackAuthError('server', 'logout');
+      trackError('server', 'logout_failed', 'auth');
       res.status(500).json({ message: 'Internal server error' })
     }
   }
 
-  addRole: RequestHandler = async (req, res) => {
+  addRole: RequestHandler<{}, any, z.infer<typeof addRoleSchema>> = async (req, res, next) => {
     try {
       // Validate input
       const validatedInput = addRoleSchema.parse(req.body)
 
       // Check if user has admin role
       const authReq = req as AuthenticatedRequest
-      const hasAdminRole = authReq.user.roles.some(role => role.name === 'admin')
+      const hasAdminRole = authReq.user.roles.some(role => role === 'admin')
       
       if (!hasAdminRole) {
-        trackAuthError('unauthorized', 'add_role');
+        trackError('unauthorized', 'add_role_unauthorized', 'auth');
         res.status(403).json({ message: 'Unauthorized' })
         return
       }
@@ -178,7 +178,7 @@ export class AuthController {
       logger.error('Add role controller error:', error)
 
       if (error instanceof z.ZodError) {
-        trackAuthError('validation', 'add_role');
+        trackError('validation', 'add_role_validation_failed', 'auth');
         res.status(400).json({
           message: 'Invalid input',
           errors: error.errors,
@@ -188,13 +188,13 @@ export class AuthController {
 
       if (error instanceof Error) {
         if (error.message === 'User not found') {
-          trackAuthError('user_not_found', 'add_role');
+          trackError('user_not_found', 'add_role_failed', 'auth');
           res.status(404).json({ message: error.message })
           return
         }
       }
 
-      trackAuthError('server', 'add_role');
+      trackError('server', 'add_role_failed', 'auth');
       res.status(500).json({ message: 'Internal server error' })
     }
   }

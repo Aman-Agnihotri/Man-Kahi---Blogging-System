@@ -1,61 +1,93 @@
 import { Request, Response, NextFunction } from 'express';
-import { authMetrics } from '../config/metrics';
-import { performance } from 'perf_hooks';
+import { metrics, authMetrics } from '@config/metrics';
 
-// Track authentication operations
-export const trackAuthMetrics = (operationType: string, provider: string = 'local') => {
-    return async (req: Request, res: Response, next: NextFunction) => {
-        const endTimer = authMetrics.authLatency.startTimer({ operation: operationType });
+// Track all HTTP requests using shared metrics
+export const trackRequest = () => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        const tracker = metrics.trackHttpRequest(req.method, req.path, parseInt(req.headers['content-length'] ?? '0', 10));
         
         res.on('finish', () => {
-            const status = res.statusCode < 400 ? 'success' : 'failure';
-            
-            switch (operationType) {
-                case 'login':
-                    authMetrics.loginAttempts.inc({ status, provider });
-                    break;
-                case 'register':
-                    authMetrics.registrationAttempts.inc({ status, provider });
-                    break;
-            }
-
-            if (res.statusCode === 429) {
-                authMetrics.rateLimitHits.inc({ endpoint: req.path });
-            }
-
-            endTimer();
+            const responseSize = parseInt(res.getHeader('content-length')?.toString() ?? '0', 10);
+            tracker.end(res.statusCode, responseSize);
         });
 
         next();
     };
 };
 
-// Track database operations
-export const trackDbOperation = (operation: string, table: string) => {
-    const startTime = performance.now();
-    return {
-        end: () => {
-            const duration = (performance.now() - startTime) / 1000;
-            authMetrics.dbOperations.observe({ operation, table }, duration);
+// Track authentication operations
+export const trackAuthMetrics = (operationType: string, provider: string = 'local') => {
+    return async (req: Request, res: Response, next: NextFunction) => {
+        // Start tracking with shared HTTP metrics
+        const httpTracker = metrics.trackHttpRequest(req.method, req.path, parseInt(req.headers['content-length'] ?? '0', 10));
+        
+        try {
+            res.on('finish', () => {
+                const status = res.statusCode < 400 ? 'success' : 'failure';
+                const responseSize = parseInt(res.getHeader('content-length')?.toString() ?? '0', 10);
+                
+                // Complete shared metrics tracking
+                httpTracker.end(res.statusCode, responseSize);
+                
+                // Track auth-specific metrics
+                switch (operationType) {
+                    case 'login':
+                        authMetrics.loginAttempts.inc({ status, provider });
+                        break;
+                    case 'register':
+                        authMetrics.registrationAttempts.inc({ status, provider });
+                        break;
+                }
+            });
+
+            next();
+        } catch (error) {
+            httpTracker.end(500, 0);
+            throw error;
         }
     };
 };
 
-// Track Redis operations
-export const trackRedisOperation = (operation: string) => {
-    const startTime = performance.now();
-    return {
-        end: () => {
-            const duration = (performance.now() - startTime) / 1000;
-            authMetrics.redisOperations.observe({ operation }, duration);
+// Track OAuth operations
+export const trackOAuthOperation = (provider: string, operation: string) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
+        // Start tracking with shared HTTP metrics
+        const httpTracker = metrics.trackHttpRequest(req.method, req.path, parseInt(req.headers['content-length'] ?? '0', 10));
+        const endTimer = authMetrics.oauthLatency.startTimer({ provider, operation });
+        
+        try {
+            res.on('finish', () => {
+                const status = res.statusCode < 400 ? 'success' : 'failure';
+                const responseSize = parseInt(res.getHeader('content-length')?.toString() ?? '0', 10);
+                
+                // Complete shared metrics tracking
+                httpTracker.end(res.statusCode, responseSize);
+                
+                // Track OAuth-specific metrics
+                authMetrics.oauthOperations.inc({ provider, operation, status });
+                endTimer();
+            });
+
+            next();
+        } catch (error) {
+            endTimer();
+            httpTracker.end(500, 0);
+            throw error;
         }
     };
 };
 
-// Track errors
-export const trackAuthError = (type: string, operation: string) => {
-    authMetrics.errors.inc({ type, operation });
-};
+// Track database operations using shared metrics
+export const trackDbOperation = (operation: string, table: string) => 
+    metrics.trackDatabaseOperation(operation, table);
+
+// Track Redis operations using shared cache metrics
+export const trackRedisOperation = (operation: string, cacheType: string = 'redis') => 
+    metrics.trackCacheOperation(operation, cacheType);
+
+// Track errors using shared metrics
+export const trackError = (errorType: string, errorCode: string, component: string, correlationId?: string) => 
+    metrics.trackError(errorType, errorCode, component, correlationId);
 
 // Track active tokens
 export const updateActiveTokens = (delta: number) => {
@@ -73,11 +105,28 @@ export const trackSessionDuration = (durationInSeconds: number) => {
 };
 
 // Track resource usage
-export const updateResourceUsage = (resource: string, type: string, value: number) => {
-    authMetrics.resourceUsage.set({ resource, type }, value);
+export const trackResource = (resource: string, type: string) => 
+    metrics.trackResource(resource, type);
+
+// Setup resource monitoring
+export const setupResourceMonitoring = (interval = 5000) => {
+    // Set up resource usage tracking
+    const resourceTracker = metrics.trackResource('system', 'auth');
+    
+    setInterval(() => {
+        const usage = process.memoryUsage();
+        resourceTracker.setUsage(usage.heapUsed / 1024 / 1024, 'MB'); // Convert to MB
+    }, interval);
 };
 
-// Track rate limit hits
-export const trackRateLimit = (endpoint: string) => {
-    authMetrics.rateLimitHits.inc({ endpoint });
-};
+// Track external service calls
+export const trackExternalCall = (service: string, operation: string) => 
+    metrics.trackExternalCall(service, operation);
+
+// Track queue operations
+export const trackQueue = (queueName: string) => 
+    metrics.trackQueue(queueName);
+
+// Track security events
+export const trackSecurityEvent = (eventType: string, severity: string) => 
+    metrics.trackSecurityEvent(eventType, severity);

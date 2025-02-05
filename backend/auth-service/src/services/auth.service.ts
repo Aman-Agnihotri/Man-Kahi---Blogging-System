@@ -7,10 +7,10 @@ import { RegisterInput, LoginResponse, AuthUser, UserWithRoles } from '@/types/a
 import { 
     trackDbOperation, 
     trackAuthMetrics, 
-    trackAuthError,
+    trackError,
     updateActiveTokens,
     trackRedisOperation 
-} from '../middlewares/metrics.middleware'
+} from '@middlewares/metrics.middleware'
 
 interface LoginInput {
     email: string
@@ -33,7 +33,7 @@ export class AuthService {
 
             if (existingUser) {
                 dbTimer.end();
-                trackAuthError('user_exists', 'register');
+                trackError('auth', 'user_exists', 'register');
                 throw new Error('User with this email or username already exists')
             }
 
@@ -118,7 +118,7 @@ export class AuthService {
 
             if (!user?.password) {
                 dbTimer.end();
-                trackAuthError('invalid_credentials', 'login');
+                trackError('auth', 'invalid_credentials', 'login');
                 throw new Error('Invalid credentials')
             }
 
@@ -126,7 +126,7 @@ export class AuthService {
             const isValid = await verifyPassword(input.password, user.password)
             if (!isValid) {
                 dbTimer.end();
-                trackAuthError('invalid_password', 'login');
+                trackError('auth', 'invalid_password', 'login');
                 throw new Error('Invalid credentials')
             }
 
@@ -174,7 +174,7 @@ export class AuthService {
 
         dbTimer.end();
         if (!user) {
-            trackAuthError('user_not_found', 'token_generation');
+            trackError('auth', 'user_not_found', 'token_generation');
             throw new Error('User not found')
         }
 
@@ -197,7 +197,7 @@ export class AuthService {
 
         dbTimer.end();
         if (!user) {
-            trackAuthError('user_not_found', 'refresh_token_generation');
+            trackError('auth', 'user_not_found', 'refresh_token_generation');
             throw new Error('User not found')
         }
 
@@ -244,7 +244,7 @@ export class AuthService {
 
             if (!user) {
                 dbTimer.end();
-                trackAuthError('user_not_found', 'add_role');
+                trackError('auth', 'user_not_found', 'add_role');
                 throw new Error('User not found')
             }
 
@@ -302,14 +302,14 @@ export class AuthService {
 
             if (!user) {
                 dbTimer.end();
-                trackAuthError('user_not_found', 'unlink_provider');
+                trackError('auth', 'user_not_found', 'unlink_provider');
                 throw new Error('User not found')
             }
 
             // If this is the only login method and user has no password, prevent unlinking
             if (!user.password && user.oAuthProviders.length <= 1) {
                 dbTimer.end();
-                trackAuthError('last_auth_method', 'unlink_provider');
+                trackError('auth', 'last_auth_method', 'unlink_provider');
                 throw new Error('Cannot unlink the only authentication method')
             }
 

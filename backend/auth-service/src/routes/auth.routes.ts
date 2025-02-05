@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { AuthController } from '../controllers/auth.controller';
+import { AuthController } from '@controllers/auth.controller';
 import { authenticate } from '@shared/middlewares/auth';
 import { createEndpointRateLimit, createServiceRateLimit } from '@shared/middlewares/rateLimit';
+import { metrics } from '@config/metrics';
 import { 
-    trackAuthMetrics, 
-    trackAuthError,
-    trackRedisOperation
-} from '../middlewares/metrics.middleware';
-import { authMetrics } from '../config/metrics';
+    trackAuthMetrics,
+    trackRedisOperation,
+    trackError
+} from '@middlewares/metrics.middleware';
 import type { RequestHandler } from 'express';
 
 const router = Router();
@@ -95,19 +95,8 @@ const authController = new AuthController();
  *           type: string
  */
 
-// Base rate limit for auth service with tracking
-router.use((req, res, next) => {
-    const serviceLimiter = createServiceRateLimit('auth');
-    const redisTimer = trackRedisOperation('rate_limit');
-    serviceLimiter(req, res, (err: any) => {
-        redisTimer.end();
-        if (err) {
-            authMetrics.rateLimitHits.inc({ endpoint: 'service' });
-            trackAuthError('rate_limit', 'service');
-        }
-        next(err);
-    });
-});
+// Base rate limit for auth service
+router.use(createServiceRateLimit('auth') as unknown as RequestHandler);
 
 /**
  * @swagger
@@ -154,7 +143,9 @@ router.post(
     '/register',
     createEndpointRateLimit('auth:register') as unknown as RequestHandler,
     trackAuthMetrics('register'),
-    authController.register
+    (req, res, next) => {
+        Promise.resolve(authController.register(req, res, next));
+    }
 );
 
 /**
@@ -195,7 +186,9 @@ router.post(
     '/login',
     createEndpointRateLimit('auth:login') as unknown as RequestHandler,
     trackAuthMetrics('login'),
-    authController.login
+    (req, res, next) => {
+        Promise.resolve(authController.login(req, res, next));
+    }
 );
 
 /**
@@ -235,7 +228,9 @@ router.post(
     '/logout',
     authenticate({ strategy: ['jwt'] }) as unknown as RequestHandler,
     createEndpointRateLimit('auth:logout') as unknown as RequestHandler,
-    authController.logout
+    (req, res, next) => {
+        Promise.resolve(authController.logout(req, res, next));
+    }
 );
 
 /**
@@ -295,7 +290,9 @@ router.post(
     '/roles',
     authenticate({ strategy: ['jwt'], roles: ['admin'] }) as unknown as RequestHandler,
     createServiceRateLimit('admin') as unknown as RequestHandler,
-    authController.addRole as RequestHandler
+    (req, res, next) => {
+        Promise.resolve(authController.addRole(req, res, next));
+    }
 );
 
 /**
@@ -350,13 +347,14 @@ router.post(
  *                   format: date-time
  */
 router.get('/health', (req, res) => {
-    // Track resource usage
+    // Track memory usage with shared metrics
     const used = process.memoryUsage();
-    authMetrics.resourceUsage.set({ resource: 'memory', type: 'heapUsed' }, used.heapUsed);
-    authMetrics.resourceUsage.set({ resource: 'memory', type: 'heapTotal' }, used.heapTotal);
-    authMetrics.resourceUsage.set({ resource: 'memory', type: 'rss' }, used.rss);
+    const memoryResource = metrics.trackResource('memory', 'auth');
+    memoryResource.setUsage(used.heapUsed, 'heapUsed');
+    memoryResource.setUsage(used.heapTotal, 'heapTotal');
+    memoryResource.setUsage(used.rss, 'rss');
 
-    // Track Redis health
+    // Track Redis health with shared metrics
     const redisTimer = trackRedisOperation('health_check');
     const redis = require('@shared/config/redis').redis;
     redis.ping()
@@ -374,7 +372,7 @@ router.get('/health', (req, res) => {
         })
         .catch((error: Error) => {
             redisTimer.end();
-            trackAuthError('redis_health', 'health_check');
+            trackError('redis_health', 'connection_failed', 'health');
             res.status(500).json({ 
                 status: 'error', 
                 service: 'auth',
