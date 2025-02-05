@@ -8,7 +8,7 @@ import {
   trackAdminError, 
   trackDbOperation, 
   trackExternalCall 
-} from '../middlewares/metrics.middleware';
+} from '@middlewares/metrics.middleware';
 
 interface BaseAnalytics {
   id: string;
@@ -67,14 +67,14 @@ export class AdminController {
   private readonly analyticsServiceUrl: string;
 
   constructor() {
-    this.analyticsServiceUrl = process.env.ANALYTICS_SERVICE_URL ?? 'http://analytics-service:3003';
+    this.analyticsServiceUrl = process.env['ANALYTICS_SERVICE_URL'] ?? 'http://analytics-service:3003';
   }
 
   // Get dashboard overview
   async getDashboardStats(req: Request, res: Response): Promise<Response> {
     try {
-      const timeframe = timeframeSchema.parse(req.query.timeframe);
-      const dateRange = dateRangeSchema.parse(req.query.dateRange);
+      const timeframe = timeframeSchema.parse(req.query['timeframe']);
+      const dateRange = dateRangeSchema.parse(req.query['dateRange']);
 
       const dbTimer = trackDbOperation('count', 'blog');
       const totalBlogs = await (prisma as any).blog.count({
@@ -160,8 +160,8 @@ export class AdminController {
   async getBlogAnalytics(req: Request, res: Response): Promise<Response> {
     try {
       const { blogId } = req.params;
-      const timeframe = timeframeSchema.parse(req.query.timeframe);
-      const dateRange = dateRangeSchema.parse(req.query.dateRange);
+      const timeframe = timeframeSchema.parse(req.query['timeframe']);
+      const dateRange = dateRangeSchema.parse(req.query['dateRange']);
 
       const analyticsTimer = trackExternalCall('analytics', `blog/${blogId}`);
       const analyticsResponse = await axios.get(
@@ -225,8 +225,8 @@ export class AdminController {
   async getUserAnalytics(req: Request, res: Response): Promise<Response> {
     try {
       const { userId } = req.params;
-      const timeframe = timeframeSchema.parse(req.query.timeframe);
-      const dateRange = dateRangeSchema.parse(req.query.dateRange);
+      const timeframe = timeframeSchema.parse(req.query['timeframe']);
+      const dateRange = dateRangeSchema.parse(req.query['dateRange']);
 
       // Get user's blogs
       const dbTimer = trackDbOperation('findMany', 'blog');
@@ -258,7 +258,7 @@ export class AdminController {
       const analyticsResponses = await Promise.all(analyticsPromises);
       const blogAnalytics = blogs.map((blog, index) => ({
         ...blog,
-        analytics: analyticsResponses[index].data
+        analytics: analyticsResponses[index]?.data ?? {}
       }));
 
       return res.json({
@@ -319,8 +319,8 @@ export class AdminController {
   // Get trending content
   async getTrendingContent(req: Request, res: Response): Promise<Response> {
     try {
-      const timeframe = timeframeSchema.parse(req.query.timeframe);
-      const dateRange = dateRangeSchema.parse(req.query.dateRange);
+      const timeframe = timeframeSchema.parse(req.query['timeframe']);
+      const dateRange = dateRangeSchema.parse(req.query['dateRange']);
 
       const analyticsTimer = trackExternalCall('analytics', 'trending');
       const analyticsResponse = await axios.get(
@@ -405,8 +405,8 @@ export class AdminController {
   // Get tag analytics
   async getTagAnalytics(req: Request, res: Response): Promise<Response> {
     try {
-      const timeframe = timeframeSchema.parse(req.query.timeframe);
-      const dateRange = dateRangeSchema.parse(req.query.dateRange);
+      const timeframe = timeframeSchema.parse(req.query['timeframe']);
+      const dateRange = dateRangeSchema.parse(req.query['dateRange']);
 
       const dbTimer = trackDbOperation('findMany', 'tag');
       const tags = await (prisma as any).tag.findMany({

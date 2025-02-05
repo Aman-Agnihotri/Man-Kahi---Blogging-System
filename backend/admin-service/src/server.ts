@@ -7,13 +7,88 @@ import { setupSwagger } from '@shared/config/swagger';
 import adminRoutes from '@routes/admin.routes';
 import dotenv from 'dotenv';
 import path from 'path';
-import { metricsHandler, metricsEnabled } from './config/metrics';
-import { trackRequest, updateResourceUsage, trackAdminError } from './middlewares/metrics.middleware';
+import { metricsHandler, metricsEnabled, metrics } from '@config/metrics';
+import { trackRequest, trackError, trackDbOperation, setupResourceMonitoring } from '@middlewares/metrics.middleware';
+import { createHealthCheck } from '@shared/middlewares/health';
 
-// Load environment variables
+// Enhanced startup logging
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  trackError('process', 'unhandled_rejection', 'admin-service');
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+  trackError('process', 'uncaught_exception', 'admin-service');
+});
+
+logger.info('Initializing Admin Service...');
+
+// Load and validate environment variables
 dotenv.config();
 
+// Enhanced environment validation
+const validateEnvironment = () => {
+  logger.info('Validating environment configuration...');
+  const requiredEnvVars = {
+    NODE_ENV: process.env['NODE_ENV'] ?? 'development',
+    PORT: process.env['PORT'] ?? '3004',
+    DATABASE_URL: process.env['DATABASE_URL'],
+    LOG_LEVEL: process.env['LOG_LEVEL'] ?? 'info',
+  };
+
+  for (const [key, value] of Object.entries(requiredEnvVars)) {
+    if (!value) {
+      const error = new Error(`Missing required environment variable: ${key}`);
+      logger.error(error);
+      throw error;
+    }
+    logger.info(`Environment variable ${key} is set`);
+  }
+
+  logger.info('Environment validation completed successfully');
+  return requiredEnvVars;
+};
+
+const env = validateEnvironment();
 const app = express();
+logger.info('Express application instance created');
+
+// Initialize app locals
+app.locals['activeSessions'] = new Map();
+
+// Enhanced request logging middleware
+app.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] || Math.random().toString(36).substring(7);
+  const startTime = process.hrtime();
+  
+  logger.info(`[${requestId}] Incoming ${req.method} ${req.url}`, {
+    headers: req.headers,
+    query: req.query,
+    body: req.body,
+  });
+
+  // Track request metrics
+  const requestMetrics = metrics.trackResource('admin_request', 'count');
+  requestMetrics.setUsage(1, 'request');
+
+  res.on('finish', () => {
+    const [seconds, nanoseconds] = process.hrtime(startTime);
+    const duration = seconds * 1000 + nanoseconds / 1000000;
+    
+    // Track response metrics
+    const responseMetrics = metrics.trackResource('admin_response', 'latency');
+    responseMetrics.setUsage(duration, 'ms');
+
+    logger.info(`[${requestId}] Completed ${req.method} ${req.url}`, {
+      statusCode: res.statusCode,
+      duration: `${duration.toFixed(2)}ms`,
+      headers: res.getHeaders()
+    });
+  });
+
+  next();
+});
 
 // Security middleware
 app.use(helmet());
@@ -22,35 +97,34 @@ app.use(express.json());
 
 // Setup Swagger documentation
 setupSwagger(app as any, 'Admin Service', [
-  path.resolve(__dirname, './routes/admin.routes.ts')
+  path.resolve(__dirname, '@routes/admin.routes.ts')
 ]);
 
-// Metrics middleware
+// Track HTTP requests
 app.use(trackRequest());
 
-// Start monitoring resource usage
-const startResourceMonitoring = () => {
-  setInterval(() => {
-    const used = process.memoryUsage();
-    updateResourceUsage('memory', 'heapUsed', used.heapUsed);
-    updateResourceUsage('memory', 'heapTotal', used.heapTotal);
-    updateResourceUsage('memory', 'rss', used.rss);
-    updateResourceUsage('memory', 'external', used.external);
-    
-    const cpuUsage = process.cpuUsage();
-    updateResourceUsage('cpu', 'user', cpuUsage.user);
-    updateResourceUsage('cpu', 'system', cpuUsage.system);
-  }, 5000); // Update every 5 seconds
-};
+// Start resource monitoring
+setupResourceMonitoring();
 
-startResourceMonitoring();
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'admin' });
+// Standardized health check with custom admin metrics
+const adminHealthCheck = createHealthCheck({
+  serviceName: 'admin-service',
+  onSuccess: async (metrics) => {
+    const activeSessions = (app.locals['activeSessions'] as Map<string, any>).size;
+
+    return {
+      ...metrics,
+      operations: {
+        activeSessions
+      }
+    };
+  }
 });
 
-// Metrics endpoint (protected by metrics enabled check)
+app.get('/health', adminHealthCheck);
+
+// Metrics endpoint
 app.get('/metrics', metricsEnabled, metricsHandler);
 
 // Routes
@@ -59,40 +133,62 @@ app.use('/api/admin', adminRoutes);
 // Error handling
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   logger.error('Unhandled error:', err);
+  trackError('server', 'unhandled_error', 'admin-service');
   
-  // Track error in metrics and add correlation ID
-  const errorType = err.name || 'UnknownError';
-  const correlationId = req.headers['x-correlation-id'] || 'unknown';
-  trackAdminError(`${errorType}_${correlationId}`);
-  
+  const correlationId = (req.headers['x-correlation-id'] || 'unknown').toString();
   res.status(500).json({
     error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    message: process.env['NODE_ENV'] === 'development' ? err.message : undefined,
+    correlationId
   });
 });
 
-// Start server
-const PORT = process.env.PORT ?? 3004;
-app.listen(PORT, () => {
-  logger.info(`Admin service running on port ${PORT}`);
-});
+// Graceful shutdown
+const shutdown = async () => {
+  logger.info('Received shutdown signal, shutting down gracefully');
+  try {
+    const dbTimer = trackDbOperation('disconnect', 'prisma');
+    await prisma.$disconnect();
+    dbTimer.end();
+    process.exit(0);
+  } catch (error) {
+    logger.error('Error during shutdown:', error);
+    trackError('server', 'shutdown_error', 'admin-service');
+    process.exit(1);
+  }
+};
 
-// Handle shutdown gracefully
-process.on('SIGTERM', async () => {
-  logger.info('Received SIGTERM signal, shutting down gracefully');
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  logger.info('Received SIGINT signal, shutting down gracefully');
-  await prisma.$disconnect();
-  process.exit(0);
-});
+// Handle shutdown signals
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason: any) => {
   logger.error('Unhandled Promise rejection:', reason);
+  trackError('server', 'unhandled_rejection', 'admin-service');
 });
+
+// Start server
+const PORT = process.env['PORT'] ?? 3004;
+
+const startServer = async () => {
+  try {
+    // Verify database connection
+    const dbTimer = trackDbOperation('connect', 'prisma');
+    await prisma.$connect();
+    dbTimer.end();
+    logger.info('Database connection established');
+
+    app.listen(PORT, () => {
+      logger.info(`Admin service running on port ${PORT}`);
+    });
+  } catch (error) {
+    logger.error('Failed to start server:', error);
+    trackError('server', 'startup_error', 'admin-service');
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app;
