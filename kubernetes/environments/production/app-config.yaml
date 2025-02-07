@@ -4,24 +4,41 @@ metadata:
   name: app-config
   namespace: mankahi
 data:
+  # Node Environment
   NODE_ENV: "production"
-  AUTH_SERVICE_URL: "http://auth-service:3001"
-  BLOG_SERVICE_URL: "http://blog-service:3002"
-  ANALYTICS_SERVICE_URL: "http://analytics-service:3003"
-  ADMIN_SERVICE_URL: "http://admin-service:3004"
-  FRONTEND_URL: "https://mankahi.local" # Replace with actual production domain
+  
+  # Service URLs (k8s service discovery for internal communication)
+  AUTH_SERVICE_URL: "http://auth-service.mankahi.svc.cluster.local:3001"
+  BLOG_SERVICE_URL: "http://blog-service.mankahi.svc.cluster.local:3002"
+  ANALYTICS_SERVICE_URL: "http://analytics-service.mankahi.svc.cluster.local:3003"
+  ADMIN_SERVICE_URL: "http://admin-service.mankahi.svc.cluster.local:3004"
+  FRONTEND_URL: "https://mankahi.local"  # External production domain
+  
+  # Rate Limiting (production values)
   RATE_LIMIT_WINDOW: "900000"
   RATE_LIMIT_MAX_REQUESTS: "100"
   DASHBOARD_RATE_LIMIT_MAX: "1000"
   ADMIN_RATE_LIMIT_WINDOW: "900000"
   ADMIN_RATE_LIMIT_MAX: "50"
-  BLOG_CACHE_TTL: "7200"
-  SEARCH_CACHE_TTL: "3600"
-  ANALYTICS_CACHE_TTL: "1800"
-  MAX_FILE_SIZE: "5242880"
+  
+  # Cache Configuration (production optimized)
+  BLOG_CACHE_TTL: "7200"        # 2 hours for production
+  SEARCH_CACHE_TTL: "3600"      # 1 hour for production
+  ANALYTICS_CACHE_TTL: "1800"   # 30 minutes
+  
+  # Upload Configuration
+  MAX_FILE_SIZE: "5242880"      # 5MB
   ALLOWED_IMAGE_TYPES: "image/jpeg,image/png,image/gif"
-  ELASTICSEARCH_INDEX_SHARDS: "3"
-  ELASTICSEARCH_INDEX_REPLICAS: "2"
+  
+  # Elasticsearch Configuration (production optimized)
+  ELASTICSEARCH_INDEX_SHARDS: "3"    # Higher for production
+  ELASTICSEARCH_INDEX_REPLICAS: "2"  # Redundancy for production
+  
+  # MinIO Configuration
   MINIO_REGION: "ap-south-1"
-  LOG_LEVEL: "info"
-  CORS_ORIGIN: "https://mankahi.local" # Replace with actual production domain
+  
+  # Logging
+  LOG_LEVEL: "info"             # Production logging level
+  
+  # CORS Configuration
+  CORS_ORIGIN: "https://mankahi.local"  # Production domain
