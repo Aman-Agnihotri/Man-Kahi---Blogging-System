@@ -58,10 +58,19 @@ type BlogTagRelation = {
 };
 
 const timeframeSchema = z.enum(['1h', '24h', '7d', '30d', 'all']).default('24h');
-const dateRangeSchema = z.object({
+const dateRangeSchema = z.preprocess((val) => {
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return val;
+    }
+  }
+  return val;
+}, z.object({
   start: z.string().datetime(),
   end: z.string().datetime(),
-}).optional();
+})).optional();
 
 export class AdminController {
   private readonly analyticsServiceUrl: string;
@@ -504,12 +513,38 @@ export class AdminController {
   // Update blog visibility
   async updateBlogVisibility(req: Request, res: Response): Promise<Response> {
     try {
-      const { blogId } = req.params;
-      const { visible } = req.body;
+      // Check required parameters first
+      if (!req.params['blogId']) {
+        trackAdminError('blog_visibility_update_error');
+        throw new Error('Blog ID is required');
+      }
+
+      if (!('visible' in req.body)) {
+        trackAdminError('blog_visibility_update_error');
+        throw new Error('Visibility state is required');
+      }
+
+      // Validate blog ID format
+      const blogIdSchema = z.string().regex(/^blog-[a-zA-Z0-9-]+$/);
+      try {
+        await blogIdSchema.parseAsync(req.params['blogId']);
+      } catch {
+        trackAdminError('blog_visibility_update_error');
+        throw new Error('Invalid blog ID format');
+      }
+
+      // Validate visibility
+      const visibilitySchema = z.boolean();
+      let visible: boolean;
+      try {
+        visible = await visibilitySchema.parseAsync(req.body.visible);
+      } catch {
+        throw new Error('Invalid visibility state');
+      }
 
       const dbTimer = trackDbOperation('update', 'blog');
       const blog = await (prisma as any).blog.update({
-        where: { id: blogId },
+        where: { id: req.params['blogId'] },
         data: { published: visible },
         include: {
           author: {
@@ -545,6 +580,21 @@ export class AdminController {
             return res.status(400).json({
               message: 'Invalid visibility state',
               details: 'The visibility value must be true or false'
+            });
+          case 'Invalid blog ID format':
+            return res.status(400).json({
+              message: 'Invalid input data',
+              details: 'Invalid blog ID format'
+            });
+          case 'Blog ID is required':
+            return res.status(400).json({
+              message: 'Invalid input data',
+              details: 'Blog ID is required'
+            });
+          case 'Visibility state is required':
+            return res.status(400).json({
+              message: 'Invalid input data',
+              details: 'Visibility state is required'
             });
         }
       }
