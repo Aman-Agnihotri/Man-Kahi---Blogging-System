@@ -34,6 +34,10 @@ const addRoleSchema = z.object({
   roleName: z.string().min(1),
 })
 
+const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1),
+})
+
 export class AuthController {
   private readonly authService: AuthService
 
@@ -139,6 +143,48 @@ export class AuthController {
       logger.error('Logout controller error:', error)
       trackError('server', 'logout_failed', 'auth');
       res.status(500).json({ message: 'Internal server error' })
+    }
+  }
+
+  refreshToken: RequestHandler<{}, any, z.infer<typeof refreshTokenSchema>> = async (req, res, next) => {
+    const redisTimer = trackRedisOperation('token_refresh');
+    try {
+      // Validate input
+      const validatedInput = refreshTokenSchema.parse(req.body);
+
+      // Refresh token with database tracking
+      const dbTimer = trackDbOperation('select', 'user');
+      const result = await this.authService.refreshToken(validatedInput.refreshToken);
+      dbTimer.end();
+
+      // Update metrics
+      updateActiveTokens(1);
+      redisTimer.end();
+
+      res.json(result);
+    } catch (error) {
+      redisTimer.end();
+      logger.error('Refresh token controller error:', error);
+
+      if (error instanceof z.ZodError) {
+        trackError('validation', 'refresh_token_validation_failed', 'auth');
+        res.status(400).json({
+          message: 'Invalid input',
+          errors: error.errors,
+        });
+        return;
+      }
+
+      if (error instanceof Error) {
+        if (error.message === 'Invalid refresh token') {
+          trackError('invalid_token', 'refresh_token_failed', 'auth');
+          res.status(401).json({ message: error.message });
+          return;
+        }
+      }
+
+      trackError('server', 'refresh_token_failed', 'auth');
+      res.status(500).json({ message: 'Internal server error' });
     }
   }
 

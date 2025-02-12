@@ -8,7 +8,6 @@ import type { RequestHandler } from 'express';
 import { 
     trackAuthMetrics,
     trackError,
-    trackDbOperation,
     updateActiveTokens
 } from '@middlewares/metrics.middleware';
 
@@ -142,32 +141,29 @@ router.get(
                 throw new Error('Authentication failed');
             }
 
-            const dbTimer = trackDbOperation('select', 'oauth_users');
+            // Find or create user and store OAuth data
+            const user = await authService.findOrCreateOAuthUser(oauthProfile);
             
-            // Create authenticated user with multiple fallbacks for username
-            const emailUsername = oauthProfile.email ? oauthProfile.email.split('@')[0] : undefined;
-            const username = oauthProfile.profile.name ?? 
-                           emailUsername ?? 
-                           `user_${oauthProfile.id}`;
-            // Check if email is available
-            if (!oauthProfile.email) {
-                throw new Error('Email is required for authentication');
-            }
-            const user: AuthenticatedUser = {
-                id: oauthProfile.id,
-                email: oauthProfile.email,
-                username,
-                roles: ['user'],
-                createdAt: new Date(),
-                updatedAt: new Date()
+            await authService.handleOAuthCallback(oauthProfile, {
+                accessToken: req.authInfo?.token,
+                expiresAt: new Date(Date.now() + 3600 * 1000), // 1 hour from now
+                tokenType: 'Bearer',
+                scope: 'profile email',
+            }, user.id);
+
+            const userRoles = user.roles.map(role => role.name);
+            req.user = {
+                id: user.id,
+                email: user.email,
+                username: user.username,
+                roles: userRoles,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt
             };
-            req.user = user;
 
             const accessToken = await authService.generateToken(user.id);
-            const refreshToken = await authService.generateRefreshToken(req.user.id);
-            dbTimer.end();
-
-            updateActiveTokens(1);
+            const refreshToken = await authService.generateRefreshToken(user.id);
+            updateActiveTokens(2);
 
             const linkToken = req.authInfo?.token;
             const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';

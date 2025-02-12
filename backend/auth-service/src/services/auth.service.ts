@@ -125,10 +125,33 @@ export class AuthService {
             // Verify password
             const isValid = await verifyPassword(input.password, user.password)
             if (!isValid) {
+                // Update login attempts
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: {
+                        loginAttempts: {
+                            increment: 1
+                        },
+                        // Lock account after 5 failed attempts for 30 minutes
+                        lockedUntil: user.loginAttempts >= 4 ? 
+                            new Date(Date.now() + 30 * 60 * 1000) : null
+                    }
+                });
+                
                 dbTimer.end();
                 trackError('auth', 'invalid_password', 'login');
                 throw new Error('Invalid credentials')
             }
+
+            // Reset login tracking on successful login
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    lastLoginAt: new Date(),
+                    loginAttempts: 0,
+                    lockedUntil: null
+                }
+            });
 
             const userRoles = user.roles.map(ur => ur.role.name)
 
@@ -187,6 +210,129 @@ export class AuthService {
             roles: userRoles,
             type: 'access'
         })
+    }
+
+    async findOrCreateOAuthUser(profile: any): Promise<UserWithRoles> {
+        const dbTimer = trackDbOperation('select', 'oauth_users');
+        try {
+            // Check if user exists by OAuth provider ID
+            let user = await prisma.user.findFirst({
+                where: {
+                    oAuthProviders: {
+                        some: {
+                            provider: profile.provider,
+                            providerId: profile.id
+                        }
+                    }
+                },
+                include: {
+                    roles: {
+                        include: {
+                            role: true
+                        }
+                    }
+                }
+            });
+
+            if (!user) {
+                // Create new user if not exists
+                const emailUsername = profile.email ? profile.email.split('@')[0] : undefined;
+                const username = profile.profile.name ?? 
+                               emailUsername ?? 
+                               `user_${profile.id}`;
+                
+                // Check if email is available
+                if (!profile.email) {
+                    throw new Error('Email is required for authentication');
+                }
+
+                user = await prisma.user.create({
+                    data: {
+                        email: profile.email,
+                        username,
+                        roles: {
+                            create: {
+                                role: {
+                                    connectOrCreate: {
+                                        where: { name: 'user' },
+                                        create: {
+                                            name: 'user',
+                                            description: 'Default user role',
+                                            slug: 'user'
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    include: {
+                        roles: {
+                            include: {
+                                role: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            dbTimer.end();
+            return {
+                ...user,
+                roles: user.roles.map(ur => ur.role)
+            };
+        } catch (error) {
+            dbTimer.end();
+            logger.error('OAuth user creation error:', error);
+            throw error;
+        }
+    }
+
+    async handleOAuthCallback(profile: any, tokens: any, userId: string): Promise<void> {
+        const dbTimer = trackDbOperation('upsert', 'oauth_provider');
+        try {
+            const oauthData = {
+                provider: profile.provider,
+                providerId: profile.id,
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                expiresAt: tokens.expiresAt ? new Date(tokens.expiresAt) : null,
+                tokenType: tokens.tokenType,
+                scope: tokens.scope,
+                idToken: tokens.idToken,
+                profileData: profile,
+                userId: userId
+            };
+
+            // Store in OAuthProvider model
+            await prisma.oAuthProvider.upsert({
+                where: {
+                    provider_providerId: {
+                        provider: profile.provider,
+                        providerId: profile.id
+                    }
+                },
+                update: oauthData,
+                create: oauthData
+            });
+
+            // Update user's last login
+            await prisma.user.update({
+                where: { id: userId },
+                data: {
+                    lastLoginAt: new Date(),
+                    loginAttempts: 0,
+                    lockedUntil: null
+                }
+            });
+
+            dbTimer.end();
+            trackAuthMetrics('oauth_success', profile.provider);
+        } catch (error) {
+            dbTimer.end();
+            logger.error('OAuth callback error:', error);
+            trackError('oauth', 'callback_failed', profile.provider);
+            throw error;
+        }
     }
 
     async generateRefreshToken(userId: string): Promise<string> {
@@ -286,6 +432,65 @@ export class AuthService {
         } catch (error) {
             logger.error('Add role error:', error)
             throw error
+        }
+    }
+
+    async refreshToken(refreshToken: string): Promise<LoginResponse> {
+        const dbTimer = trackDbOperation('select', 'user');
+        try {
+            // Verify refresh token
+            const decoded = await import('@shared/utils/jwt').then(jwt => jwt.verifyToken(refreshToken));
+            if (!decoded || decoded.type !== 'refresh') {
+                dbTimer.end();
+                trackError('auth', 'invalid_refresh_token', 'refresh');
+                throw new Error('Invalid refresh token');
+            }
+
+            // Get user with roles
+            const user = await prisma.user.findUnique({
+                where: { id: decoded.userId },
+                include: {
+                    roles: {
+                        include: {
+                            role: true
+                        }
+                    }
+                }
+            });
+
+            if (!user) {
+                dbTimer.end();
+                trackError('auth', 'user_not_found', 'refresh');
+                throw new Error('User not found');
+            }
+
+            const userRoles = user.roles.map(ur => ur.role.name);
+
+            // Generate new tokens
+            const token = await this.generateToken(user.id);
+            const newRefreshToken = await this.generateRefreshToken(user.id);
+            updateActiveTokens(2); // One for access token, one for refresh token
+
+            trackAuthMetrics('token_refresh_success', 'local');
+
+            const authUser: AuthUser = {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                roles: userRoles
+            };
+
+            dbTimer.end();
+
+            return {
+                user: authUser,
+                token,
+                refreshToken: newRefreshToken
+            };
+        } catch (error) {
+            dbTimer.end();
+            logger.error('Refresh token error:', error);
+            throw error;
         }
     }
 

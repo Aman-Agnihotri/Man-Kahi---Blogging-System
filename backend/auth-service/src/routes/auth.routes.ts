@@ -235,6 +235,55 @@ router.post(
 
 /**
  * @swagger
+ * /auth/refresh:
+ *   post:
+ *     tags:
+ *       - Authentication
+ *     summary: Refresh access token
+ *     description: Get a new access token using a valid refresh token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: New access token generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                 refreshToken:
+ *                   type: string
+ *                 user:
+ *                   $ref: '#/components/schemas/AuthUser'
+ *       401:
+ *         description: Invalid or expired refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post(
+    '/refresh',
+    createEndpointRateLimit('auth:refresh') as unknown as RequestHandler,
+    trackAuthMetrics('refresh'),
+    (req, res, next) => {
+        Promise.resolve(authController.refreshToken(req, res, next));
+    }
+);
+
+/**
+ * @swagger
  * /auth/roles:
  *   post:
  *     tags:
