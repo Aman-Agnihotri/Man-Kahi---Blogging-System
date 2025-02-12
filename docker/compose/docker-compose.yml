@@ -1,3 +1,10 @@
+name: "mankahi-dev-compose"
+
+networks:
+    frontend:
+    backend:
+    monitoring:
+
 services:
     # Database Initialization Service
     init-db:
@@ -12,6 +19,19 @@ services:
             - .env.development
         volumes:
             - ../../backend/shared:/app/shared
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: 512M
+        restart: "no"
+        networks:
+            - backend
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
 
     # PostgreSQL
     postgres:
@@ -29,6 +49,26 @@ services:
             interval: 10s
             timeout: 5s
             retries: 5
+        deploy:
+            resources:
+                limits:
+                    cpus: "2"
+                    memory: 4G
+        command: >
+            postgres
+            -c shared_buffers=1GB
+            -c effective_cache_size=2GB
+            -c work_mem=32MB
+            -c maintenance_work_mem=256MB
+            -c max_connections=100
+        networks:
+            - backend
+        stop_grace_period: 30s
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
 
     # Redis
     redis:
@@ -38,12 +78,20 @@ services:
             - "6379:6379"
         volumes:
             - redis-data:/data
-        command: redis-server --appendonly yes
+        command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
         healthcheck:
             test: ["CMD", "redis-cli", "ping"]
             interval: 10s
             timeout: 5s
             retries: 5
+        networks:
+            - backend
+        stop_grace_period: 20s
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
 
     # MinIO
     minio:
@@ -54,6 +102,9 @@ services:
             - "9001:9001"
         env_file:
             - .env.development
+        environment:
+            - MINIO_ROOT_USER=${MINIO_ROOT_USER:-admin}
+            - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
         volumes:
             - minio-data:/data
         command: server /data --console-address ":9001"
@@ -62,6 +113,14 @@ services:
             interval: 30s
             timeout: 20s
             retries: 3
+        networks:
+            - backend
+        stop_grace_period: 20s
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
 
     # Elasticsearch
     elasticsearch:
@@ -70,15 +129,17 @@ services:
         env_file:
             - .env.development
         environment:
+            - node.name=es01
             - discovery.type=single-node
             - ES_JAVA_OPTS=-Xms512m -Xmx512m
             - xpack.security.enabled=false
+            - bootstrap.memory_lock=true
         ports:
             - "9200:9200"
         volumes:
             - elasticsearch-data:/usr/share/elasticsearch/data
         healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:9200"]
+            test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=60s"]
             interval: 30s
             timeout: 10s
             retries: 5
@@ -86,6 +147,14 @@ services:
             memlock:
                 soft: -1
                 hard: -1
+        networks:
+            - backend
+        stop_grace_period: 30s
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
 
     # Auth Service
     auth-service:
@@ -112,11 +181,18 @@ services:
         command: npm run dev
         working_dir: /app/auth-service
         healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+            test: ["CMD-SHELL", "curl -sf http://localhost:3001/health | grep -q '\"status\":\"healthy\"'"]
             interval: 30s
             timeout: 10s
             retries: 3
             start_period: 40s
+        networks:
+            - backend
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
 
     # Blog Service
     blog-service:
@@ -148,51 +224,18 @@ services:
         command: npm run dev
         working_dir: /app/blog-service
         healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+            test: ["CMD-SHELL", "curl -sf http://localhost:3002/health | grep -q '\"status\":\"healthy\"'"]
             interval: 30s
             timeout: 10s
             retries: 3
             start_period: 40s
-
-    # Frontend (Nuxt)
-    frontend:
-        build:
-            context: ../../frontend
-            target: development
-        container_name: mankahi-frontend
-        ports:
-            - "3000:3000"
-        depends_on:
-            - auth-service
-            - blog-service
-        env_file:
-            - .env.development
-        environment:
-            - NUXT_PUBLIC_API_URL=http://localhost:80
-        volumes:
-            - ../../frontend:/app
-            - /app/node_modules
-        command: npm run dev
-
-    # API Gateway
-    nginx:
-        image: nginx:latest
-        container_name: mankahi-nginx
-        ports:
-            - "80:80"
-        depends_on:
-            - frontend
-            - auth-service
-            - blog-service
-        volumes:
-            - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-            - ../nginx/cors.conf:/etc/nginx/cors.conf:ro
-            - blog-uploads:/var/www/uploads
-        healthcheck:
-            test: ["CMD", "nginx", "-t"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
+        networks:
+            - backend
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
 
     # Analytics Service
     analytics-service:
@@ -222,11 +265,18 @@ services:
         command: npx ts-node-dev -r tsconfig-paths/register --respawn --transpile-only src/server.ts
         working_dir: /app/analytics-service
         healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+            test: ["CMD-SHELL", "curl -sf http://localhost:3003/health | grep -q '\"status\":\"healthy\"'"]
             interval: 30s
             timeout: 10s
             retries: 3
             start_period: 40s
+        networks:
+            - backend
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
 
     # Admin Service
     admin-service:
@@ -258,11 +308,147 @@ services:
         command: npm run dev
         working_dir: /app/admin-service
         healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+            test: ["CMD-SHELL", "curl -sf http://localhost:3004/health | grep -q '\"status\":\"healthy\"'"]
             interval: 30s
             timeout: 10s
             retries: 3
             start_period: 40s
+        networks:
+            - backend
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
+
+    # Frontend
+    frontend:
+        build:
+            context: ../../frontend
+            target: development
+        container_name: mankahi-frontend
+        ports:
+            - "3000:3000"
+        depends_on:
+            auth-service:
+                condition: service_healthy
+            blog-service:
+                condition: service_healthy
+            analytics-service:
+                condition: service_healthy
+            admin-service:
+                condition: service_healthy
+        env_file:
+            - .env.development
+        environment:
+            - NUXT_PUBLIC_API_URL=http://localhost:80
+        volumes:
+            - ../../frontend:/app
+            - /app/node_modules
+        command: npm run dev
+        networks:
+            - frontend
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
+
+    # API Gateway
+    nginx:
+        image: nginx:latest
+        container_name: mankahi-nginx
+        ports:
+            - "80:80"
+            - "443:443"
+        depends_on:
+            frontend:
+                condition: service_started
+            auth-service:
+                condition: service_healthy
+            blog-service:
+                condition: service_healthy
+            analytics-service:
+                condition: service_healthy
+            admin-service:
+                condition: service_healthy
+        volumes:
+            - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+            - ../nginx/cors.conf:/etc/nginx/cors.conf:ro
+            - ../nginx/ssl:/etc/nginx/ssl:ro
+            - blog-uploads:/var/www/uploads
+            - nginx-logs:/var/log/nginx
+        healthcheck:
+            test: ["CMD", "nginx", "-t"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - frontend
+            - backend
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
+
+    # Prometheus
+    prometheus:
+        image: prom/prometheus:latest
+        container_name: mankahi-prometheus
+        ports:
+            - "9090:9090"
+        volumes:
+            - ../prometheus:/etc/prometheus
+            - prometheus-data:/prometheus
+        command: --config.file=/etc/prometheus/prometheus.yml
+        depends_on:
+            - auth-service
+            - blog-service
+            - admin-service
+            - analytics-service
+        healthcheck:
+            test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/ready | grep -q 'Ready'"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - backend
+            - monitoring
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
+
+    # Grafana
+    grafana:
+        image: grafana/grafana-enterprise:latest
+        container_name: mankahi-grafana
+        ports:
+            - "3005:3000"
+        volumes:
+            - grafana-data:/var/lib/grafana
+            - ../../kubernetes/base/dashboards:/var/lib/grafana/dashboards
+        environment:
+            - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+            - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+            - GF_AUTH_ANONYMOUS_ENABLED=false
+            - GF_SERVER_ROOT_URL=http://localhost:3005
+        depends_on:
+            - prometheus
+        healthcheck:
+            test: ["CMD-SHELL", 'curl -sf http://localhost:3000/api/health | grep -q "  \"database\": \"ok\""']
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - monitoring
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "3"
 
 volumes:
     postgres-data:
@@ -272,3 +458,6 @@ volumes:
     blog-uploads:
     analytics-logs:
     admin-logs:
+    nginx-logs:
+    prometheus-data:
+    grafana-data:

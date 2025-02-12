@@ -63,7 +63,7 @@ EXPOSE 3003
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD ["curl", "-f", "http://localhost:3003/health"]
+    CMD ["sh", "-c", "curl -sf http://localhost:3003/health | grep -q '\"status\":\"healthy\"'"]
 
 # Start the server
 CMD ["node", "dist/server.js"]

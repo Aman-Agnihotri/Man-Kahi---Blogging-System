@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'backend-services'
+    static_configs:
+      - targets:
+        - 'mankahi-auth:3001'
+        - 'mankahi-blog:3002'
+        - 'mankahi-admin:3004'
+        - 'mankahi-analytics:3003'
