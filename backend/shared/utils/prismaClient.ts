@@ -1,6 +1,8 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import logger from "./logger";
 
+export { Prisma };
+
 declare global {
     namespace NodeJS {
         interface Global {

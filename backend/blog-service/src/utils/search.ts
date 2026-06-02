@@ -1,5 +1,4 @@
-import { prisma } from '@shared/utils/prismaClient'
-import { Prisma } from '@prisma/client'
+import { prisma, Prisma } from '@shared/utils/prismaClient'
 import logger from '@shared/utils/logger'
 import { redis } from '@shared/config/redis'
 

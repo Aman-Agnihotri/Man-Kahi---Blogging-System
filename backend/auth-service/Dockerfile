@@ -24,8 +24,9 @@ COPY shared/ ../shared/
 
 # Generate Prisma Client
 WORKDIR /app/shared
-RUN npx prisma generate
+RUN npm ci
 WORKDIR /app/auth-service
+RUN mkdir -p prisma && cp ../shared/prisma/schema.prisma prisma/schema.prisma && ../shared/node_modules/.bin/prisma generate --schema prisma/schema.prisma
 
 # Build TypeScript code
 RUN npm run build

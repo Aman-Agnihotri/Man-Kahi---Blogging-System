@@ -172,6 +172,11 @@ async function handleOAuthAuthentication(profile: any) {
 
 // Set up Google OAuth strategy
 function setupGoogleStrategy() {
+  if (!process.env['GOOGLE_CLIENT_ID'] || !process.env['GOOGLE_CLIENT_SECRET']) {
+    logger.warn('Google OAuth credentials are not set; Google login is disabled')
+    return
+  }
+
   passport.use(
     new GoogleStrategy(
       {

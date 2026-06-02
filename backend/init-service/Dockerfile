@@ -8,5 +8,5 @@ COPY shared/ ./
 # Install dependencies
 RUN npm install
 
-# Script to run migrations
-CMD ["npx", "prisma", "migrate", "deploy"]
+# Run migrations when present; this repo currently has only schema.prisma.
+CMD ["sh", "-c", "if [ -d prisma/migrations ]; then npx prisma migrate deploy; else npx prisma db push; fi"]
