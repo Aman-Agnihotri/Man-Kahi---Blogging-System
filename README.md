@@ -1,206 +1,132 @@
-# Man Kahi - Blogging System
+# ManKahi
 
-A modern blogging platform built with microservices architecture.
+ManKahi is a blogging platform for writers who want a clean publishing space, searchable stories, author profiles, analytics, and moderation tools.
 
-## System Architecture
+The project is being refactored into a professional-grade single-server application: easy to run on a laptop today, deployable to one server next, and structured so the services can scale later without a full rewrite.
 
-The system consists of the following services:
-- Auth Service: User authentication and authorization
-- Blog Service: Blog post management and content delivery
-- Analytics Service: User behavior and content analytics
-- Admin Service: Administrative operations and monitoring
-- Frontend: Nuxt.js-based user interface
+## Product Vision
 
-Supporting infrastructure:
-- PostgreSQL: Primary database
-- Redis: Session management and caching
-- Elasticsearch: Full-text search
-- MinIO: Object storage
-- Nginx: API Gateway
+ManKahi should feel like a complete writing product, not just a technical demo.
 
-## Prerequisites
+Writers should be able to:
 
-- Docker and Docker Compose
-- Kubernetes cluster (for K8s deployment)
-- kubectl
-- kustomize
+- create an account and manage their profile
+- write, save, edit, publish, and unpublish stories
+- add cover images, tags, categories, excerpts, and SEO metadata
+- view their own stories and performance from a dashboard
+- build a public author profile
 
-## Development Setup
+Readers should be able to:
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd man-kahi
+- browse recent and featured stories
+- search full-text content
+- read posts by slug
+- explore categories and tags
+- discover related and trending posts
+
+Admins should be able to:
+
+- review platform activity
+- moderate blog visibility
+- inspect analytics
+- manage unsafe or inappropriate content
+
+## Current Status
+
+The local Docker stack is running and usable as the current development/demo environment.
+
+Working foundation:
+
+- Nuxt frontend
+- Nginx gateway
+- Auth service
+- Blog service
+- Analytics service
+- Admin service
+- PostgreSQL
+- Redis
+- Elasticsearch
+- MinIO integration path
+- Prometheus/Grafana scaffolding
+- Cloudflare Tunnel demo path
+
+Still in progress:
+
+- frontend pages are not fully connected to real backend data
+- several backend API contracts need cleanup
+- production Docker Compose needs hardening
+- Kubernetes manifests are scaffolding, not the current deployment target
+- test coverage needs to be expanded around core workflows
+
+## Product Areas
+
+### Publishing
+
+The blog system is designed around markdown-based publishing with title, slug, content, cover image, tags, categories, excerpt, and SEO fields.
+
+### Discovery
+
+Search is backed by Elasticsearch, with Redis caching planned around hot reads and repeated queries.
+
+### Accounts
+
+Authentication supports local login and an optional Google OAuth path. Role and permission models exist for admin-level access.
+
+### Analytics
+
+The analytics service tracks views, reading progress, reads, and link clicks. Admin-facing analytics needs contract cleanup before it should be treated as complete.
+
+### Moderation
+
+Admin APIs exist for dashboard-style operations and blog visibility controls. These need final route/schema alignment before the admin workflow is considered production-ready.
+
+## Architecture Summary
+
+ManKahi uses a service-oriented architecture:
+
+```text
+Browser
+  -> Nginx gateway
+  -> Nuxt frontend
+  -> Auth, Blog, Analytics, and Admin services
+  -> PostgreSQL, Redis, Elasticsearch, and object storage
 ```
 
-2. Set up environment variables:
-```bash
-cp .env.example .env.development
-# Edit .env.development with your development settings
+The immediate target is a polished single-server deployment where only nginx is public and every backing service remains private.
+
+Read the full architecture notes in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Action Plan](docs/ACTION_PLAN.md)
+
+## Local Access
+
+When the development stack is running, use the gateway:
+
+```text
+http://localhost:8080
 ```
 
-3. Start the services using Docker Compose:
-```bash
-cd docker/compose
-docker-compose up -d
+Detailed setup and deployment commands live in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Project Direction
+
+The next milestone is:
+
+```text
+Professional single-server MVP deployment + real core blogging workflow
 ```
 
-4. Initialize the databases:
-```bash
-# Wait for PostgreSQL to be ready
-docker-compose exec postgres bash /docker-entrypoint-initdb.d/init-multiple-dbs.sh
-```
+That means:
 
-5. Access the services:
-- Frontend: http://localhost:3000
-- API Gateway: http://localhost:80
-- Admin Dashboard: http://localhost:3004
-- MinIO Console: http://localhost:9001
+- reliable local development
+- clean single-server production path
+- real frontend-to-backend integration
+- tested auth and blog workflows
+- public gateway only
+- documented operations, backup, restore, and monitoring
 
-## Kubernetes Deployment
-
-### Development Environment
-
-1. Create required secrets:
-```bash
-cd kubernetes/environments/development
-cp secrets.example.yaml secrets.yaml
-# Edit secrets.yaml with your development secrets
-```
-
-2. Apply the development configuration:
-```bash
-kubectl apply -k kubernetes/environments/development
-```
-
-### Production Environment
-
-1. Set up production secrets:
-```bash
-cd kubernetes/environments/production
-cp secrets.example.yaml secrets.yaml
-# Edit secrets.yaml with your production secrets
-```
-
-2. Update the domain in app-config.yaml:
-```yaml
-FRONTEND_URL: "https://your-domain.com"
-CORS_ORIGIN: "https://your-domain.com"
-```
-
-3. Apply the production configuration:
-```bash
-kubectl apply -k kubernetes/environments/production
-```
-
-## Service URLs
-
-Development URLs:
-- Frontend: http://localhost:3000
-- Auth Service: http://localhost:3001
-- Blog Service: http://localhost:3002
-- Analytics Service: http://localhost:3003
-- Admin Service: http://localhost:3004
-
-Kubernetes URLs:
-- Development: http://mankahi.local
-- Production: https://your-domain.com
-
-## Environment Variables
-
-The system uses two environment files:
-- `.env`: Base configuration shared between environments
-- `.env.development`: Development-specific overrides
-
-For production, use Kubernetes secrets and ConfigMaps located in:
-- `kubernetes/environments/production/app-config.yaml`
-- `kubernetes/environments/production/secrets.yaml`
-
-## Health Checks
-
-Monitor service health:
-```bash
-# Docker Compose
-docker-compose ps
-
-# Kubernetes
-kubectl get pods -n mankahi
-```
-
-## Logs
-
-View service logs:
-```bash
-# Docker Compose
-docker-compose logs -f [service-name]
-
-# Kubernetes
-kubectl logs -f -n mankahi deployment/[service-name]
-```
-
-## Data Persistence
-
-Volumes are used for:
-- PostgreSQL data
-- Redis data
-- Elasticsearch data
-- MinIO storage
-- Blog uploads
-- Service logs
-
-## Security Notes
-
-1. Development environment:
-   - Default credentials in .env.development
-   - Services exposed on localhost
-   - Debug logging enabled
-   - CORS configured for local development
-
-2. Production environment:
-   - Use strong, unique secrets
-   - Services not directly exposed
-   - Minimal logging
-   - CORS restricted to your domain
-   - Health checks enabled
-   - Resource limits enforced
-
-## Troubleshooting
-
-1. Database Connection Issues:
-   - Verify PostgreSQL is healthy: `docker-compose ps postgres`
-   - Check database initialization: `docker-compose logs postgres`
-
-2. Service Startup Issues:
-   - Verify dependencies are healthy
-   - Check service logs: `docker-compose logs [service-name]`
-   - Verify environment variables are set correctly
-
-3. Kubernetes Issues:
-   - Check pod status: `kubectl get pods -n mankahi`
-   - View pod logs: `kubectl logs -n mankahi [pod-name]`
-   - Verify secrets: `kubectl get secrets -n mankahi`
-
-## Development Workflow
-
-1. Local Development:
-```bash
-# Start all services
-docker-compose up -d
-
-# Watch service logs
-docker-compose logs -f
-
-# Rebuild a specific service
-docker-compose up -d --build [service-name]
-```
-
-2. Kubernetes Development:
-```bash
-# Apply changes
-kubectl apply -k kubernetes/environments/development
-
-# Watch pods
-kubectl get pods -n mankahi -w
-
-# View logs
-kubectl logs -f -n mankahi deployment/[service-name]
+Progress is tracked in [ACTION_PLAN.md](ACTION_PLAN.md).
