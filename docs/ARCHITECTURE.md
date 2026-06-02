@@ -173,4 +173,4 @@ When scale requires it, the future architecture should introduce:
 - Production Compose exposes too many internal services.
 - Kubernetes manifests currently do not build cleanly.
 
-The full prioritized checklist is tracked in [../ACTION_PLAN.md](../ACTION_PLAN.md).
+The full prioritized checklist is tracked in [ACTION_PLAN.md](ACTION_PLAN.md).

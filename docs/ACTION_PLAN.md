@@ -72,7 +72,7 @@ Purpose: establish a clean baseline before more feature work.
 - [x] Identify broken backend API contracts and deployment inconsistencies.
 - [x] Create a known-issues section in the README or link this action plan from the README.
 - [x] Capture the current public demo method using Cloudflare Tunnel.
-- [x] Decide whether `ACTION_PLAN.md` remains root-level or moves into a future `docs/` directory.
+- [x] Move `ACTION_PLAN.md` into `docs/` with the other project docs.
 
 Acceptance criteria:
 

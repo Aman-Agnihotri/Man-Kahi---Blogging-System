@@ -211,4 +211,4 @@ Before exposing the app publicly:
 - [ ] rate limits do not break normal usage
 - [ ] admin routes require admin permissions
 
-Progress is tracked in [../ACTION_PLAN.md](../ACTION_PLAN.md).
+Progress is tracked in [ACTION_PLAN.md](ACTION_PLAN.md).

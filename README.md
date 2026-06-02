@@ -129,4 +129,4 @@ That means:
 - public gateway only
 - documented operations, backup, restore, and monitoring
 
-Progress is tracked in [ACTION_PLAN.md](ACTION_PLAN.md).
+Progress is tracked in [docs/ACTION_PLAN.md](docs/ACTION_PLAN.md).
