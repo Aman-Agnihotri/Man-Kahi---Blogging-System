@@ -86,35 +86,35 @@ Purpose: make the project deploy cleanly on a laptop or one Linux server.
 
 ### Development Compose
 
-- [ ] Keep `docker/compose/docker-compose.yml` as the official development stack.
+- [x] Keep `docker/compose/docker-compose.yml` as the official development stack.
 - [ ] Verify hot reload works for frontend and backend services.
 - [ ] Verify database initialization works from a clean volume.
-- [ ] Verify health checks for auth, blog, analytics, admin, nginx, Postgres, Redis, and Elasticsearch.
-- [ ] Add clear commands for start, stop, rebuild, reset, logs, and health checks.
-- [ ] Document required local prerequisites: Docker, Docker Compose, ports, env file.
+- [x] Verify health checks for auth, blog, analytics, admin, nginx, Postgres, Redis, and Elasticsearch.
+- [x] Add clear commands for start, stop, rebuild, reset, logs, and health checks.
+- [x] Document required local prerequisites: Docker, Docker Compose, ports, env file.
 
 ### Production Compose
 
-- [ ] Fix service name mismatches, including `initdb` vs `init-db`.
-- [ ] Bind internal service ports to private networks only.
-- [ ] Ensure only nginx exposes public `80` and `443`.
-- [ ] Remove public exposure of Postgres, Redis, Elasticsearch, MinIO, app services, Prometheus, and Grafana.
-- [ ] Align Elasticsearch security settings with actual app connection config.
-- [ ] Align MinIO SSL settings with actual server configuration.
-- [ ] Replace development commands with production build/start commands.
-- [ ] Add `restart: unless-stopped` where appropriate.
-- [ ] Add persistent named volumes for database, cache, search, uploads, logs, Prometheus, and Grafana.
-- [ ] Add resource limits that make sense for a single server.
-- [ ] Add `.env.production.example` with all required variables.
-- [ ] Add production domain and API URL guidance.
-- [ ] Add deployment commands for first deploy and later updates.
+- [x] Fix service name mismatches, including `initdb` vs `init-db`.
+- [x] Bind internal service ports to private networks only.
+- [x] Ensure only nginx exposes public `80` and `443`.
+- [x] Remove public exposure of Postgres, Redis, Elasticsearch, MinIO, app services, Prometheus, and Grafana.
+- [x] Align Elasticsearch security settings with actual app connection config.
+- [x] Align MinIO SSL settings with actual server configuration.
+- [x] Replace development commands with production build/start commands.
+- [x] Add `restart: unless-stopped` where appropriate.
+- [x] Add persistent named volumes for database, cache, search, uploads, logs, Prometheus, and Grafana.
+- [x] Add resource limits that make sense for a single server.
+- [x] Add `.env.production.example` with all required variables.
+- [x] Add production domain and API URL guidance.
+- [x] Add deployment commands for first deploy and later updates.
 
 ### Cloudflare Tunnel
 
-- [ ] Document quick tunnel for temporary demo.
-- [ ] Document named tunnel for stable domain routing.
-- [ ] Ensure tunnel points only to nginx.
-- [ ] Document DNS and Cloudflare Access recommendations.
+- [x] Document quick tunnel for temporary demo.
+- [x] Document named tunnel for stable domain routing.
+- [x] Ensure tunnel points only to nginx.
+- [x] Document DNS and Cloudflare Access recommendations.
 
 ### Backups And Restore
 
@@ -375,8 +375,8 @@ Acceptance criteria:
 - [ ] Admin visibility ID validation rejects real Prisma IDs.
 - [ ] Auth lockout writes `lockedUntil` but does not enforce it.
 - [ ] OAuth callback paths are inconsistent.
-- [ ] Production Compose exposes too many internal services.
-- [ ] Production Compose has `initdb` service typo.
+- [x] Production Compose exposes too many internal services.
+- [x] Production Compose has `initdb` service typo.
 - [ ] Kubernetes Kustomize build currently fails due to missing base `.env`.
 - [ ] Kubernetes deployment paths are split between `overlays` and `environments`.
 
@@ -395,7 +395,7 @@ Acceptance criteria:
 
 - [ ] One command starts local development reliably.
 - [ ] One documented path deploys to a single server.
-- [ ] Only nginx is public in production.
+- [x] Only nginx is public in production.
 - [ ] A user can register, log in, write, publish, edit, delete, and view blogs.
 - [ ] Search works from real indexed content.
 - [ ] User dashboard and stories use real data.
@@ -403,4 +403,4 @@ Acceptance criteria:
 - [ ] Backups and restores are documented and tested.
 - [ ] Logs, health checks, and metrics work.
 - [ ] Core workflows have automated tests.
-- [ ] README links to this action plan.
+- [x] README links to this action plan.

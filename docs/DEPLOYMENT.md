@@ -10,7 +10,7 @@ ManKahi currently has one supported deployment path and two future/experimental 
 | --- | --- | --- |
 | Local Docker Compose | Supported now | Development and laptop demo |
 | Cloudflare Tunnel | Supported now | Temporary public exposure of the local gateway |
-| Single-server production Compose | Target state | Real VPS/home-server deployment after hardening |
+| Single-server production Compose | Config validates; runtime testing pending | Real VPS/home-server deployment after hardening |
 | Kubernetes | Future/scaffolding | Not the current deployment target |
 
 ## Local Development
@@ -150,6 +150,8 @@ Notes:
 
 For a stable domain, use a named Cloudflare Tunnel and route the domain to the same nginx gateway.
 
+For private operational surfaces such as Grafana, prefer SSH access, VPN access, or Cloudflare Access in front of a protected route. Do not publish observability tools directly to the open internet.
+
 ## Single-Server Production Target
 
 Single-server production is the next deployment milestone, but the current production Compose file still needs hardening before it should be used publicly.
@@ -165,22 +167,51 @@ Target behavior:
 - persistent volumes are used
 - backup and restore scripts exist
 
-Expected future command shape:
+Create a production env file from the template:
 
 ```bash
 cd docker/compose
-docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+cp .env.production.example .env.production
 ```
 
-Current production Compose issues to fix first:
+Replace every placeholder in `.env.production`, especially secrets, passwords, `PUBLIC_APP_URL`, `FRONTEND_URL`, `SITE_URL`, `CORS_ORIGIN`, and `GOOGLE_CALLBACK_URL`.
 
-- internal services expose public ports
-- blog service references `initdb`, but the service is named `init-db`
-- Elasticsearch security settings and app connection settings are not fully aligned
-- MinIO SSL settings and actual MinIO server mode are not aligned
-- `deploy.replicas` does not provide normal Docker Compose scaling unless using Swarm-compatible deployment behavior
+Validate the production Compose config with:
 
-Until those are fixed, use the development Compose stack for local/demo work.
+```bash
+cd docker/compose
+MANKAHI_ENV_FILE=.env.production docker compose -f docker-compose.prod.yml --env-file .env.production config --quiet
+```
+
+Expected production startup command:
+
+```bash
+cd docker/compose
+MANKAHI_ENV_FILE=.env.production docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+Expected production update command after pulling new code:
+
+```bash
+cd docker/compose
+MANKAHI_ENV_FILE=.env.production docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build --remove-orphans
+```
+
+Current production Compose status:
+
+- config validation passes with `.env.production.example`
+- only nginx publishes host ports
+- internal app and infrastructure services stay on Docker networks
+- fake `deploy.replicas` settings have been removed for single-server mode
+- Elasticsearch and MinIO settings match the current app configuration
+
+Remaining production work:
+
+- runtime-test the production stack on a clean machine
+- verify production Dockerfiles start every service correctly
+- add backup and restore scripts
+- decide how Grafana should be accessed privately
+- configure real TLS/domain behavior for nginx or Cloudflare
 
 ## Kubernetes Status
 

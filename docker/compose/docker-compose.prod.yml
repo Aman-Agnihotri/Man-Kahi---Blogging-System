@@ -16,7 +16,7 @@ services:
             postgres:
                 condition: service_healthy
         env_file:
-            - .env
+            - ${MANKAHI_ENV_FILE:-.env}
         volumes:
             - ../../backend/shared:/app/shared
         deploy:
@@ -37,10 +37,9 @@ services:
     postgres:
         image: postgres:16-alpine
         container_name: mankahi-postgres-prod
+        restart: unless-stopped
         env_file:
-            - .env
-        ports:
-            - "5432:5432"
+            - ${MANKAHI_ENV_FILE:-.env}
         volumes:
             - postgres-data:/var/lib/postgresql/data
             - ../scripts/init-db.sh:/docker-entrypoint-initdb.d/init.sh
@@ -80,9 +79,8 @@ services:
     redis:
         image: redis:alpine
         container_name: mankahi-redis-prod
+        restart: unless-stopped
         command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
-        ports:
-            - "6379:6379"
         volumes:
             - redis-data:/data
         deploy:
@@ -108,11 +106,9 @@ services:
     minio:
         image: minio/minio
         container_name: mankahi-minio-prod
-        ports:
-            - "9000:9000"
-            - "9001:9001"
+        restart: unless-stopped
         env_file:
-            - .env
+            - ${MANKAHI_ENV_FILE:-.env}
         environment:
             - MINIO_ROOT_USER=${MINIO_ROOT_USER:-admin}
             - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-adminpassword}
@@ -142,20 +138,18 @@ services:
     elasticsearch:
         image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
         container_name: mankahi-elasticsearch-prod
+        restart: unless-stopped
         env_file:
-            - .env
+            - ${MANKAHI_ENV_FILE:-.env}
         environment:
             - node.name=es01
             - cluster.name=mankahi-es-cluster
             - discovery.type=single-node
             - bootstrap.memory_lock=true
             - ES_JAVA_OPTS=-Xms4g -Xmx4g
-            - xpack.security.enabled=true
-        ports:
-            - "9200:9200"
+            - xpack.security.enabled=false
         volumes:
             - elasticsearch-data:/usr/share/elasticsearch/data
-            - ./elasticsearch/config/certs:/usr/share/elasticsearch/config/certs:ro
         deploy:
             resources:
                 limits:
@@ -169,7 +163,7 @@ services:
                 soft: 65536
                 hard: 65536
         healthcheck:
-            test: [ "CMD-SHELL", "curl -sf --cacert /usr/share/elasticsearch/config/certs/http_ca.crt https://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=60s" ]
+            test: [ "CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=60s" ]
             interval: 30s
             timeout: 10s
             retries: 5
@@ -192,7 +186,7 @@ services:
         restart: unless-stopped
         working_dir: /app/auth-service
         env_file:
-            - .env
+            - ${MANKAHI_ENV_FILE:-.env}
         environment:
             - NODE_ENV=production
             - PORT=3001
@@ -201,10 +195,6 @@ services:
         volumes:
             - ../../backend/shared:/app/shared
         deploy:
-            replicas: 2
-            update_config:
-                parallelism: 1
-                delay: 10s
             resources:
                 limits:
                     cpus: "1"
@@ -224,8 +214,6 @@ services:
                 condition: service_healthy
             analytics-service:
                 condition: service_healthy
-        ports:
-            - "3001:3001"
         networks:
             - backend
         stop_grace_period: 30s
@@ -245,15 +233,16 @@ services:
         restart: unless-stopped
         working_dir: /app/blog-service
         env_file:
-            - .env
+            - ${MANKAHI_ENV_FILE:-.env}
         environment:
             - NODE_ENV=production
             - PORT=3002
             - ELASTICSEARCH_INDEX_SHARDS=3
             - ELASTICSEARCH_INDEX_REPLICAS=1
+            - ELASTICSEARCH_URL=http://elasticsearch:9200
             - MINIO_ENDPOINT=minio
             - MINIO_PORT=9000
-            - MINIO_USE_SSL=true
+            - MINIO_USE_SSL=false
             - RATE_LIMIT_WINDOW=900
             - RATE_LIMIT_MAX_REQUESTS=100
             - BLOG_CACHE_TTL=3600
@@ -263,10 +252,6 @@ services:
             - ../../backend/shared:/app/shared
             - blog-uploads:/app/blog-service/uploads
         deploy:
-            replicas: 3
-            update_config:
-                parallelism: 1
-                delay: 10s
             resources:
                 limits:
                     cpus: "2"
@@ -284,14 +269,12 @@ services:
                 condition: service_healthy
             redis:
                 condition: service_healthy
-            initdb:
+            init-db:
                 condition: service_completed_successfully
             postgres:
                 condition: service_healthy
             analytics-service:
                 condition: service_healthy
-        ports:
-            - "3002:3002"
         networks:
             - backend
         stop_grace_period: 30s
@@ -318,7 +301,7 @@ services:
                 condition: service_healthy
         working_dir: /app/analytics-service
         env_file:
-            - .env
+            - ${MANKAHI_ENV_FILE:-.env}
         environment:
             - NODE_ENV=production
             - PORT=3003
@@ -330,10 +313,6 @@ services:
             - ../../backend/shared:/app/shared
             - analytics-logs:/app/analytics-service/logs
         deploy:
-            replicas: 2
-            update_config:
-                parallelism: 1
-                delay: 10s
             resources:
                 limits:
                     cpus: "1"
@@ -344,8 +323,6 @@ services:
             timeout: 10s
             retries: 3
             start_period: 40s
-        ports:
-            - "3003:3003"
         networks:
             - frontend
             - backend
@@ -374,7 +351,7 @@ services:
                 condition: service_healthy
         working_dir: /app/admin-service
         env_file:
-            - .env
+            - ${MANKAHI_ENV_FILE:-.env}
         environment:
             - NODE_ENV=production
             - PORT=3004
@@ -385,10 +362,6 @@ services:
             - ../../backend/shared:/app/shared
             - admin-logs:/app/admin-service/logs
         deploy:
-            replicas: 2
-            update_config:
-                parallelism: 1
-                delay: 10s
             resources:
                 limits:
                     cpus: "1"
@@ -399,8 +372,6 @@ services:
             timeout: 10s
             retries: 3
             start_period: 40s
-        ports:
-            - "3004:3004"
         networks:
             - frontend
             - backend
@@ -428,15 +399,11 @@ services:
             admin-service:
                 condition: service_healthy
         env_file:
-            - .env
+            - ${MANKAHI_ENV_FILE:-.env}
         environment:
             - NODE_ENV=production
-            - NUXT_PUBLIC_API_URL=http://localhost:80
+            - NUXT_PUBLIC_API_URL=${PUBLIC_APP_URL:-http://localhost}
         deploy:
-            replicas: 3
-            update_config:
-                parallelism: 1
-                delay: 10s
             resources:
                 limits:
                     cpus: "1"
@@ -447,8 +414,6 @@ services:
             timeout: 10s
             retries: 3
             start_period: 40s
-        ports:
-            - "3000:3000"
         networks:
             - frontend
         stop_grace_period: 30s
@@ -481,8 +446,6 @@ services:
                 condition: service_healthy
             admin-service:
                 condition: service_healthy
-        ports:
-            - "9090:9090"
         deploy:
             resources:
                 limits:
@@ -519,8 +482,6 @@ services:
             - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
             - GF_AUTH_ANONYMOUS_ENABLED=false
             - GF_SERVER_ROOT_URL=http://localhost:3005
-        ports:
-            - "3005:3000"
         deploy:
             resources:
                 limits:
@@ -566,10 +527,6 @@ services:
             - blog-uploads:/var/www/uploads
             - nginx-logs:/var/log/nginx
         deploy:
-            replicas: 2
-            update_config:
-                parallelism: 1
-                delay: 10s
             resources:
                 limits:
                     cpus: "2"
