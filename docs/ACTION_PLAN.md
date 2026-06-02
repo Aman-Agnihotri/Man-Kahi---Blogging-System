@@ -150,14 +150,15 @@ Purpose: make existing services internally consistent before expanding features.
 
 ### Blog Service
 
-- [ ] Fix delete route so it checks a blog ID as a blog ID, not as a slug.
-- [ ] Fix suggested blogs controller to read `blogId` from route params.
-- [ ] Protect `GET /api/blogs/user` or change controller behavior for anonymous users.
-- [ ] Align uploaded image field with Prisma `coverImage`.
-- [ ] Add slug collision handling.
+- [x] Fix delete route so it checks a blog ID as a blog ID, not as a slug.
+- [x] Fix suggested blogs controller to read `blogId` from route params.
+- [x] Protect `GET /api/blogs/user` or change controller behavior for anonymous users.
+- [x] Align uploaded image field with Prisma `coverImage`.
+- [x] Add slug collision handling.
 - [ ] Decide draft vs published behavior for create and update.
 - [ ] Ensure blog create/update/delete invalidates Redis and Elasticsearch consistently.
 - [ ] Add tests for create, read by slug, update, delete, search, tags, suggestions, and user blogs.
+  - Started: added focused blog-service tests for create/update/delete service contracts, suggested blogs, and user blog visibility.
 
 ### Analytics Service
 
@@ -367,10 +368,10 @@ Acceptance criteria:
 
 ## Known Issues To Fix First
 
-- [ ] Blog delete uses ID as slug during authorization.
-- [ ] Suggested blogs route/controller param mismatch.
-- [ ] User blogs route can call authenticated-only controller without auth.
-- [ ] Upload field mismatch: `imageUrl` vs `coverImage`.
+- [x] Blog delete uses ID as slug during authorization.
+- [x] Suggested blogs route/controller param mismatch.
+- [x] User blogs route can call authenticated-only controller without auth.
+- [x] Upload field mismatch: `imageUrl` vs `coverImage`.
 - [ ] Admin analytics routes do not match analytics service routes.
 - [ ] Admin visibility ID validation rejects real Prisma IDs.
 - [ ] Auth lockout writes `lockedUntil` but does not enforce it.

@@ -128,7 +128,7 @@ export class SearchService {
 
   async getUserBlogs(params: {
     userId: string
-    currentUserId: string
+    currentUserId?: string
     page?: number
     limit?: number
   }) {
@@ -136,13 +136,18 @@ export class SearchService {
     try {
       const page = params.page ?? 1
       const limit = params.limit ?? 10
+      if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+        throw new Error('Invalid pagination')
+      }
+
+      const includeDrafts = params.currentUserId === params.userId
 
       const [blogs, total] = await Promise.all([
         prisma.blog.findMany({
           where: {
             authorId: params.userId,
             deletedAt: null,
-            ...(params.userId !== params.currentUserId ? { published: true } : {}),
+            ...(includeDrafts ? {} : { published: true }),
           },
           skip: (page - 1) * limit,
           take: limit,
@@ -161,7 +166,7 @@ export class SearchService {
           where: {
             authorId: params.userId,
             deletedAt: null,
-            ...(params.userId !== params.currentUserId ? { published: true } : {}),
+            ...(includeDrafts ? {} : { published: true }),
           },
         }),
       ])

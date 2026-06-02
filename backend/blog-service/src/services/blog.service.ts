@@ -24,9 +24,33 @@ interface UpdateBlogInput {
   categoryId?: string
   tags?: string[]
   published?: boolean
+  file?: Express.Multer.File
 }
 
 export class BlogService {
+  private async generateUniqueSlug(title: string, excludeBlogId?: string): Promise<string> {
+    const baseSlug = slugify(title, { lower: true, strict: true }) || 'post'
+    let suffix = 0
+
+    while (true) {
+      const suffixText = suffix === 0 ? '' : `-${suffix}`
+      const slug = `${baseSlug.slice(0, 200 - suffixText.length)}${suffixText}`
+      const existingBlog = await prisma.blog.findFirst({
+        where: {
+          slug,
+          ...(excludeBlogId ? { id: { not: excludeBlogId } } : {}),
+        },
+        select: { id: true },
+      })
+
+      if (!existingBlog) {
+        return slug
+      }
+
+      suffix += 1
+    }
+  }
+
   async createBlog(data: CreateBlogInput) {
     const startTime = Date.now();
     logger.debug('Creating new blog post:', { title: data.title, authorId: data.authorId });
@@ -42,13 +66,13 @@ export class BlogService {
     const processedContent = processMarkdown(data.content);
 
     // Generate slug
-    const slug = slugify(data.title, { lower: true, strict: true });
+    const slug = await this.generateUniqueSlug(data.title);
 
     // Process image if provided
-    let imageUrl: string | undefined;
+    let coverImage: string | undefined;
     if (data.file) {
       logger.debug('Processing blog image');
-      imageUrl = await processImage(data.file);
+      coverImage = await processImage(data.file);
     }
 
     // Create blog post
@@ -61,7 +85,7 @@ export class BlogService {
         description: data.description,
         published: data.published ?? false,
         authorId: data.authorId,
-        ...(imageUrl && { imageUrl }),
+        ...(coverImage && { coverImage }),
         ...(data.categoryId && { categoryId: data.categoryId }),
         ...(data.tags && {
           tags: {
@@ -216,15 +240,26 @@ export class BlogService {
       processedContent = processMarkdown(data.content);
     }
 
+    let coverImage: string | undefined;
+    if (data.file) {
+      logger.debug('Processing updated blog image');
+      coverImage = await processImage(data.file);
+    }
+
+    const updatedSlug = data.title
+      ? await this.generateUniqueSlug(data.title, id)
+      : undefined
+
     // Update blog
     const updatedBlog = await prisma.blog.update({
       where: { id },
       data: {
         ...(data.title && {
           title: data.title,
-          slug: slugify(data.title, { lower: true, strict: true }),
+          slug: updatedSlug,
         }),
         ...(processedContent && { content: processedContent }),
+        ...(coverImage && { coverImage }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.published !== undefined && { published: data.published }),
         ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
@@ -273,7 +308,7 @@ export class BlogService {
     logger.debug(`Updating cache for blog ${id}`);
     await Promise.all([
       blogCache.invalidate(blog.slug),
-      data.title ? blogCache.invalidate(slugify(data.title, { lower: true, strict: true })) : null,
+      updatedSlug ? blogCache.invalidate(updatedSlug) : null,
       blogCache.set(updatedBlog.slug, JSON.stringify(updatedBlog)),
     ]);
 
@@ -287,7 +322,7 @@ export class BlogService {
     // Check blog exists and user is author
     const blog = await prisma.blog.findUnique({
       where: { id },
-      select: { authorId: true, slug: true }
+      select: { id: true, authorId: true, slug: true, published: true }
     });
 
     if (!blog) {
@@ -311,5 +346,6 @@ export class BlogService {
     ]);
 
     logger.info(`Blog deleted successfully: ${id}`);
+    return blog;
   }
 }

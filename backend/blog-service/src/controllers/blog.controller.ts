@@ -203,7 +203,10 @@ export class BlogController {
       }
 
       dbTimer = trackDbOperation('update', 'blog');
-      const blog = await this.blogService.updateBlog(id, req.user!.id, validatedInput);
+      const blog = await this.blogService.updateBlog(id, req.user!.id, {
+        ...validatedInput,
+        file: req.file,
+      });
       dbTimer.end();
       
       if (fileUploadTimer) {
@@ -287,23 +290,20 @@ export class BlogController {
   async delete(req: Request, res: Response): Promise<Response> {
     let dbTimer;
     const { id } = req.params
-      if (!id) {
-        return res.status(400).json({
-          message: 'Blog ID is required',
-          details: 'The blog ID parameter is missing from the request URL'
-        });
-      }
+    if (!id) {
+      return res.status(400).json({
+        message: 'Blog ID is required',
+        details: 'The blog ID parameter is missing from the request URL'
+      });
+    }
+
     try {
       dbTimer = trackDbOperation('delete', 'blog');
-      // Get blog details first to check if it was published
-      const blog = await this.blogService.getBlogBySlug(id, req.user!.id);
-      const wasPublished = blog.published;
-
-      await this.blogService.deleteBlog(id, req.user!.id);
+      const blog = await this.blogService.deleteBlog(id, req.user!.id);
       dbTimer.end();
       
       // Decrement active blog count if it was published
-      if (wasPublished) {
+      if (blog.published) {
         updateActiveBlogCount(-1);
       }
 
@@ -435,8 +435,8 @@ export class BlogController {
   // Get suggested blogs
   async getSuggestedBlogs(req: Request, res: Response): Promise<Response> {
     let searchTimer;
-    const { id } = req.params
-    if (!id) {
+    const { blogId } = req.params
+    if (!blogId) {
       return res.status(400).json({
         message: 'Blog ID is required',
         details: 'The blog ID parameter is missing from the request URL'
@@ -444,7 +444,7 @@ export class BlogController {
     }
     try {
       searchTimer = trackSearchOperation('suggestions');
-      const blogs = await this.searchService.getSuggestedBlogs(id)
+      const blogs = await this.searchService.getSuggestedBlogs(blogId)
       searchTimer.end('success');
       return res.json(blogs)
     } catch (error) {
@@ -482,12 +482,20 @@ export class BlogController {
     let searchTimer;
     
     try {
+      const requestedUserId = req.params['userId'] ?? req.user?.id;
+      if (!requestedUserId) {
+        return res.status(401).json({
+          message: 'Authentication required',
+          details: 'You must be logged in to fetch your own blogs'
+        });
+      }
+
       searchTimer = trackSearchOperation('user_blogs');
       const result = await this.searchService.getUserBlogs({
-        userId: req.params['userId'] ?? req.user!.id,
-        currentUserId: req.user!.id,
-        page: parseInt(req.query['page'] as string),
-        limit: parseInt(req.query['limit'] as string),
+        userId: requestedUserId,
+        currentUserId: req.user?.id,
+        page: req.query['page'] ? parseInt(req.query['page'] as string, 10) : undefined,
+        limit: req.query['limit'] ? parseInt(req.query['limit'] as string, 10) : undefined,
       })
       searchTimer.end('success');
       return res.json(result)

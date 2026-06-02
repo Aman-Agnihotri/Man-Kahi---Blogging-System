@@ -15,17 +15,11 @@ import { metricsHandler } from '@config/metrics';
 const router = Router();
 const blogController = new BlogController();
 
-// Analytics Headers Middleware
-const analyticsMiddleware: RequestHandler = (req, res, next) => {
-  addAnalyticsHeaders(req, res, next);
-  next();
-};
-
 // Service Rate Limit Middleware
 const serviceRateLimit = createServiceRateLimit('blog');
 
 // Initialize routes
-router.use(analyticsMiddleware);
+router.use(addAnalyticsHeaders as RequestHandler);
 router.use(serviceRateLimit);
 
 // Metrics endpoint
@@ -82,6 +76,25 @@ router.get(
   }) as RequestHandler
 );
 
+// Get current user's blogs
+router.get(
+  '/user',
+  authenticate() as RequestHandler,
+  trackBlogOperation('get_user_blogs') as RequestHandler,
+  ((req: Request, res: Response, next: NextFunction) => {
+    blogController.getUserBlogs(req, res).catch(next);
+  }) as RequestHandler
+);
+
+// Get a specific user's public blogs
+router.get(
+  '/user/:userId',
+  trackBlogOperation('get_user_blogs') as RequestHandler,
+  ((req: Request, res: Response, next: NextFunction) => {
+    blogController.getUserBlogs(req, res).catch(next);
+  }) as RequestHandler
+);
+
 // Get blog by slug
 router.get(
   '/:slug',
@@ -124,24 +137,6 @@ router.delete(
   trackBlogOperation('delete_blog') as RequestHandler,
   ((req: Request, res: Response, next: NextFunction) => {
     blogController.delete(req, res).catch(next);
-  }) as RequestHandler
-);
-
-// Get user's blogs
-router.get(
-  '/user',
-  trackBlogOperation('get_user_blogs') as RequestHandler,
-  ((req: Request, res: Response, next: NextFunction) => {
-    blogController.getUserBlogs(req, res).catch(next);
-  }) as RequestHandler
-);
-
-// Get specific user's blogs
-router.get(
-  '/user/:userId',
-  trackBlogOperation('get_user_blogs') as RequestHandler,
-  ((req: Request, res: Response, next: NextFunction) => {
-    blogController.getUserBlogs(req, res).catch(next);
   }) as RequestHandler
 );
 
