@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { BlogController } from '@controllers/blog.controller';
-import { updateActiveBlogCount } from '@middlewares/metrics.middleware';
+import { trackBlogView, updateActiveBlogCount } from '@middlewares/metrics.middleware';
 
 type MockResponse = Response & {
   json: jest.Mock;
@@ -9,6 +9,7 @@ type MockResponse = Response & {
 
 type MockBlogService = {
   deleteBlog: jest.Mock;
+  getBlogBySlug: jest.Mock;
   updateBlog: jest.Mock;
 };
 
@@ -30,6 +31,7 @@ const createController = () => {
   const controller = new BlogController();
   const blogService = {
     deleteBlog: jest.fn(),
+    getBlogBySlug: jest.fn(),
     updateBlog: jest.fn(),
   } as MockBlogService;
   const searchService = {
@@ -49,6 +51,51 @@ const createController = () => {
 };
 
 describe('BlogController contract fixes', () => {
+  it('tracks public views only for published blog reads', async () => {
+    const { controller, blogService } = createController();
+    const res = createResponse();
+    blogService.getBlogBySlug.mockResolvedValue({
+      id: 'blog-1',
+      slug: 'published-blog',
+      published: true,
+    });
+
+    await controller.getBySlug(asRequest({
+      params: { slug: 'published-blog' },
+    }), res);
+
+    expect(blogService.getBlogBySlug).toHaveBeenCalledWith('published-blog', undefined);
+    expect(trackBlogView).toHaveBeenCalledWith('blog-1');
+    expect(res.json).toHaveBeenCalledWith({
+      id: 'blog-1',
+      slug: 'published-blog',
+      published: true,
+    });
+  });
+
+  it('does not track public views for author draft previews', async () => {
+    const { controller, blogService } = createController();
+    const res = createResponse();
+    blogService.getBlogBySlug.mockResolvedValue({
+      id: 'blog-1',
+      slug: 'draft-blog',
+      published: false,
+    });
+
+    await controller.getBySlug(asRequest({
+      params: { slug: 'draft-blog' },
+      user: { id: 'author-1' },
+    }), res);
+
+    expect(blogService.getBlogBySlug).toHaveBeenCalledWith('draft-blog', 'author-1');
+    expect(trackBlogView).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({
+      id: 'blog-1',
+      slug: 'draft-blog',
+      published: false,
+    });
+  });
+
   it('deletes by blog ID and updates active count only from the deleted blog result', async () => {
     const { controller, blogService } = createController();
     const res = createResponse();

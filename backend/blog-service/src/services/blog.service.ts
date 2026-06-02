@@ -27,7 +27,18 @@ interface UpdateBlogInput {
   file?: Express.Multer.File
 }
 
+interface BlogVisibilitySnapshot {
+  id: string
+  authorId: string
+  published: boolean
+  deletedAt?: Date | string | null
+}
+
 export class BlogService {
+  private canReadBlog(blog: BlogVisibilitySnapshot, userId?: string): boolean {
+    return blog.published || (!!userId && blog.authorId === userId)
+  }
+
   private async generateUniqueSlug(title: string, excludeBlogId?: string): Promise<string> {
     const baseSlug = slugify(title, { lower: true, strict: true }) || 'post'
     let suffix = 0
@@ -152,16 +163,20 @@ export class BlogService {
     // Try to get from cache first
     const cachedBlog = await blogCache.get(slug);
     if (cachedBlog) {
-      const blog = JSON.parse(cachedBlog);
+      const blog = JSON.parse(cachedBlog) as BlogVisibilitySnapshot & {
+        analytics?: { views?: number } | null
+      };
       // Check visibility
-      if (!blog.published && !userId) {
+      if (blog.deletedAt || !this.canReadBlog(blog, userId)) {
         logger.warn(`Unauthorized access attempt for unpublished blog: ${slug}`);
         throw new Error('Blog not found');
       }
       // Increment views in background
-      blogCache.incrementViews(blog.id).catch((error: Error) => 
-        logger.error('Error incrementing views:', error)
-      );
+      if (blog.published) {
+        blogCache.incrementViews(blog.id).catch((error: Error) =>
+          logger.error('Error incrementing views:', error)
+        );
+      }
       return blog;
     }
 
@@ -170,7 +185,6 @@ export class BlogService {
       where: {
         slug,
         deletedAt: null,
-        ...(userId ? {} : { published: true }),
       },
       include: {
         category: true,
@@ -188,15 +202,22 @@ export class BlogService {
       throw new Error('Blog not found');
     }
 
+    if (!this.canReadBlog(blog, userId)) {
+      logger.warn(`Unauthorized access attempt for unpublished blog: ${slug}`);
+      throw new Error('Blog not found');
+    }
+
     // Cache the blog
     await blogCache.set(slug, JSON.stringify(blog));
 
     // Increment views in background and update Elasticsearch
-    logger.debug(`Updating view metrics for blog: ${blog.id}`);
-    Promise.all([
-      blogCache.incrementViews(blog.id),
-      updateBlogIndex(blog.id, { views: (blog.analytics?.views ?? 0) + 1 })
-    ]).catch((error: Error) => logger.error('Error updating views:', error));
+    if (blog.published) {
+      logger.debug(`Updating view metrics for blog: ${blog.id}`);
+      Promise.all([
+        blogCache.incrementViews(blog.id),
+        updateBlogIndex(blog.id, { views: (blog.analytics?.views ?? 0) + 1 })
+      ]).catch((error: Error) => logger.error('Error updating views:', error));
+    }
 
     return blog;
   }
@@ -336,13 +357,15 @@ export class BlogService {
     }
 
     logger.debug(`Soft deleting blog ${id} and cleaning up references`);
+    const deletedAt = new Date();
+    await prisma.blog.update({
+      where: { id },
+      data: { deletedAt },
+    });
+
     await Promise.all([
-      prisma.blog.update({
-        where: { id },
-        data: { deletedAt: new Date() },
-      }),
       blogCache.invalidate(blog.slug),
-      updateBlogIndex(id, { deletedAt: new Date() })
+      updateBlogIndex(id, { deletedAt })
     ]);
 
     logger.info(`Blog deleted successfully: ${id}`);

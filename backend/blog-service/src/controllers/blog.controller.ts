@@ -149,7 +149,9 @@ export class BlogController {
       }
       const blog = await this.blogService.getBlogBySlug(slug, req.user?.id)
       // Track blog view
-      trackBlogView(blog.id);
+      if (blog.published) {
+        trackBlogView(blog.id);
+      }
       
       const response = res.json(blog);
       dbTimer.end();

@@ -18,6 +18,15 @@ const blogController = new BlogController();
 // Service Rate Limit Middleware
 const serviceRateLimit = createServiceRateLimit('blog');
 
+const optionalAuthenticate: RequestHandler = (req, res, next) => {
+  if (!req.headers.authorization?.startsWith('Bearer ')) {
+    next();
+    return;
+  }
+
+  (authenticate() as RequestHandler)(req, res, next);
+};
+
 // Initialize routes
 router.use(addAnalyticsHeaders as RequestHandler);
 router.use(serviceRateLimit);
@@ -98,6 +107,7 @@ router.get(
 // Get blog by slug
 router.get(
   '/:slug',
+  optionalAuthenticate,
   trackBlogOperation('get_blog') as RequestHandler,
   trackBlogView as RequestHandler,
   ((req: Request, res: Response, next: NextFunction) => {

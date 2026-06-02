@@ -14,7 +14,9 @@ const prismaMock = prisma as unknown as {
 };
 
 const cacheMock = blogCache as unknown as {
+  get: jest.Mock;
   invalidate: jest.Mock;
+  incrementViews: jest.Mock;
   set: jest.Mock;
 };
 
@@ -69,6 +71,83 @@ describe('BlogService contract fixes', () => {
       slug: 'same-title-1',
     }));
     expect(cacheMock.set).toHaveBeenCalledWith('same-title-1', JSON.stringify(blogRecord));
+  });
+
+  it('allows authors to read their own cached drafts without counting a public view', async () => {
+    const service = new BlogService();
+    const draftBlog = {
+      ...blogRecord,
+      slug: 'draft-blog',
+      published: false,
+    };
+    cacheMock.get.mockResolvedValue(JSON.stringify(draftBlog));
+
+    const result = await service.getBlogBySlug('draft-blog', 'author-1');
+
+    expect(result).toEqual(expect.objectContaining({
+      id: draftBlog.id,
+      authorId: draftBlog.authorId,
+      published: false,
+      slug: draftBlog.slug,
+    }));
+    expect(prismaMock.blog.findUnique).not.toHaveBeenCalled();
+    expect(cacheMock.incrementViews).not.toHaveBeenCalled();
+    expect(updateBlogIndexMock).not.toHaveBeenCalled();
+  });
+
+  it('hides cached drafts from anonymous users and non-authors', async () => {
+    const service = new BlogService();
+    const draftBlog = {
+      ...blogRecord,
+      slug: 'draft-blog',
+      published: false,
+    };
+    cacheMock.get.mockResolvedValue(JSON.stringify(draftBlog));
+
+    await expect(service.getBlogBySlug('draft-blog')).rejects.toThrow('Blog not found');
+    await expect(service.getBlogBySlug('draft-blog', 'other-user')).rejects.toThrow('Blog not found');
+
+    expect(prismaMock.blog.findUnique).not.toHaveBeenCalled();
+    expect(cacheMock.incrementViews).not.toHaveBeenCalled();
+    expect(updateBlogIndexMock).not.toHaveBeenCalled();
+  });
+
+  it('allows authors to read database drafts without counting a public view', async () => {
+    const service = new BlogService();
+    const draftBlog = {
+      ...blogRecord,
+      slug: 'draft-blog',
+      published: false,
+    };
+    cacheMock.get.mockResolvedValue(null);
+    prismaMock.blog.findUnique.mockResolvedValue(draftBlog);
+
+    const result = await service.getBlogBySlug('draft-blog', 'author-1');
+
+    expect(result).toEqual(draftBlog);
+    expect(prismaMock.blog.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        slug: 'draft-blog',
+        deletedAt: null,
+      },
+    }));
+    expect(cacheMock.set).toHaveBeenCalledWith('draft-blog', JSON.stringify(draftBlog));
+    expect(cacheMock.incrementViews).not.toHaveBeenCalled();
+    expect(updateBlogIndexMock).not.toHaveBeenCalled();
+  });
+
+  it('counts views only for published blog reads', async () => {
+    const service = new BlogService();
+    cacheMock.get.mockResolvedValue(null);
+    prismaMock.blog.findUnique.mockResolvedValue({
+      ...blogRecord,
+      analytics: { views: 7 },
+    });
+
+    await service.getBlogBySlug('same-title-1');
+
+    expect(cacheMock.incrementViews).toHaveBeenCalledWith('blog-1');
+    expect(updateBlogIndexMock).toHaveBeenCalledWith('blog-1', { views: 8 });
   });
 
   it('updates blog images through coverImage and excludes the current blog when regenerating slugs', async () => {
@@ -139,9 +218,10 @@ describe('BlogService contract fixes', () => {
       where: { id: 'blog-1' },
       data: { deletedAt: expect.any(Date) },
     });
+    const deletedAt = prismaMock.blog.update.mock.calls[0][0].data.deletedAt;
     expect(cacheMock.invalidate).toHaveBeenCalledWith('same-title');
     expect(updateBlogIndexMock).toHaveBeenCalledWith('blog-1', {
-      deletedAt: expect.any(Date),
+      deletedAt,
     });
   });
 });

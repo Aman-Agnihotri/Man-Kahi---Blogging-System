@@ -155,10 +155,10 @@ Purpose: make existing services internally consistent before expanding features.
 - [x] Protect `GET /api/blogs/user` or change controller behavior for anonymous users.
 - [x] Align uploaded image field with Prisma `coverImage`.
 - [x] Add slug collision handling.
-- [ ] Decide draft vs published behavior for create and update.
-- [ ] Ensure blog create/update/delete invalidates Redis and Elasticsearch consistently.
+- [x] Decide draft vs published behavior for create and update.
+- [x] Ensure blog create/update/delete invalidates Redis and Elasticsearch consistently.
 - [ ] Add tests for create, read by slug, update, delete, search, tags, suggestions, and user blogs.
-  - Started: added focused blog-service tests for create/update/delete service contracts, suggested blogs, and user blog visibility.
+  - Started: added focused blog-service tests for create/update/delete service contracts, read-by-slug draft visibility, suggestions, and user blog visibility.
 
 ### Analytics Service
 
