@@ -157,8 +157,8 @@ Purpose: make existing services internally consistent before expanding features.
 - [x] Add slug collision handling.
 - [x] Decide draft vs published behavior for create and update.
 - [x] Ensure blog create/update/delete invalidates Redis and Elasticsearch consistently.
-- [ ] Add tests for create, read by slug, update, delete, search, tags, suggestions, and user blogs.
-  - Started: added focused blog-service tests for create/update/delete service contracts, read-by-slug draft visibility, suggestions, and user blog visibility.
+- [x] Add tests for create, read by slug, update, delete, search, tags, suggestions, and user blogs.
+  - Added focused blog-service tests for create/update/delete service contracts, read-by-slug draft visibility, search, popular tags, suggestions, and user blog visibility.
 
 ### Analytics Service
 

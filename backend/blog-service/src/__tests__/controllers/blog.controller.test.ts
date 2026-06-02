@@ -14,8 +14,10 @@ type MockBlogService = {
 };
 
 type MockSearchService = {
+  getPopularTags: jest.Mock;
   getSuggestedBlogs: jest.Mock;
   getUserBlogs: jest.Mock;
+  searchBlogs: jest.Mock;
 };
 
 const asRequest = (req: Record<string, unknown>): Request => req as unknown as Request;
@@ -35,8 +37,10 @@ const createController = () => {
     updateBlog: jest.fn(),
   } as MockBlogService;
   const searchService = {
+    getPopularTags: jest.fn(),
     getSuggestedBlogs: jest.fn(),
     getUserBlogs: jest.fn(),
+    searchBlogs: jest.fn(),
   } as MockSearchService;
 
   Object.assign(controller as unknown as {
@@ -51,6 +55,53 @@ const createController = () => {
 };
 
 describe('BlogController contract fixes', () => {
+  it('parses search query params and passes them to the search service', async () => {
+    const { controller, searchService } = createController();
+    const res = createResponse();
+    const results = {
+      blogs: [{ id: 'blog-1', title: 'Search Result' }],
+      total: 1,
+      page: 2,
+      totalPages: 1,
+    };
+    searchService.searchBlogs.mockResolvedValue(results);
+
+    await controller.search(asRequest({
+      query: {
+        query: 'typescript',
+        page: '2',
+        limit: '5',
+        category: 'category-1',
+        tags: 'node,api',
+        sortBy: 'recent',
+        author: 'author-1',
+      },
+    }), res);
+
+    expect(searchService.searchBlogs).toHaveBeenCalledWith({
+      query: 'typescript',
+      page: 2,
+      limit: 5,
+      category: 'category-1',
+      tags: ['node', 'api'],
+      sortBy: 'recent',
+      authorId: 'author-1',
+    });
+    expect(res.json).toHaveBeenCalledWith(results);
+  });
+
+  it('returns popular tags from the search service', async () => {
+    const { controller, searchService } = createController();
+    const res = createResponse();
+    const tags = [{ id: 'tag-1', name: 'typescript' }];
+    searchService.getPopularTags.mockResolvedValue(tags);
+
+    await controller.getPopularTags(asRequest({}), res);
+
+    expect(searchService.getPopularTags).toHaveBeenCalledWith();
+    expect(res.json).toHaveBeenCalledWith(tags);
+  });
+
   it('tracks public views only for published blog reads', async () => {
     const { controller, blogService } = createController();
     const res = createResponse();
