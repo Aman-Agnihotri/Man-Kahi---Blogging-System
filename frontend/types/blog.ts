@@ -82,8 +82,41 @@ export interface SearchBlogsParams {
   sortBy?: 'recent' | 'popular' | 'relevant';
 }
 
+/**
+ * The shape blog-service's /search endpoint actually returns - a flat
+ * Elasticsearch document (see backend/blog-service/src/utils/
+ * elasticsearch.ts's BlogDocument), NOT the same nested shape as `Blog`
+ * (which comes from Postgres via getBySlug/getMyBlogs). There is no
+ * `author`/`category` object here, only flat id/name-ish fields, and
+ * `tags` is `string[]`, not join rows. Rendering this with `Blog`'s shape
+ * (e.g. `post.author?.username`) silently renders "Unknown" for
+ * everything - confirmed live - since the field is actually
+ * `authorUsername` at the top level.
+ */
+export interface BlogSearchResultItem {
+  id: string;
+  title: string;
+  content: string;
+  description: string | null;
+  slug: string;
+  authorId: string;
+  authorUsername: string | null;
+  categoryId: string | null;
+  tags: string[];
+  published: boolean;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+  deletedAt: string | null;
+  views: number;
+  excerpt: string | null;
+  coverImage: string | null;
+  readTime: number;
+  score: number;
+}
+
 export interface SearchBlogsResult {
-  blogs: (Blog & { score: number })[];
+  blogs: BlogSearchResultItem[];
   total: number;
   page: number;
   totalPages: number;

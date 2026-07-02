@@ -38,6 +38,7 @@ interface BlogDocument {
   published: boolean
   createdAt: Date
   updatedAt: Date
+  publishedAt: Date | null
   deletedAt: Date | null
   views: number
   excerpt: string | null
@@ -112,6 +113,7 @@ export const setupElasticsearch = async (): Promise<void> => {
               published: { type: 'boolean' },
               createdAt: { type: 'date' },
               updatedAt: { type: 'date' },
+              publishedAt: { type: 'date' },
               deletedAt: { type: 'date' },
               views: { type: 'long' },
               excerpt: { type: 'text' },
@@ -328,6 +330,7 @@ export const syncBlogsToElasticsearch = async (): Promise<void> => {
           published: blog.published,
           createdAt: blog.createdAt,
           updatedAt: blog.updatedAt,
+          publishedAt: blog.publishedAt,
           deletedAt: blog.deletedAt,
           views: blog.analytics?.views ?? 0,
           excerpt: blog.excerpt,

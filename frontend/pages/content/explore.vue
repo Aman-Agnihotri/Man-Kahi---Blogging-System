@@ -55,7 +55,7 @@
           </NuxtLink>
           <div class="p-6">
             <div class="flex items-center space-x-2 mb-4">
-              <span v-for="tag in tagNames(post)" :key="tag"
+              <span v-for="tag in post.tags" :key="tag"
                 class="px-2 py-1 bg-primary-100 text-primary-700 text-sm rounded-full">
                 {{ tag }}
               </span>
@@ -68,14 +68,12 @@
             <p class="text-primary-600 mb-4 line-clamp-2">{{ post.excerpt ?? '' }}</p>
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-3">
-                <img v-if="post.author?.profileImage" :src="post.author.profileImage" :alt="post.author.username"
-                  class="w-10 h-10 rounded-full object-cover">
-                <span v-else
+                <span
                   class="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold uppercase">
-                  {{ post.author?.username?.charAt(0) ?? '?' }}
+                  {{ post.authorUsername?.charAt(0) ?? '?' }}
                 </span>
                 <div>
-                  <p class="text-sm font-medium text-primary-900">{{ post.author?.username ?? 'Unknown' }}</p>
+                  <p class="text-sm font-medium text-primary-900">{{ post.authorUsername ?? 'Unknown' }}</p>
                   <p class="text-sm text-primary-500">{{ formatDate(post.publishedAt) }}</p>
                 </div>
               </div>
@@ -96,7 +94,6 @@
 
 <script setup lang="ts">
 import type { SearchBlogsParams, SearchBlogsResult, PopularTag } from '~/types/blog'
-import { tagNames } from '~/types/blog'
 import type { ApiError } from '~/types/admin'
 
 const blogApi = useBlogApi()

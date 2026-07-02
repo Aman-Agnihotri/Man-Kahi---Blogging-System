@@ -51,7 +51,7 @@
           </NuxtLink>
           <div class="p-6">
             <div class="flex items-center space-x-2 mb-4">
-              <span v-for="tag in tagNames(post)" :key="tag"
+              <span v-for="tag in post.tags" :key="tag"
                 class="px-2 py-1 bg-primary-100 text-primary-700 text-sm rounded-full">
                 {{ tag }}
               </span>
@@ -69,15 +69,13 @@
 
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-3">
-                <img v-if="post.author?.profileImage" :src="post.author.profileImage" :alt="post.author.username"
-                  class="w-10 h-10 rounded-full object-cover">
-                <span v-else
+                <span
                   class="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold uppercase">
-                  {{ post.author?.username?.charAt(0) ?? '?' }}
+                  {{ post.authorUsername?.charAt(0) ?? '?' }}
                 </span>
                 <div>
                   <span class="text-sm font-medium text-primary-900">
-                    {{ post.author?.username ?? 'Unknown' }}
+                    {{ post.authorUsername ?? 'Unknown' }}
                   </span>
                   <p class="text-sm text-primary-500">
                     {{ formatDate(post.publishedAt) }}
@@ -88,7 +86,7 @@
               <div class="flex items-center space-x-4 text-sm text-primary-500">
                 <span class="flex items-center">
                   <i class="ri-eye-line mr-1"></i>
-                  {{ post.analytics?.views ?? 0 }}
+                  {{ post.views }}
                 </span>
                 <span class="flex items-center">
                   <i class="ri-time-line mr-1"></i>
@@ -142,7 +140,6 @@
 
 <script setup lang="ts">
   import type { SearchBlogsResult } from '~/types/blog'
-  import { tagNames } from '~/types/blog'
   import type { ApiError } from '~/types/admin'
 
   const blogApi = useBlogApi()
