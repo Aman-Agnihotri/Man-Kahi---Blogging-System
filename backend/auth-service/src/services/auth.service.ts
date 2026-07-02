@@ -122,22 +122,31 @@ export class AuthService {
                 throw new Error('Invalid credentials')
             }
 
-            // Verify password
-            const isValid = await verifyPassword(input.password, user.password)
+            const now = new Date();
+            const isLocked = !!user.lockedUntil && user.lockedUntil > now;
+            if (isLocked) {
+                dbTimer.end();
+                trackError('auth', 'account_locked', 'login');
+                throw new Error('Account is locked due to too many failed login attempts. Please try again later.')
+            }
+
+            // A previously set lock that has since expired resets the attempt count
+            const attemptsBeforeThisTry = user.lockedUntil && user.lockedUntil <= now ? 0 : user.loginAttempts;
+
+            // Verify password (verifyPassword expects (hashedPassword, plainPassword))
+            const isValid = await verifyPassword(user.password, input.password)
             if (!isValid) {
-                // Update login attempts
+                const nextAttempts = attemptsBeforeThisTry + 1;
+                // Lock account after 5 failed attempts for 30 minutes
                 await prisma.user.update({
                     where: { id: user.id },
                     data: {
-                        loginAttempts: {
-                            increment: 1
-                        },
-                        // Lock account after 5 failed attempts for 30 minutes
-                        lockedUntil: user.loginAttempts >= 4 ? 
+                        loginAttempts: nextAttempts,
+                        lockedUntil: nextAttempts >= 5 ?
                             new Date(Date.now() + 30 * 60 * 1000) : null
                     }
                 });
-                
+
                 dbTimer.end();
                 trackError('auth', 'invalid_password', 'login');
                 throw new Error('Invalid credentials')

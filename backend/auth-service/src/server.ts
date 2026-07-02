@@ -140,8 +140,11 @@ setupSwagger(app, 'Auth Service', [
 ]);
 
 // Routes
+// oauthRoutes is mounted under the same prefix as authRoutes (not a separate
+// /api/oauth prefix) so its paths match the nginx gateway's OAuth location
+// block and the documented GOOGLE_CALLBACK_URL (/api/auth/google/callback).
 app.use('/api/auth', authRoutes)
-app.use('/api/oauth', oauthRoutes)
+app.use('/api/auth', oauthRoutes)
 
 // Global error handler
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

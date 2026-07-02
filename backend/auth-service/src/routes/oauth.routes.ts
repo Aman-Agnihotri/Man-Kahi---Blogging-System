@@ -4,8 +4,9 @@ import { AuthService } from '@services/auth.service';
 import logger from '@shared/utils/logger';
 import { authenticate, AuthenticatedRequest, AuthenticatedUser } from '@shared/middlewares/auth';
 import { createEndpointRateLimit } from '@shared/middlewares/rateLimit';
+import { requireProviderConfigured } from '@config/oauth';
 import type { RequestHandler } from 'express';
-import { 
+import {
     trackAuthMetrics,
     trackError,
     updateActiveTokens
@@ -97,6 +98,7 @@ const authService = new AuthService();
  */
 router.get(
     '/google',
+    requireProviderConfigured('google'),
     createEndpointRateLimit('auth:oauth') as unknown as RequestHandler,
     trackAuthMetrics('oauth_initiate', 'google'),
     (req: Request, res: Response, next: NextFunction) => {
@@ -132,6 +134,7 @@ router.get(
  */
 router.get(
     '/google/callback',
+    requireProviderConfigured('google'),
     createEndpointRateLimit('auth:oauth') as unknown as RequestHandler,
     passport.authenticate('google', { session: false }) as RequestHandler,
     ((async (req: OAuthRequest, res: Response) => {

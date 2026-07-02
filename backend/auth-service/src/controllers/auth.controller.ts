@@ -116,6 +116,12 @@ export class AuthController {
           res.status(401).json({ message: error.message })
           return
         }
+
+        if (error.message.startsWith('Account is locked')) {
+          trackError('account_locked', 'login_failed', 'auth');
+          res.status(423).json({ message: error.message })
+          return
+        }
       }
 
       trackError('server', 'login_failed', 'auth');

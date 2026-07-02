@@ -34,10 +34,45 @@ export function getClientSecret(provider: OAuthProvider): string {
 }
 
 export function getAuthCallbackURL(provider: OAuthProvider): string {
-  const baseURL = process.env['AUTH_SERVICE_URL'] ?? 'http://localhost:3000'
+  const explicitCallbackURL = process.env[`${provider.toUpperCase()}_CALLBACK_URL`]
+  if (explicitCallbackURL) {
+    return explicitCallbackURL
+  }
+
+  const baseURL = process.env['AUTH_SERVICE_URL'] ?? 'http://localhost:3001'
   if (!process.env['AUTH_SERVICE_URL']) {
     trackError('missing_config', 'oauth_callback_url', 'oauth')
-    logger.warn('AUTH_SERVICE_URL not set, using default: http://localhost:3000')
+    logger.warn('AUTH_SERVICE_URL not set, using default: http://localhost:3001')
   }
-  return `${baseURL}/auth/${provider}/callback`
+  // Must match how oauthRoutes is mounted in server.ts (/api/auth) and the
+  // nginx gateway's OAuth location block.
+  return `${baseURL}/api/auth/${provider}/callback`
+}
+
+/**
+ * Whether a given OAuth provider has credentials configured for this environment.
+ * OAuth is optional: providers without credentials are simply disabled.
+ */
+export function isProviderConfigured(provider: OAuthProvider): boolean {
+  return Boolean(
+    process.env[`${provider.toUpperCase()}_CLIENT_ID`] &&
+    process.env[`${provider.toUpperCase()}_CLIENT_SECRET`]
+  )
+}
+
+/**
+ * Express middleware factory that returns a 503 instead of letting passport
+ * throw on an unregistered strategy when a provider's OAuth credentials are
+ * not configured for this environment.
+ */
+export function requireProviderConfigured(provider: OAuthProvider) {
+  return (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): void => {
+    if (!isProviderConfigured(provider)) {
+      res.status(503).json({
+        message: `${provider} OAuth is not configured on this server`,
+      });
+      return;
+    }
+    next();
+  };
 }
