@@ -215,7 +215,7 @@ deploy() {
 
     # Apply/Delete Kubernetes configurations
     echo -e "\nPerforming $ACTION for $ENVIRONMENT environment..."
-    if ! kustomize build ../overlays/$ENVIRONMENT | kubectl_with_sudo $ACTION -f - $dry_run_flag; then
+    if ! kustomize build ../environments/$ENVIRONMENT | kubectl_with_sudo $ACTION -f - $dry_run_flag; then
         echo -e "${RED}Error: Deployment failed${NC}"
         exit 1
     fi

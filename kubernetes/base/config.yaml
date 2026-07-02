@@ -52,3 +52,8 @@ data:
   AUTH_SERVICE_URL: http://auth-service:3001
   BLOG_SERVICE_URL: http://blog-service:3002
   ADMIN_SERVICE_URL: http://admin-service:3004
+  # Without this, every service's /metrics route 404s (see
+  # backend/shared/config/metrics.ts's metricsEnabled gate) and the
+  # prometheus.io/scrape annotations on each Deployment below scrape
+  # nothing - same gap found and fixed in docker-compose's env files.
+  ENABLE_METRICS: "true"

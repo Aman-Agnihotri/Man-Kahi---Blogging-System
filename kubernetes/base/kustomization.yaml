@@ -8,7 +8,7 @@ resources:
   - config/environment.yaml
   - secrets/services-secrets.yaml
   - infrastructure.yaml
-  - services/auth.yaml
+  - services.yaml
   - ingress.yaml
   - ingress-config.yaml
   - ingress-rbac.yaml
@@ -20,8 +20,3 @@ commonLabels:
   app.kubernetes.io/part-of: mankahi-blogging-platform
 
 namespace: mankahi
-
-configMapGenerator:
-  - name: shared-config
-    envs:
-      - .env

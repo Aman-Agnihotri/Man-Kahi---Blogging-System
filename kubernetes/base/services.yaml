@@ -12,6 +12,10 @@ spec:
     metadata:
       labels:
         app: auth-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3001"
     spec:
       automountServiceAccountToken: false
       containers:
@@ -25,7 +29,7 @@ spec:
         - configMapRef:
             name: services-config
         - secretRef:
-            name: services-secret
+            name: app-secrets
         resources:
           limits:
             memory: "1Gi"
@@ -104,6 +108,10 @@ spec:
     metadata:
       labels:
         app: blog-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3002"
     spec:
       automountServiceAccountToken: false
       containers:
@@ -117,7 +125,7 @@ spec:
         - configMapRef:
             name: services-config
         - secretRef:
-            name: services-secret
+            name: app-secrets
         resources:
           limits:
             memory: "2Gi"
@@ -205,6 +213,10 @@ spec:
     metadata:
       labels:
         app: analytics-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3003"
     spec:
       automountServiceAccountToken: false
       containers:
@@ -218,7 +230,7 @@ spec:
         - configMapRef:
             name: services-config
         - secretRef:
-            name: services-secret
+            name: app-secrets
         resources:
           limits:
             memory: "2Gi"
@@ -297,6 +309,10 @@ spec:
     metadata:
       labels:
         app: admin-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3004"
     spec:
       automountServiceAccountToken: false
       containers:
@@ -310,7 +326,7 @@ spec:
         - configMapRef:
             name: services-config
         - secretRef:
-            name: services-secret
+            name: app-secrets
         resources:
           limits:
             memory: "1Gi"

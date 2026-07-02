@@ -433,12 +433,18 @@ Purpose: keep the system easy to evolve when traffic grows.
 - [ ] Separate write path side effects behind service modules.
 - [ ] Make search indexing replaceable with async workers later.
 - [ ] Make analytics ingestion replaceable with a queue later.
-- [ ] Add database connection pooling guidance.
-- [ ] Document when to introduce PgBouncer.
-- [ ] Document when to move uploads to cloud object storage.
-- [ ] Document when to move from Compose to Kubernetes or managed services.
-- [ ] Archive or repair Kubernetes manifests after Docker production is solid.
-- [ ] Add load-testing scripts for laptop and single-server baselines.
+- [x] Add database connection pooling guidance.
+  - `docs/SCALING.md` - current per-replica pool sizing, the concrete connection-count trigger for when it becomes a problem, and what to watch (`pg_stat_activity`).
+- [x] Document when to introduce PgBouncer.
+  - `docs/SCALING.md` - not yet warranted at current scale; concrete trigger conditions and transaction-vs-session pooling mode guidance included.
+- [x] Document when to move uploads to cloud object storage.
+  - `docs/SCALING.md` - notes this is already architecturally cheap (MinIO is already S3-compatible and already backs both blog covers and user avatars), with concrete triggers for when to actually do it.
+- [x] Document when to move from Compose to Kubernetes or managed services.
+  - `docs/SCALING.md` - concrete triggers (compute ceiling, zero-downtime deploy requirement, managed multi-node backing stores, multi-engineer independent deploys), explicitly "not yet" at current scale.
+- [x] Archive or repair Kubernetes manifests after Docker production is solid.
+  - Repaired what was cheaply and confidently fixable: `base/kustomization.yaml`'s missing-`.env` failure (removed the dead/unused generator block), `services.yaml` never being wired in (3 of 4 backend services had no K8s objects at all), a secret-name mismatch (`services-secret` vs the real `app-secrets`), and `deploy.sh` building `overlays/` while checking secrets under `environments/` (two incompatible, cross-wired directory trees). Archived the redundant `overlays/` tree (`kubernetes/overlays.archived/`) in favor of `environments/`, which `deploy.sh` now consistently targets. `kubectl kustomize base` now builds cleanly. One issue remains and is explicitly documented rather than silently left broken: `environments/*/kustomization.yaml`'s generator `behavior: merge` targets base ConfigMaps/Secrets that are plain static resources, which this kustomize version rejects - needs restructuring `base/config/environment.yaml` and `base/secrets/services-secrets.yaml` to be generator-produced too. See `kubernetes/README.md`'s Known Limitations section for the exact error and fix direction.
+- [x] Add load-testing scripts for laptop and single-server baselines.
+  - `docker/scripts/load-test.sh` - dependency-free concurrent-request baseline (curl + bash background jobs), configurable concurrency/request-count/endpoint. Live-verified against the running dev stack (50 requests, 10 concurrent, 0 failures). Documented in `docs/SCALING.md` as a baseline check, not a replacement for k6/JMeter for deeper testing.
 
 Acceptance criteria:
 
@@ -457,8 +463,10 @@ Acceptance criteria:
 - [x] OAuth callback paths are inconsistent.
 - [x] Production Compose exposes too many internal services.
 - [x] Production Compose has `initdb` service typo.
-- [ ] Kubernetes Kustomize build currently fails due to missing base `.env`.
-- [ ] Kubernetes deployment paths are split between `overlays` and `environments`.
+- [x] Kubernetes Kustomize build currently fails due to missing base `.env`.
+  - Fixed by removing the unused `configMapGenerator` block that referenced it - see Phase 8 notes.
+- [x] Kubernetes deployment paths are split between `overlays` and `environments`.
+  - Consolidated to `environments/`; `overlays/` archived - see Phase 8 notes.
 
 ## Recommended Implementation Order
 

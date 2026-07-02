@@ -1,0 +1,163 @@
+# ManKahi Scaling Guidance
+
+Last updated: 2026-07-03
+
+## Purpose
+
+This document is Phase 8 of `docs/ACTION_PLAN.md`: "Future Scale
+Readiness." It does not describe changes made to the running system - it
+describes concrete, measurable triggers for *when* to make each change,
+so scaling decisions are made in response to real evidence rather than
+speculatively. The current system (Docker Compose, one Postgres instance,
+one Redis instance, one Elasticsearch node) is intentionally sized for a
+laptop-to-single-server deployment; none of the migrations below should
+be started before their trigger condition is actually observed.
+
+## Current Statelessness
+
+All four backend services (auth, blog, analytics, admin) are already
+stateless: no in-memory session state, no local file storage for
+anything that must survive a restart (uploads go to MinIO, not local
+disk), and horizontal scaling today is just "run more container
+replicas behind the same nginx upstream block." This is why Docker
+Compose's `deploy.replicas` (development) and the equivalent in the
+production compose file can be increased directly with no code changes,
+and why the Kubernetes manifests in `kubernetes/` (scaffolding, see
+`kubernetes/README.md`) already model each service as a `Deployment`
+with a `HorizontalPodAutoscaler` rather than a `StatefulSet`.
+
+The two async side effects that currently run inline in the request path
+- Elasticsearch indexing (`indexBlog`/`updateBlogIndex` in
+`backend/blog-service/src/utils/elasticsearch.ts`, called synchronously
+from `blog.service.ts`'s create/update/delete) and analytics ingestion
+(`analyticsClient` calls in `blog-service`'s middleware, and
+`analytics-service`'s direct-write `trackEvent`/`trackProgress`/
+`trackLinkClick` controllers) - are the two places most likely to need
+to move behind a queue as write volume grows. See the sections below for
+when.
+
+## Database Connection Pooling
+
+**Current state:** each service instance opens its own Prisma connection
+pool directly against Postgres (no pooler in front of it). Prisma's
+default pool size is `num_cpus * 2 + 1` per client instance - with 4
+backend services at 1 replica each in development, that's a handful of
+connections; Postgres's own default `max_connections` (100) comfortably
+covers this.
+
+**When this becomes a problem:** `(number of service replicas) x
+(Prisma's per-instance pool size)` approaching Postgres's
+`max_connections`. Concretely: once you're running more than roughly
+15-20 total backend replicas across all four services (e.g. 5x blog-service
++ 5x auth-service + 5x analytics-service + 5x admin-service, matching the
+Kubernetes manifests' example replica counts in `kubernetes/base/services.yaml`),
+you're at real risk of Postgres refusing new connections during a
+deploy (when old and new replicas briefly coexist) or a traffic spike.
+
+**What to watch:** Postgres's `pg_stat_activity` connection count over
+time (`SELECT count(*) FROM pg_stat_activity;`), or Prometheus's
+`pg_stat_activity_count` if a `postgres_exporter` is added later. Alert
+before you hit `max_connections`, not after.
+
+**Fix, in order of effort:**
+1. Lower Prisma's per-service pool size via `connection_limit` on
+   `DATABASE_URL` (e.g. `?connection_limit=5`) if replicas are numerous
+   but per-replica traffic is low - free, no new infrastructure.
+2. Raise Postgres's `max_connections` (costs memory - each connection
+   reserves ~5-10MB) if you have headroom.
+3. Introduce PgBouncer (see below) once (1) and (2) together aren't
+   enough, or once connection *churn* (not just count) is the problem -
+   e.g. many short-lived serverless/edge-function-style callers rather
+   than a fixed number of long-running service replicas.
+
+## When To Introduce PgBouncer
+
+Not yet warranted at the current scale (single Postgres instance, a
+handful of long-lived service replicas each holding a stable connection
+pool). Introduce it when either is true:
+- Connection *count* pressure per the section above, after the cheaper
+  fixes (Prisma `connection_limit`, raising `max_connections`) are
+  exhausted.
+- Connection *churn* pressure: if any component starts opening/closing
+  Postgres connections per-request rather than holding a pool (this
+  would be a regression from the current architecture, not something
+  planned - Prisma's client is meant to be instantiated once per
+  process and reused, exactly as `backend/shared/utils/prismaClient.ts`
+  already does).
+
+If/when it's warranted: run PgBouncer in `transaction` pooling mode (not
+`session` mode - Prisma doesn't use session-level features like
+`LISTEN`/`NOTIFY` or advisory locks that would require it) as a sidecar
+or a small dedicated service in front of Postgres, and point
+`DATABASE_URL` at it instead of Postgres directly. No application code
+changes needed beyond the connection string.
+
+## When To Move Uploads To Cloud Object Storage
+
+**Current state:** MinIO (S3-compatible) already backs both blog cover
+images (`backend/blog-service/src/config/upload.ts`) and user avatars
+(`backend/auth-service`'s equivalent, added in the Phase 7 feature
+batch) - uploads are not stored on local disk anywhere in the running
+services. This means the "move to cloud object storage" migration is
+already architecturally cheap: it's a matter of pointing the existing
+S3-compatible client at a real provider, not a rewrite.
+
+**When to actually do it:** when either is true:
+- You move off a single server (MinIO's data lives in a Docker named
+  volume tied to that one machine - it doesn't survive a
+  single-server-to-multi-server migration on its own without adding
+  MinIO's own distributed/erasure-coded mode, which is itself
+  operationally heavier than just using a managed provider).
+- The `minio-data` volume's disk usage or backup time becomes a genuine
+  operational burden on the single server (uploads competing with
+  Postgres/Elasticsearch for disk I/O or backup windows).
+
+**How:** update `MINIO_ENDPOINT`/`MINIO_PORT`/`MINIO_ACCESS_KEY`/
+`MINIO_SECRET_KEY`/`MINIO_USE_SSL`/`MINIO_REGION` to point at the new
+provider (AWS S3, Cloudflare R2, Backblaze B2, or a managed MinIO
+cluster) - every service already reads these as env vars, no code
+changes required as long as the provider is S3-API-compatible (all of
+the above are). Migrate existing objects with any S3-to-S3 sync tool
+(e.g. `rclone`) before cutting over.
+
+## When To Move From Compose To Kubernetes
+
+**Not yet.** Docker Compose on a single server remains the right choice
+until at least one of these is true:
+- You need more compute than a single server can provide (vertical
+  scaling of one machine has stopped being viable or cost-effective).
+- You need zero-downtime deploys with automated rollback, which Compose
+  doesn't provide natively (a `docker compose up -d --build` briefly
+  disrupts the service being rebuilt; Kubernetes rolling updates don't).
+- You need a backing store (Postgres, Elasticsearch) to run as a
+  genuinely managed multi-node cluster with automatic failover, which
+  is easier to operate via Kubernetes operators (or a managed cloud
+  database service, which is worth considering *instead of* Kubernetes
+  for just this piece) than by hand in Compose.
+- Multiple engineers need to deploy independently without stepping on
+  a single shared server.
+
+None of these apply at the project's current scale. When one does,
+`kubernetes/` has a head start (see `kubernetes/README.md` for its exact
+current state and known remaining issues) rather than starting from
+nothing - but expect real setup work before a first deploy: fixing the
+one remaining `kubernetes/environments/` build issue documented there,
+provisioning real secrets, and - most importantly - deciding on managed
+vs. self-hosted Postgres/Elasticsearch, since running stateful clusters
+well inside Kubernetes is a significant operational commitment in its
+own right that a managed cloud database service often sidesteps
+entirely.
+
+## Load Testing
+
+`docker/scripts/load-test.sh` (added alongside this document) runs a
+lightweight concurrent-request baseline against a running stack using
+only `curl` and standard shell tools (no new dependency to install) -
+intentionally simple, meant to answer "does this server fall over under
+N concurrent users hitting the core read paths," not to replace a real
+load-testing tool. For deeper testing (sustained load, realistic user
+flows, distributed load generation), reach for [k6](https://k6.io/) or
+[Apache JMeter](https://jmeter.apache.org/) - deliberately not bundled
+here, since which tool fits depends on what you're specifically trying
+to learn (single-server ceiling vs. multi-service bottleneck
+identification vs. database-specific tuning).
