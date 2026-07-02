@@ -187,6 +187,28 @@ describe('BlogController contract fixes', () => {
     expect(res.json).toHaveBeenCalledWith({ id: 'blog-1', title: 'Updated Title' });
   });
 
+  it('coerces a multipart "published" string into a real boolean (create and update are always multipart)', async () => {
+    const { controller, blogService } = createController();
+
+    const createRes = createResponse();
+    blogService.updateBlog.mockResolvedValue({ id: 'blog-1', published: true });
+    await controller.update(asRequest({
+      params: { id: 'blog-1' },
+      body: { published: 'true' },
+      user: { id: 'author-1' },
+    }), createRes);
+    expect(blogService.updateBlog).toHaveBeenCalledWith('blog-1', 'author-1', { published: true });
+
+    const updateRes = createResponse();
+    blogService.updateBlog.mockResolvedValue({ id: 'blog-1', published: false });
+    await controller.update(asRequest({
+      params: { id: 'blog-1' },
+      body: { published: 'false' },
+      user: { id: 'author-1' },
+    }), updateRes);
+    expect(blogService.updateBlog).toHaveBeenCalledWith('blog-1', 'author-1', { published: false });
+  });
+
   it('reads suggested blog IDs from the blogId route param', async () => {
     const { controller, searchService } = createController();
     const res = createResponse();

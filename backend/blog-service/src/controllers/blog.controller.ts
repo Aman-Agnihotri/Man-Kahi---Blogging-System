@@ -12,6 +12,16 @@ import {
   trackBlogView
 } from '@middlewares/metrics.middleware'
 
+// create/update are always submitted as multipart/form-data (an optional
+// cover image rides along), so every field - including this one - arrives
+// as a string, never a real boolean. Accept both so JSON callers aren't
+// broken either.
+const booleanish = z.preprocess((val) => {
+  if (val === 'true') return true
+  if (val === 'false') return false
+  return val
+}, z.boolean())
+
 // Input validation schemas
 const createBlogSchema = z.object({
   title: z.string().min(3).max(200),
@@ -19,7 +29,7 @@ const createBlogSchema = z.object({
   description: z.string().max(500).optional(),
   categoryId: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  published: z.boolean().optional(),
+  published: booleanish.optional(),
 })
 
 const updateBlogSchema = createBlogSchema.partial()
