@@ -180,6 +180,13 @@ describe('SearchService suggested blogs', () => {
         createdAt: 'desc',
       },
       include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            profileImage: true,
+          },
+        },
         category: true,
         tags: {
           include: { tag: true },

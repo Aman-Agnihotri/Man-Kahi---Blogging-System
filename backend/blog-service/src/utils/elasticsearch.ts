@@ -32,6 +32,7 @@ interface BlogDocument {
   description: string | null
   slug: string
   authorId: string
+  authorUsername: string | null
   categoryId: string | null
   tags: string[]
   published: boolean
@@ -39,6 +40,9 @@ interface BlogDocument {
   updatedAt: Date
   deletedAt: Date | null
   views: number
+  excerpt: string | null
+  coverImage: string | null
+  readTime: number
 }
 
 interface SearchHit<T> {
@@ -102,6 +106,7 @@ export const setupElasticsearch = async (): Promise<void> => {
               },
               slug: { type: 'keyword' },
               authorId: { type: 'keyword' },
+              authorUsername: { type: 'keyword' },
               categoryId: { type: 'keyword' },
               tags: { type: 'keyword' },
               published: { type: 'boolean' },
@@ -109,6 +114,9 @@ export const setupElasticsearch = async (): Promise<void> => {
               updatedAt: { type: 'date' },
               deletedAt: { type: 'date' },
               views: { type: 'long' },
+              excerpt: { type: 'text' },
+              coverImage: { type: 'keyword' },
+              readTime: { type: 'integer' },
             },
           },
         },
@@ -286,6 +294,9 @@ export const syncBlogsToElasticsearch = async (): Promise<void> => {
         skip: offset,
         take: batchSize,
         include: {
+          author: {
+            select: { username: true },
+          },
           tags: {
             include: {
               tag: true,
@@ -306,6 +317,7 @@ export const syncBlogsToElasticsearch = async (): Promise<void> => {
           description: blog.description,
           slug: blog.slug,
           authorId: blog.authorId,
+          authorUsername: blog.author?.username ?? null,
           categoryId: blog.categoryId,
           tags: blog.tags.map(t => t.tag.name),
           published: blog.published,
@@ -313,6 +325,9 @@ export const syncBlogsToElasticsearch = async (): Promise<void> => {
           updatedAt: blog.updatedAt,
           deletedAt: blog.deletedAt,
           views: blog.analytics?.views ?? 0,
+          excerpt: blog.excerpt,
+          coverImage: blog.coverImage,
+          readTime: blog.readTime,
         },
       ])
 

@@ -122,6 +122,13 @@ export class BlogService {
         },
       },
       include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            profileImage: true,
+          },
+        },
         category: true,
         tags: {
           include: {
@@ -141,6 +148,7 @@ export class BlogService {
       description: blog.description,
       slug: blog.slug,
       authorId: blog.authorId,
+      authorUsername: blog.author?.username ?? null,
       categoryId: blog.categoryId,
       tags: blog.tags.map(t => t.tag.name),
       published: blog.published,
@@ -148,6 +156,9 @@ export class BlogService {
       updatedAt: blog.updatedAt,
       deletedAt: null,
       views: blog.analytics?.views ?? 0,
+      excerpt: blog.excerpt,
+      coverImage: blog.coverImage,
+      readTime: blog.readTime,
     });
 
     // Cache the blog
@@ -187,6 +198,13 @@ export class BlogService {
         deletedAt: null,
       },
       include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            profileImage: true,
+          },
+        },
         category: true,
         tags: {
           include: {
@@ -302,6 +320,13 @@ export class BlogService {
         }),
       },
       include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            profileImage: true,
+          },
+        },
         category: true,
         tags: {
           include: {
@@ -323,6 +348,9 @@ export class BlogService {
       tags: updatedBlog.tags.map(t => t.tag.name),
       published: updatedBlog.published,
       updatedAt: updatedBlog.updatedAt,
+      excerpt: updatedBlog.excerpt,
+      coverImage: updatedBlog.coverImage,
+      readTime: updatedBlog.readTime,
     });
 
     // Invalidate old cache and cache updated blog

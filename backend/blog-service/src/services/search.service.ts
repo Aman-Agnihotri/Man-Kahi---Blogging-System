@@ -110,6 +110,13 @@ export class SearchService {
           createdAt: 'desc'
         },
         include: {
+          author: {
+            select: {
+              id: true,
+              username: true,
+              profileImage: true,
+            },
+          },
           category: true,
           tags: {
             include: { tag: true }
@@ -153,6 +160,13 @@ export class SearchService {
           take: limit,
           orderBy: { createdAt: 'desc' },
           include: {
+            author: {
+              select: {
+                id: true,
+                username: true,
+                profileImage: true,
+              },
+            },
             category: true,
             tags: {
               include: {
