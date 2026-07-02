@@ -5,7 +5,7 @@ import logger from '@shared/utils/logger'
 
 export class SearchService {
   async searchBlogs(params: {
-    query: string
+    query?: string
     page?: number
     limit?: number
     category?: string

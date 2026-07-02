@@ -25,7 +25,11 @@ const createBlogSchema = z.object({
 const updateBlogSchema = createBlogSchema.partial()
 
 const searchQuerySchema = z.object({
-  query: z.string().min(1),
+  // Optional: an absent/empty query lists published blogs (e.g. sorted by
+  // recent) instead of full-text matching, which is what the home/explore
+  // "browse" views need - there was previously no way to list blogs at all
+  // without providing a search term.
+  query: z.string().optional(),
   page: z.string().transform(Number).optional(),
   limit: z.string().transform(Number).optional(),
   category: z.string().optional(),

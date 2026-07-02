@@ -171,7 +171,7 @@ export const removeBlogFromIndex = async (id: string): Promise<void> => {
 }
 
 export interface SearchOptions {
-  query: string
+  query?: string
   page?: number
   limit?: number
   category?: string
@@ -200,16 +200,18 @@ export const searchBlogsElastic = async (options: SearchOptions): Promise<Search
     } = options
 
     const must: estypes.QueryDslQueryContainer[] = [
-      {
-        bool: {
-          should: [
-            { match: { title: { query, boost: 2 } } },
-            { match: { content: query } },
-            { match: { description: { query, boost: 1.5 } } },
-          ],
-          minimum_should_match: 1,
-        },
-      },
+      query
+        ? {
+            bool: {
+              should: [
+                { match: { title: { query, boost: 2 } } },
+                { match: { content: query } },
+                { match: { description: { query, boost: 1.5 } } },
+              ],
+              minimum_should_match: 1,
+            },
+          }
+        : { match_all: {} },
       { term: { published: true } },
     ]
 
