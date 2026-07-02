@@ -28,10 +28,87 @@ const trackLinkSchema = z.object({
   path: z.string(),
 });
 
-const getAnalyticsSchema = z.object({
-  blogId: z.string(),
-  timeframe: z.enum(['1h', '24h', '7d', '30d', 'all']).optional(),
+const blogIdParamSchema = z.object({
+  blogId: z.string().min(1),
 });
+
+// timeframe/start/end are accepted (admin-service forwards them) but are not
+// currently used to filter the response: BlogAnalytics is a single
+// cumulative row per blog, not a time-bucketed series, so there is nothing
+// to filter by yet. Kept as an optional, validated no-op for forward
+// compatibility and so malformed values still surface as 400s.
+const blogAnalyticsQuerySchema = z.object({
+  timeframe: z.enum(['1h', '24h', '7d', '30d', 'all']).optional(),
+  start: z.string().optional(),
+  end: z.string().optional(),
+});
+
+const multiBlogAnalyticsQuerySchema = z.object({
+  blogIds: z.union([z.array(z.string()), z.string()]),
+});
+
+// Field set matching the real Prisma BlogAnalytics columns that the admin
+// service (and its BaseAnalytics TypeScript contract) actually consumes.
+// Deliberately excludes recentVisitors/interactionEvents - those are large
+// internal JSON blobs, not part of the public analytics contract.
+const BLOG_ANALYTICS_SELECT = {
+  id: true,
+  blogId: true,
+  views: true,
+  uniqueViews: true,
+  reads: true,
+  readProgress: true,
+  linkClicks: true,
+  shareCount: true,
+  likes: true,
+  comments: true,
+  shares: true,
+  engagement: true,
+  deviceStats: true,
+  referrerStats: true,
+  timeSpentStats: true,
+  lastUpdated: true,
+} as const;
+
+type BlogAnalyticsRow = {
+  id: string;
+  blogId: string;
+  views: number;
+  uniqueViews: number;
+  reads: number;
+  readProgress: number;
+  linkClicks: number;
+  shareCount: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  engagement: number;
+  deviceStats: unknown;
+  referrerStats: unknown;
+  timeSpentStats: unknown;
+  lastUpdated: Date;
+};
+
+function zeroedBlogAnalytics(blogId: string): BlogAnalyticsRow {
+  return {
+    id: '',
+    blogId,
+    views: 0,
+    uniqueViews: 0,
+    reads: 0,
+    readProgress: 0,
+    linkClicks: 0,
+    shareCount: 0,
+    likes: 0,
+    comments: 0,
+    shares: 0,
+    engagement: 0,
+    deviceStats: null,
+    referrerStats: null,
+    timeSpentStats: null,
+    lastUpdated: new Date(0),
+  };
+}
 
 export class AnalyticsController {
   // Track generic analyticsRedis event
@@ -336,14 +413,14 @@ export class AnalyticsController {
     }
   }
 
-  // Get blog analyticsRedis
+  // Get blog analytics: a flat snapshot matching the Prisma BlogAnalytics
+  // row, refreshed with live Redis counters where that improves freshness.
   async getBlogAnalytics(req: Request, res: Response): Promise<Response> {
     try {
-      const validatedInput = getAnalyticsSchema.parse(req.query);
-      const { blogId, timeframe = '24h' } = validatedInput;
+      const { blogId } = blogIdParamSchema.parse(req.params);
+      blogAnalyticsQuerySchema.parse(req.query);
 
       const startTime = process.hrtime();
-      // Track queue metrics
       const queueTracker = metrics.trackQueue('aggregation');
       queueTracker.setSize(1);
 
@@ -351,18 +428,30 @@ export class AnalyticsController {
       const realtimeStats = await analyticsRedis.getRealTimeStats(blogId);
       analyticsMetrics.aggregationOperations.inc({ operation_type: 'realtime', status: 'success' });
 
-      // Get historical data from database
-      const historicalData = await this.getHistoricalData(blogId, timeframe);
+      // Get the persisted analytics row, if any. A blog with no analytics
+      // yet is a normal state (e.g. brand new blog), not an error.
+      const row = await prisma.blogAnalytics.findUnique({
+        where: { blogId },
+        select: BLOG_ANALYTICS_SELECT,
+      });
       analyticsMetrics.aggregationOperations.inc({ operation_type: 'historical', status: 'success' });
+
+      const base: BlogAnalyticsRow = row ?? zeroedBlogAnalytics(blogId);
+
+      // Merge in live Redis counters where they improve freshness - the DB
+      // row is only updated periodically, while Redis tracks views in
+      // real time.
+      const merged: BlogAnalyticsRow = {
+        ...base,
+        views: Math.max(base.views, realtimeStats.views),
+        uniqueViews: Math.max(base.uniqueViews, realtimeStats.uniqueViews),
+      };
 
       const [secs, nanos] = process.hrtime(startTime);
       analyticsMetrics.aggregationDuration.observe({ operation_type: 'total' }, secs + nanos / 1e9);
       queueTracker.setSize(0);
 
-      return res.status(200).json({
-        realtime: realtimeStats,
-        historical: historicalData,
-      });
+      return res.status(200).json(merged);
     } catch (error) {
       metrics.trackError(
         error instanceof z.ZodError ? 'validation' : 'aggregation',
@@ -380,7 +469,7 @@ export class AnalyticsController {
           }))
         });
       }
-      
+
       if (error instanceof Error) {
         switch (error.message) {
           case 'Blog not found':
@@ -400,11 +489,108 @@ export class AnalyticsController {
             });
         }
       }
-      
+
       logger.error('Unexpected error fetching analytics:', error);
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch analytics data'
+      });
+    }
+  }
+
+  // Platform-wide aggregate stats across all blogs
+  async getOverallStats(_req: Request, res: Response): Promise<Response> {
+    try {
+      const [aggregate, trackedBlogs] = await Promise.all([
+        prisma.blogAnalytics.aggregate({
+          _sum: { views: true, uniqueViews: true, reads: true, linkClicks: true },
+          _avg: { readProgress: true, engagement: true },
+        }),
+        prisma.blogAnalytics.count(),
+      ]);
+      analyticsMetrics.aggregationOperations.inc({ operation_type: 'overall_stats', status: 'success' });
+
+      return res.status(200).json({
+        views: aggregate._sum.views ?? 0,
+        uniqueViews: aggregate._sum.uniqueViews ?? 0,
+        reads: aggregate._sum.reads ?? 0,
+        linkClicks: aggregate._sum.linkClicks ?? 0,
+        avgReadProgress: aggregate._avg.readProgress ?? 0,
+        avgEngagement: aggregate._avg.engagement ?? 0,
+        trackedBlogs,
+      });
+    } catch (error) {
+      analyticsMetrics.aggregationOperations.inc({ operation_type: 'overall_stats', status: 'error' });
+      logger.error('Error fetching overall stats:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch overall analytics stats'
+      });
+    }
+  }
+
+  // Top blogs by views descending
+  async getTrending(_req: Request, res: Response): Promise<Response> {
+    try {
+      const rows = await prisma.blogAnalytics.findMany({
+        orderBy: { views: 'desc' },
+        take: 10,
+        select: BLOG_ANALYTICS_SELECT,
+      });
+      analyticsMetrics.aggregationOperations.inc({ operation_type: 'trending', status: 'success' });
+
+      return res.status(200).json(rows);
+    } catch (error) {
+      analyticsMetrics.aggregationOperations.inc({ operation_type: 'trending', status: 'error' });
+      logger.error('Error fetching trending blogs:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch trending blogs'
+      });
+    }
+  }
+
+  // Batch analytics for a set of blogs
+  async getMultiBlogAnalytics(req: Request, res: Response): Promise<Response> {
+    try {
+      const validatedInput = multiBlogAnalyticsQuerySchema.parse(req.query);
+      const blogIds = (
+        Array.isArray(validatedInput.blogIds)
+          ? validatedInput.blogIds
+          : validatedInput.blogIds.split(',')
+      )
+        .map(id => id.trim())
+        .filter(Boolean);
+
+      if (blogIds.length === 0) {
+        return res.status(400).json({
+          message: 'Invalid input data',
+          details: 'blogIds query parameter is required'
+        });
+      }
+
+      const rows = await prisma.blogAnalytics.findMany({
+        where: { blogId: { in: blogIds } },
+        select: BLOG_ANALYTICS_SELECT,
+      });
+      analyticsMetrics.aggregationOperations.inc({ operation_type: 'multi', status: 'success' });
+
+      return res.status(200).json(rows);
+    } catch (error) {
+      analyticsMetrics.aggregationOperations.inc({ operation_type: 'multi', status: 'error' });
+      logger.error('Error fetching multi blog analytics:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        });
+      }
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch analytics for the requested blogs'
       });
     }
   }
@@ -440,48 +626,4 @@ export class AnalyticsController {
     analyticsMetrics.eventProcessingTime.observe({ event_type: field }, secs + nanos / 1e9);
   }
 
-  private async getHistoricalData(
-    blogId: string,
-    timeframe: string
-  ): Promise<any> {
-    const timeframeMap = {
-      '1h': 60 * 60 * 1000,
-      '24h': 24 * 60 * 60 * 1000,
-      '7d': 7 * 24 * 60 * 60 * 1000,
-      '30d': 30 * 24 * 60 * 60 * 1000,
-    };
-
-    const startTime = process.hrtime();
-    try {
-      if (timeframe === 'all') {
-        const result = await prisma.blogAnalytics.findUnique({
-          where: { blogId },
-        });
-        const [secs, nanos] = process.hrtime(startTime);
-        analyticsMetrics.dataStorageOperations.inc({ operation: 'read', status: 'success' });
-        analyticsMetrics.eventProcessingTime.observe({ event_type: 'historical_query' }, secs + nanos / 1e9);
-        return result;
-      }
-
-      const since = new Date(Date.now() - timeframeMap[timeframe as keyof typeof timeframeMap]);
-
-      const result = await prisma.analyticsEvent.groupBy({
-        by: ['type'],
-        where: {
-          blogId,
-          timestamp: { gte: since },
-        },
-        _count: true,
-      });
-      const [secs, nanos] = process.hrtime(startTime);
-      analyticsMetrics.dataStorageOperations.inc({ operation: 'read', status: 'success' });
-      analyticsMetrics.eventProcessingTime.observe({ event_type: 'historical_query' }, secs + nanos / 1e9);
-      return result;
-    } catch (error) {
-      const [secs, nanos] = process.hrtime(startTime);
-      analyticsMetrics.dataStorageOperations.inc({ operation: 'read', status: 'error' });
-      analyticsMetrics.eventProcessingTime.observe({ event_type: 'historical_query' }, secs + nanos / 1e9);
-      throw error;
-    }
-  }
 }

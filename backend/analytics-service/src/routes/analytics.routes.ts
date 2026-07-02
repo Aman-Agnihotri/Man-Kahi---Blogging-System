@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { AnalyticsController } from '@controllers/analytics.controller';
-import { authenticate } from '@shared/middlewares/auth';
+import { authenticate, rateLimit } from '@shared/middlewares/auth';
 import type { Request, Response, NextFunction, RequestHandler } from 'express-serve-static-core';
 import { trackEventProcessing, trackAggregation } from '@middlewares/metrics.middleware';
 import logger from '@shared/utils/logger';
@@ -146,6 +146,63 @@ const logRequest = (routeName: string) => {
  *                 type: string
  *               message:
  *                 type: string
+ *     BlogAnalyticsRow:
+ *       type: object
+ *       description: Flat snapshot matching the Prisma BlogAnalytics row, optionally refreshed with live Redis counters.
+ *       properties:
+ *         id:
+ *           type: string
+ *         blogId:
+ *           type: string
+ *         views:
+ *           type: integer
+ *         uniqueViews:
+ *           type: integer
+ *         reads:
+ *           type: integer
+ *         readProgress:
+ *           type: number
+ *         linkClicks:
+ *           type: integer
+ *         shareCount:
+ *           type: integer
+ *         likes:
+ *           type: integer
+ *         comments:
+ *           type: integer
+ *         shares:
+ *           type: integer
+ *         engagement:
+ *           type: number
+ *         deviceStats:
+ *           type: object
+ *           nullable: true
+ *         referrerStats:
+ *           type: object
+ *           nullable: true
+ *         timeSpentStats:
+ *           type: object
+ *           nullable: true
+ *         lastUpdated:
+ *           type: string
+ *           format: date-time
+ *     OverallStats:
+ *       type: object
+ *       properties:
+ *         views:
+ *           type: integer
+ *         uniqueViews:
+ *           type: integer
+ *         reads:
+ *           type: integer
+ *         linkClicks:
+ *           type: integer
+ *         avgReadProgress:
+ *           type: number
+ *         avgEngagement:
+ *           type: number
+ *         trackedBlogs:
+ *           type: integer
  */
 
 const router = Router();
@@ -158,9 +215,11 @@ const analyticsController = new AnalyticsController();
  *     tags:
  *       - Analytics
  *     summary: Track analytics event
- *     description: Track a generic analytics event (view, read, click)
- *     security:
- *       - bearerAuth: []
+ *     description: >
+ *       Track a generic analytics event (view, read, click). Open to anonymous
+ *       readers as well as authenticated users - the product supports
+ *       account-free browsing/reading, and anonymous visitors are identified
+ *       via the deviceId fingerprint instead of a JWT. Still rate limited.
  *     requestBody:
  *       required: true
  *       content:
@@ -192,9 +251,7 @@ const analyticsController = new AnalyticsController();
  */
 router.post(
   '/event',
-  authenticate({
-    rateLimit: { windowMs: 1 * 60 * 1000, max: 60 }
-  }) as unknown as RequestHandler,
+  rateLimit(1 * 60 * 1000, 60) as unknown as RequestHandler,
   logRequest('Track Event'),
   trackEventProcessing('track_event'),
   (req, res, next) => {
@@ -214,9 +271,9 @@ router.post(
  *     tags:
  *       - Analytics
  *     summary: Track reading progress
- *     description: Track a user's reading progress through a blog post
- *     security:
- *       - bearerAuth: []
+ *     description: >
+ *       Track a user's reading progress through a blog post. Open to
+ *       anonymous and authenticated readers alike; still rate limited.
  *     requestBody:
  *       required: true
  *       content:
@@ -248,9 +305,7 @@ router.post(
  */
 router.post(
   '/progress',
-  authenticate({
-    rateLimit: { windowMs: 1 * 60 * 1000, max: 60 }
-  }) as unknown as RequestHandler,
+  rateLimit(1 * 60 * 1000, 60) as unknown as RequestHandler,
   logRequest('Track Progress'),
   trackEventProcessing('track_progress'),
   (req, res, next) => {
@@ -270,9 +325,9 @@ router.post(
  *     tags:
  *       - Analytics
  *     summary: Track link click
- *     description: Track when a user clicks a link within a blog post
- *     security:
- *       - bearerAuth: []
+ *     description: >
+ *       Track when a user clicks a link within a blog post. Open to
+ *       anonymous and authenticated readers alike; still rate limited.
  *     requestBody:
  *       required: true
  *       content:
@@ -304,9 +359,7 @@ router.post(
  */
 router.post(
   '/link',
-  authenticate({
-    rateLimit: { windowMs: 1 * 60 * 1000, max: 60 }
-  }) as unknown as RequestHandler,
+  rateLimit(1 * 60 * 1000, 60) as unknown as RequestHandler,
   logRequest('Track Link'),
   trackEventProcessing('track_link'),
   (req, res, next) => {
@@ -325,7 +378,12 @@ router.post(
  *     tags:
  *       - Analytics
  *     summary: Get blog analytics
- *     description: Get analytics data for a specific blog post (Admin/Analyst only)
+ *     description: >
+ *       Get the current analytics snapshot for a specific blog post
+ *       (Admin/Analyst only). Returns a flat object matching the Prisma
+ *       BlogAnalytics row; if the blog has no analytics yet, returns a
+ *       zeroed-out object with the same shape rather than a 404, since a
+ *       brand-new blog simply has no analytics yet.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -340,13 +398,14 @@ router.post(
  *           type: string
  *           enum: [1h, 24h, 7d, 30d, all]
  *           default: 24h
+ *         description: Reserved for future historical breakdowns; BlogAnalytics is currently a single cumulative row, so this has no filtering effect yet.
  *     responses:
  *       200:
  *         description: Analytics data retrieved successfully
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/AnalyticsResponse'
+ *               $ref: '#/components/schemas/BlogAnalyticsRow'
  *       401:
  *         description: Unauthorized
  *         content:
@@ -382,6 +441,161 @@ router.get(
       userId: (req as any).user?.id
     });
     analyticsController.getBlogAnalytics(req, res).catch(next);
+  }
+);
+
+/**
+ * @swagger
+ * /analytics/stats/overall:
+ *   get:
+ *     tags:
+ *       - Analytics
+ *     summary: Get platform-wide analytics overview
+ *     description: Aggregate view/read/click totals across all blogs (Admin/Analyst only).
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Aggregate stats retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/OverallStats'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden - Requires admin or analyst role
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get(
+  '/stats/overall',
+  authenticate({
+    strategy: ['jwt'],
+    roles: ['admin', 'analyst'],
+    rateLimit: { windowMs: 1 * 60 * 1000, max: 300 }
+  }) as unknown as RequestHandler,
+  logRequest('Get Overall Stats'),
+  trackAggregation('get_overall_stats'),
+  (req, res, next) => {
+    analyticsController.getOverallStats(req, res).catch(next);
+  }
+);
+
+/**
+ * @swagger
+ * /analytics/trending:
+ *   get:
+ *     tags:
+ *       - Analytics
+ *     summary: Get trending blogs
+ *     description: Top blogs ordered by views descending (Admin/Analyst only).
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Trending blogs retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/BlogAnalyticsRow'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden - Requires admin or analyst role
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get(
+  '/trending',
+  authenticate({
+    strategy: ['jwt'],
+    roles: ['admin', 'analyst'],
+    rateLimit: { windowMs: 1 * 60 * 1000, max: 300 }
+  }) as unknown as RequestHandler,
+  logRequest('Get Trending Blogs'),
+  trackAggregation('get_trending'),
+  (req, res, next) => {
+    analyticsController.getTrending(req, res).catch(next);
+  }
+);
+
+/**
+ * @swagger
+ * /analytics/multi:
+ *   get:
+ *     tags:
+ *       - Analytics
+ *     summary: Get analytics for multiple blogs
+ *     description: >
+ *       Batch-fetch analytics rows for a set of blogs (Admin/Analyst only).
+ *       Accepts `blogIds` as a comma-separated string or as repeated/array
+ *       query params.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: blogIds
+ *         required: true
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *         style: form
+ *         explode: true
+ *     responses:
+ *       200:
+ *         description: Analytics rows retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/BlogAnalyticsRow'
+ *       400:
+ *         description: Invalid input data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden - Requires admin or analyst role
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get(
+  '/multi',
+  authenticate({
+    strategy: ['jwt'],
+    roles: ['admin', 'analyst'],
+    rateLimit: { windowMs: 1 * 60 * 1000, max: 300 }
+  }) as unknown as RequestHandler,
+  logRequest('Get Multi Blog Analytics'),
+  trackAggregation('get_multi_blog_analytics'),
+  (req, res, next) => {
+    analyticsController.getMultiBlogAnalytics(req, res).catch(next);
   }
 );
 
