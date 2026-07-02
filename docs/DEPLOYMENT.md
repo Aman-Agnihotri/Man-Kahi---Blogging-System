@@ -72,6 +72,20 @@ http://localhost:8080
 
 Direct service ports are bound to localhost for development, but the gateway should be the normal access path.
 
+### Smoke Test The Core Loop
+
+After the stack is up and healthy, exercise the full register → login →
+create → publish → view-by-slug → edit → appears-in-my-stories → delete
+loop against the gateway with one command:
+
+```bash
+cd docker/compose
+./scripts/smoke-test.sh
+```
+
+Set `SMOKE_TEST_BASE_URL` if the gateway isn't at the default
+`http://localhost:8080`.
+
 ### Check Status
 
 ```bash

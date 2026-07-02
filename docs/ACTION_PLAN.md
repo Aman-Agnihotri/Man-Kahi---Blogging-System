@@ -323,21 +323,34 @@ Acceptance criteria:
 
 Purpose: stop regressions while refactoring and adding features.
 
-- [ ] Add a root-level test command or script that runs all service tests.
-- [ ] Add auth service integration tests.
-- [ ] Add blog service integration tests.
-- [ ] Add analytics service tests.
-- [ ] Keep and expand admin service tests.
+- [x] Add a root-level test command or script that runs all service tests.
+  - Root `package.json`: `npm test` (auth/blog/analytics/admin in sequence), `npm run typecheck` (all 4 backend services + frontend), `npm run install:all`. No workspaces - each project stays independently installed, matching how Docker builds them.
+- [x] Add auth service integration tests.
+  - 21 tests: register, login (success/lockout/lock-expiry-reset/invalid-credentials), controller status mapping, logout, refresh-token, OAuth-disabled-mode.
+- [x] Add blog service integration tests.
+  - Pre-existing coverage (24 tests) plus one new regression test for the multipart-boolean-coercion bug below.
+- [x] Add analytics service tests.
+  - 17 tests, written from scratch (no test infra existed before this pass): event/progress/link tracking, all four analytics-retrieval endpoints.
+- [x] Keep and expand admin service tests.
+  - 56 tests: pre-existing suites updated for the new analytics contract and fixed ID validation, plus a new suite for the `listBlogs` moderation endpoint.
 - [ ] Add frontend smoke tests for core routes.
+  - Deferred: no frontend test framework (vitest/@nuxt/test-utils) is installed, and setting one up plus writing meaningful component tests is real new infra work beyond this pass's scope. Verified instead via `npm run typecheck` (clean across the whole app) and careful manual code review of every wired page - there was no way to launch an interactive browser in this environment either.
 - [ ] Add API contract tests for nginx-routed endpoints.
-- [ ] Add Docker Compose smoke test commands.
+  - Deferred alongside the Docker Compose smoke test below - both need a running stack, which this environment can't provide (see note).
+- [x] Add Docker Compose smoke test commands.
+  - `docker/compose/scripts/smoke-test.sh`: curls the full core loop (register → login → create → publish → view-by-slug → edit → appears in "my stories" → delete) through the nginx gateway. **Written and code-reviewed but not executed against a live stack**: this sandbox has no network access to pull Docker images (`docker compose up` fails resolving `docker.io`), so full end-to-end verification wasn't possible here - run it yourself after `docker compose up -d --build` before relying on it.
+  - While investigating why I couldn't verify this, found and fixed two real bugs it would otherwise have caught: (1) `docker/compose/.env.example`'s `DATABASE_URL` used `${POSTGRES_USER}:${POSTGRES_PASSWORD}` shell-style interpolation, which Docker Compose's `env_file:` does not expand - every service would have received a literal, broken connection string on a fresh clean-volume start. (2) blog-service's create/update endpoints are always submitted as multipart/form-data (for the optional cover image), so `published` always arrives as the string `"true"`/`"false"`, but the Zod schema required a real `boolean` and rejected it outright - every publish/draft toggle from the frontend's own multipart form submission would have 400'd. Both are fixed; see their respective commits/notes.
 - [ ] Add lint/typecheck workflow for each service and frontend.
+  - Typecheck: done (see above). Lint: deferred - `eslint` is listed as a devDependency in several `package.json`s but no `.eslintrc`/`eslint.config.*` exists anywhere in the repo for any service or the frontend; standing up rule sets and fixing the resulting violations from scratch across 5 projects is meaningfully more work than this pass's scope, and typecheck already provides the higher-value safety net (catches real type errors, not just style).
 
 Acceptance criteria:
 
-- Core workflows are covered by automated tests.
-- Local test commands are documented.
-- A deployment change can be verified without manual clicking only.
+- [x] Core workflows are covered by automated tests.
+  - Backend: yes, thoroughly (auth, blog, analytics, admin all pass `npm test`). Frontend: covered by typecheck + manual review only, not automated component/e2e tests (documented gap above).
+- [x] Local test commands are documented.
+  - `npm test` / `npm run typecheck` from the repo root; `docker/compose/scripts/smoke-test.sh` for a running stack.
+- [ ] A deployment change can be verified without manual clicking only.
+  - True for backend logic (jest + tsc). Not yet true for full-stack integration: the smoke-test script above exists for exactly this purpose but hasn't been run against a live stack (no Docker image pull access in this environment) - leaving this unchecked until someone runs it somewhere with normal network access and confirms it passes.
 
 ## Phase 7: Core Product Features
 
