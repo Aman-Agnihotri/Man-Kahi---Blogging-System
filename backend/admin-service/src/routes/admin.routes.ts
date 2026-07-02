@@ -231,6 +231,43 @@ router.get(
 
 /**
  * @swagger
+ * /admin/blogs:
+ *   get:
+ *     tags:
+ *       - Admin
+ *     summary: List blogs for moderation
+ *     description: Lists blogs regardless of published state, for moderation purposes.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: published
+ *         schema:
+ *           type: string
+ *           enum: [true, false]
+ *         description: Filter by publish state; omit to return both.
+ *     responses:
+ *       200:
+ *         description: Blogs retrieved successfully
+ */
+router.get(
+    '/blogs',
+    trackAdminOperation('list_blogs'),
+    (req, res, next) => {
+        adminController.listBlogs(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
  * /admin/analytics/blog/{blogId}:
  *   get:
  *     tags:

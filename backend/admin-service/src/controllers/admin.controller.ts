@@ -76,6 +76,54 @@ export class AdminController {
     this.analyticsServiceUrl = process.env['ANALYTICS_SERVICE_URL'] ?? 'http://analytics-service:3003';
   }
 
+  // List blogs for moderation, regardless of published state. Every other
+  // blog-listing surface (blog-service's /search, /user/:userId) only ever
+  // returns published blogs, so there was previously no way for an admin to
+  // find an already-hidden blog to restore it.
+  async listBlogs(req: Request, res: Response): Promise<Response> {
+    try {
+      const page = Math.max(1, Number(req.query['page']) || 1);
+      const limit = Math.min(100, Math.max(1, Number(req.query['limit']) || 20));
+      const publishedParam = req.query['published'];
+      const publishedFilter =
+        publishedParam === 'true' ? true : publishedParam === 'false' ? false : undefined;
+
+      const where = {
+        deletedAt: null,
+        ...(publishedFilter !== undefined && { published: publishedFilter }),
+      };
+
+      const dbTimer = trackDbOperation('findMany', 'blog');
+      const [blogs, total] = await Promise.all([
+        (prisma as any).blog.findMany({
+          where,
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            author: { select: { id: true, username: true, profileImage: true } },
+          },
+        }),
+        (prisma as any).blog.count({ where }),
+      ]);
+      dbTimer.end();
+
+      return res.json({
+        blogs,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+      });
+    } catch (error) {
+      trackAdminError('list_blogs_error');
+      logger.error('Error listing blogs for moderation:', error);
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to list blogs'
+      });
+    }
+  }
+
   // Get dashboard overview
   async getDashboardStats(req: Request, res: Response): Promise<Response> {
     try {
