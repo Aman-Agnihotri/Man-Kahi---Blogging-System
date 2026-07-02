@@ -7,14 +7,13 @@
 # Usage: from docker/compose, after `docker compose up -d --build`:
 #   ./scripts/smoke-test.sh
 #
-# Requires: curl, a POSIX shell, and (for JSON field extraction) either
-# `jq` or python3 - falls back to a minimal grep/sed extraction if neither
-# is available.
-#
-# NOTE: written and reviewed, but not executed against a live stack in the
-# environment this was authored in (no network access to pull Docker
-# images there) - run it yourself before relying on it, and open an issue
-# if a step doesn't match actual service behavior.
+# Requires: curl, a POSIX shell, and (for JSON field extraction) one of
+# `jq`, `node`, or `python3` - falls back to a minimal grep/sed extraction
+# if none is available. `node` is checked before `python3` since this is a
+# Node.js project (node is always present in this dev environment) and
+# because on some Windows setups `python3` resolves to a Microsoft Store
+# app-execution-alias shim that isn't real Python and fails at runtime
+# rather than being absent from PATH.
 
 set -euo pipefail
 
@@ -32,7 +31,9 @@ extract() {
   local json="$1" field="$2"
   if command -v jq >/dev/null 2>&1; then
     echo "$json" | jq -r --arg f "$field" '.[$f] // empty'
-  elif command -v python3 >/dev/null 2>&1; then
+  elif command -v node >/dev/null 2>&1; then
+    node -e "const d=JSON.parse(process.argv[1]); process.stdout.write(String(d[process.argv[2]] ?? ''))" "$json" "$field"
+  elif python3 -c "" >/dev/null 2>&1; then
     python3 -c "import sys,json; d=json.loads(sys.argv[1]); print(d.get(sys.argv[2],''))" "$json" "$field"
   else
     echo "$json" | sed -n "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -1
