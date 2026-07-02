@@ -456,14 +456,41 @@ Acceptance criteria:
 
 ## Definition Of Done For The Professional MVP
 
+A note on verification limits for this pass (2026-07-02): every item below
+that touches a running stack (Docker Compose, a live database, a browser)
+could only be verified statically here - unit/integration tests, `tsc`/
+`nuxi typecheck`, and careful manual code review against the real Prisma
+schema and actual request/response contracts, cross-checking every call
+site. This sandbox has no network access to pull Docker images at all, so
+no container could be started, and no browser was available either. That
+review process did catch and fix several real, serious bugs along the way
+(login was completely broken by a reversed `verifyPassword` argument
+order; every publish/draft toggle would have 400'd via multipart form
+data; `DATABASE_URL` would never have resolved on a fresh volume) - so the
+code-level confidence is real, not just "should work in theory." But per
+this project's own instructions, that is not the same thing as clicking
+through it in a browser, and none of the items below are checked off on
+the strength of static review alone. Run `docker/scripts/smoke-test.sh`
+(backend core loop, no browser needed) and a manual click-through in a
+browser to close the loop and check these off for real.
+
 - [ ] One command starts local development reliably.
+  - `docker compose up -d --build` is that command; a real `DATABASE_URL` bug that would have broken every service on first boot is now fixed (see Phase 1 notes). Not run against a live daemon here.
 - [ ] One documented path deploys to a single server.
+  - Documented in `docs/DEPLOYMENT.md`; config validates (`docker compose config`); not runtime-tested on a real machine.
 - [x] Only nginx is public in production.
 - [ ] A user can register, log in, write, publish, edit, delete, and view blogs.
+  - Every backend contract bug blocking this flow that was found is fixed (see Phase 2 notes, especially the `verifyPassword` and multipart-boolean bugs), and the frontend is fully wired against those real contracts (Phase 3). Not click-tested in a browser.
 - [ ] Search works from real indexed content.
+  - Blog-service's `/search` now supports both keyword search and query-less browsing against real Elasticsearch data, wired on the explore/home pages. Not run against a live Elasticsearch instance here.
 - [ ] User dashboard and stories use real data.
+  - Fully wired to `getMyBlogs()`; honest stats only (no fabricated aggregates). Not click-tested.
 - [ ] Admin can view dashboard data and moderate blog visibility.
+  - New `/admin/dashboard` page + new `GET /api/admin/blogs` moderation-listing endpoint (didn't exist before - there was no way to even see hidden blogs to restore them). Not click-tested.
 - [ ] Backups and restores are documented and tested.
+  - Documented and scripted (Phase 1); restore has not been executed against a real clean volume (no Docker access here) - see the verification-status note in `docs/DEPLOYMENT.md`.
 - [ ] Logs, health checks, and metrics work.
+  - Out of scope for this pass per the requested phase ordering (Phase 5, gated on 1-4 being fully done - Phase 1 isn't fully done because of the live-verification gap above). Health check endpoints/config exist from prior work; not independently re-verified here.
 - [ ] Core workflows have automated tests.
+  - Backend: yes, thoroughly - auth (21 tests), blog (25), analytics (17), admin (56), all passing via `npm test` from the repo root. Frontend: typecheck only, no automated component/e2e tests (documented gap in Phase 6).
 - [x] README links to this action plan.
