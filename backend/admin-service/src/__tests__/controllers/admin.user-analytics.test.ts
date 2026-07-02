@@ -52,8 +52,9 @@ describe('AdminController - User Analytics', () => {
         readProgress: 0.75,
         linkClicks: 150,
         shareCount: 50,
-        commentCount: 75,
-        likeCount: 200,
+        comments: 75,
+        likes: 200,
+        shares: 30,
         engagement: 0.85,
         deviceStats: { desktop: 600, mobile: 350, tablet: 50 },
         referrerStats: {
@@ -80,7 +81,8 @@ describe('AdminController - User Analytics', () => {
         expect.objectContaining({
           where: {
             authorId: 'user-123',
-            published: true
+            published: true,
+            deletedAt: null
           }
         })
       );

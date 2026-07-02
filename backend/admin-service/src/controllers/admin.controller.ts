@@ -10,6 +10,13 @@ import {
   trackExternalCall 
 } from '@middlewares/metrics.middleware';
 
+// Mirrors the real Prisma `BlogAnalytics` columns exactly (see
+// backend/shared/prisma/schema.prisma) - this is also the exact flat shape
+// returned by analytics-service's blog/trending/multi endpoints. Do not add
+// fields here that don't exist on that model; deleted fields
+// (avgTimeOnPage, bounceRate, completionRate, commentCount, likeCount,
+// recentVisitors, interactionEvents, readingDepth, scrollDepth, exitPoints)
+// were never real - they had no backing column and no data source.
 interface BaseAnalytics {
   id: string;
   blogId: string;
@@ -20,20 +27,10 @@ interface BaseAnalytics {
   linkClicks: number;
   shareCount: number;
   lastUpdated: Date;
-  recentVisitors: any;
-  avgTimeOnPage: number;
-  bounceRate: number;
-  completionRate: number;
-  commentCount: number;
-  likeCount: number;
   engagement: number;
-  deviceStats: Record<string, number>;
-  referrerStats: Record<string, number>;
-  timeSpentStats: Record<string, number>;
-  interactionEvents: Record<string, number>;
-  readingDepth: Record<string, number>;
-  scrollDepth: Record<string, number>;
-  exitPoints: Record<string, number>;
+  deviceStats: Record<string, number> | null;
+  referrerStats: Record<string, number> | null;
+  timeSpentStats: Record<string, number> | null;
   likes: number;
   comments: number;
   shares: number;
@@ -45,7 +42,7 @@ interface AnalyticsResponse extends Omit<BaseAnalytics, 'lastUpdated'> {
   lastUpdated: string;
 }
 
-type BlogWithAnalytics = ExtendedBlog & {
+type BlogWithAnalytics = Omit<ExtendedBlog, 'analytics'> & {
   analytics: Analytics;
 };
 
@@ -88,16 +85,20 @@ export class AdminController {
       const dbTimer = trackDbOperation('count', 'blog');
       const totalBlogs = await (prisma as any).blog.count({
         where: {
-          published: true
+          published: true,
+          deletedAt: null
         }
       });
       dbTimer.end();
 
-      // Get total users count
+      // Get total users count. Not filtered by emailVerified: there is no
+      // email verification flow implemented yet (see Phase 4), so every
+      // user's emailVerified defaults to false and this would otherwise
+      // always read 0 regardless of real signups.
       const usersDbTimer = trackDbOperation('count', 'user');
       const totalUsers = await (prisma as any).user.count({
         where: {
-          emailVerified: true
+          deletedAt: null
         }
       });
       usersDbTimer.end();
@@ -242,7 +243,8 @@ export class AdminController {
       const blogs = await (prisma as any).blog.findMany({
         where: {
           authorId: userId,
-          published: true
+          published: true,
+          deletedAt: null
         },
         select: {
           id: true,
@@ -349,7 +351,8 @@ export class AdminController {
       const blogs = await (prisma as any).blog.findMany({
         where: {
           id: { in: blogIds },
-          published: true
+          published: true,
+          deletedAt: null
         },
         include: {
           author: {
@@ -384,14 +387,7 @@ export class AdminController {
               lastUpdated: new Date(analytics.lastUpdated),
               deviceStats: analytics.deviceStats || {},
               referrerStats: analytics.referrerStats || {},
-              timeSpentStats: analytics.timeSpentStats || {},
-              interactionEvents: analytics.interactionEvents || {},
-              readingDepth: analytics.readingDepth || {},
-              scrollDepth: analytics.scrollDepth || {},
-              exitPoints: analytics.exitPoints || {},
-              likes: analytics.likeCount || 0,
-              comments: analytics.commentCount || 0,
-              shares: analytics.shareCount || 0
+              timeSpentStats: analytics.timeSpentStats || {}
             } as Analytics
         });
       }
@@ -524,8 +520,11 @@ export class AdminController {
         throw new Error('Visibility state is required');
       }
 
-      // Validate blog ID format
-      const blogIdSchema = z.string().regex(/^blog-[a-zA-Z0-9-]+$/);
+      // Validate blog ID format. Real Prisma IDs are cuid()-generated
+      // (e.g. "cm3x9k2p40000ab12cd34ef56"), not prefixed with "blog-".
+      // Keep this generic rather than over-fitting to cuid's exact shape,
+      // in case the ID scheme ever changes.
+      const blogIdSchema = z.string().min(1).regex(/^[a-zA-Z0-9_-]+$/);
       try {
         await blogIdSchema.parseAsync(req.params['blogId']);
       } catch {

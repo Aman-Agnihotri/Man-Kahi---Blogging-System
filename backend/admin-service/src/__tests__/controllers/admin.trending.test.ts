@@ -45,8 +45,9 @@ describe('AdminController - Trending Content', () => {
         readProgress: 0.85,
         linkClicks: 200,
         shareCount: 75,
-        likeCount: 250,
-        commentCount: 100,
+        likes: 250,
+        comments: 100,
+        shares: 40,
         engagement: 0.9,
         lastUpdated: '2024-02-06T00:00:00Z',
         deviceStats: {
@@ -71,8 +72,9 @@ describe('AdminController - Trending Content', () => {
         readProgress: 0.75,
         linkClicks: 150,
         shareCount: 50,
-        likeCount: 180,
-        commentCount: 70,
+        likes: 180,
+        comments: 70,
+        shares: 25,
         engagement: 0.8,
         lastUpdated: '2024-02-06T00:00:00Z',
         deviceStats: {
@@ -152,7 +154,8 @@ describe('AdminController - Trending Content', () => {
         expect.objectContaining({
           where: {
             id: { in: ['blog-1', 'blog-2'] },
-            published: true
+            published: true,
+            deletedAt: null
           }
         })
       );

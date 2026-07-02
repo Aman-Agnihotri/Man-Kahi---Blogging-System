@@ -27,7 +27,7 @@ describe('AdminController - Blog Visibility', () => {
       status: jest.fn().mockReturnThis(),
     } as Partial<Response>;
     mockRequest = {
-      params: { blogId: 'blog-123' },
+      params: { blogId: 'cm3x9k2p40000ab12cd34ef56' },
       body: { visible: true }
     };
 
@@ -36,7 +36,7 @@ describe('AdminController - Blog Visibility', () => {
   });
 
   const mockBlogData = {
-    id: 'blog-123',
+    id: 'cm3x9k2p40000ab12cd34ef56',
     title: 'Test Blog',
     published: true,
     author: {
@@ -55,7 +55,7 @@ describe('AdminController - Blog Visibility', () => {
     );
 
     expect(prisma.blog.update).toHaveBeenCalledWith({
-      where: { id: 'blog-123' },
+      where: { id: 'cm3x9k2p40000ab12cd34ef56' },
       data: { published: true },
       include: {
         author: {
@@ -185,7 +185,10 @@ describe('AdminController - Blog Visibility', () => {
   it('should validate blog ID format', async () => {
     const invalidRequest = {
       ...mockRequest,
-      params: { blogId: '123-invalid' }
+      // Contains a slash and a space, which no valid ID scheme (cuid or
+      // otherwise) would ever produce - genuinely exercises the regex
+      // rather than relying on a hardcoded "blog-" prefix that was never real.
+      params: { blogId: 'not/a valid id' }
     };
 
     await adminController.updateBlogVisibility(

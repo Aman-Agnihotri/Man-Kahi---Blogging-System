@@ -4,6 +4,10 @@
   "description": "Admin service for ManKahi blogging platform",
   "main": "dist/server.js",
   "scripts": {
+    "prisma:generate": "node ../shared/scripts/generate-client.js",
+    "predev": "npm run prisma:generate",
+    "prebuild": "npm run prisma:generate",
+    "pretest": "npm run prisma:generate",
     "dev": "ts-node-dev -r tsconfig-paths/register --respawn --transpile-only src/server.ts",
     "build": "tsc --project tsconfig.json",
     "start": "node dist/server.js",
@@ -33,6 +37,7 @@
     "@typescript-eslint/parser": "^8.22.0",
     "eslint": "^9.19.0",
     "jest": "^29.7.0",
+    "prisma": "6.3.0",
     "ts-jest": "^29.2.5",
     "ts-node-dev": "^2.0.0",
     "tsconfig-paths": "^4.2.0",

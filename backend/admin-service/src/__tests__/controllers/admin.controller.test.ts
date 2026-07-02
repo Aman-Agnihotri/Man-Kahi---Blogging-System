@@ -28,9 +28,12 @@ describe('AdminController', () => {
     const mockAnalyticsResponse = {
       data: {
         views: 1000,
-        uniqueVisitors: 750,
-        avgTimeOnSite: 180,
-        bounceRate: 0.35
+        uniqueViews: 750,
+        reads: 600,
+        linkClicks: 120,
+        avgReadProgress: 0.62,
+        avgEngagement: 0.4,
+        trackedBlogs: 100
       }
     };
 

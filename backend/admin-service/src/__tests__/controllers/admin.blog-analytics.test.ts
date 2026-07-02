@@ -46,8 +46,9 @@ describe('AdminController - Blog Analytics', () => {
         readProgress: 0.75,
         linkClicks: 150,
         shareCount: 50,
-        likeCount: 200,
-        commentCount: 75,
+        likes: 200,
+        comments: 75,
+        shares: 30,
         engagement: 0.85,
         deviceStats: {
           desktop: 600,

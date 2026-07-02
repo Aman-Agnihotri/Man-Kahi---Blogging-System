@@ -22,19 +22,29 @@ import {
  *           type: integer
  *         analytics:
  *           type: object
+ *           description: Passthrough of analytics-service's GET /api/analytics/stats/overall response.
  *           properties:
  *             views:
  *               type: integer
- *             uniqueVisitors:
+ *             uniqueViews:
  *               type: integer
- *             avgTimeOnSite:
+ *             reads:
+ *               type: integer
+ *             linkClicks:
+ *               type: integer
+ *             avgReadProgress:
  *               type: number
- *             bounceRate:
+ *             avgEngagement:
  *               type: number
+ *             trackedBlogs:
+ *               type: integer
  *     BlogAnalytics:
  *       type: object
+ *       description: Flat shape matching the Prisma BlogAnalytics row exactly.
  *       properties:
  *         id:
+ *           type: string
+ *         blogId:
  *           type: string
  *         views:
  *           type: integer
@@ -52,14 +62,22 @@ import {
  *           type: integer
  *         comments:
  *           type: integer
+ *         shares:
+ *           type: integer
  *         engagement:
  *           type: number
  *         deviceStats:
  *           type: object
+ *           nullable: true
  *         referrerStats:
  *           type: object
+ *           nullable: true
  *         timeSpentStats:
  *           type: object
+ *           nullable: true
+ *         lastUpdated:
+ *           type: string
+ *           format: date-time
  *     UserAnalytics:
  *       type: object
  *       properties:
