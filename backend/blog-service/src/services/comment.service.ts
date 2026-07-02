@@ -8,7 +8,15 @@ const AUTHOR_SELECT = {
 } as const
 
 export class CommentService {
-  async listComments(blogId: string, page = 1, limit = 20) {
+  // Mirrors BlogService's private canReadBlog: a draft's comments are only
+  // visible to its own author. Without this, the (intentionally public,
+  // no-auth-required) list endpoint would let anyone enumerate comments
+  // on someone else's unpublished draft.
+  private canReadBlog(blog: { published: boolean; authorId: string }, userId?: string): boolean {
+    return blog.published || (!!userId && blog.authorId === userId)
+  }
+
+  async listComments(blogId: string, page = 1, limit = 20, userId?: string) {
     logger.debug(`Listing comments for blog ${blogId}`, { page, limit })
 
     if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
@@ -17,9 +25,9 @@ export class CommentService {
 
     const blog = await prisma.blog.findUnique({
       where: { id: blogId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, published: true, authorId: true },
     })
-    if (!blog) {
+    if (!blog || !this.canReadBlog(blog, userId)) {
       logger.warn(`Blog not found when listing comments: ${blogId}`)
       throw new Error('Blog not found')
     }
@@ -55,9 +63,9 @@ export class CommentService {
 
     const blog = await prisma.blog.findUnique({
       where: { id: blogId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, published: true, authorId: true },
     })
-    if (!blog) {
+    if (!blog || !this.canReadBlog(blog, userId)) {
       logger.warn(`Blog not found when creating comment: ${blogId}`)
       throw new Error('Blog not found')
     }

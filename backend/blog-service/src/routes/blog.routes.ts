@@ -286,9 +286,13 @@ router.delete(
   }) as RequestHandler
 );
 
-// List / create comments on a blog (list is public, create requires auth)
+// List / create comments on a blog (list is public, create requires auth).
+// optionalAuthenticate so an author viewing their own draft's comments is
+// recognized - the service layer still enforces published-or-author
+// visibility either way, this just lets it know who's asking.
 router.get(
   '/:id/comments',
+  optionalAuthenticate,
   trackBlogOperation('list_comments') as RequestHandler,
   ((req: Request, res: Response, next: NextFunction) => {
     commentController.list(req, res).catch(next);

@@ -24,7 +24,7 @@ const prismaMock = prisma as unknown as {
 describe('CommentService.listComments', () => {
   it('returns top-level comments with their replies, paginated', async () => {
     const service = new CommentService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1' });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', published: true, authorId: 'author-1' });
     const comments = [{ id: 'comment-1', replies: [] }];
     prismaMock.comment.findMany.mockResolvedValue(comments);
     prismaMock.comment.count.mockResolvedValue(1);
@@ -49,12 +49,34 @@ describe('CommentService.listComments', () => {
     await expect(service.listComments('blog-1', 0, 20)).rejects.toThrow('Invalid pagination');
     await expect(service.listComments('blog-1', 1, 500)).rejects.toThrow('Invalid pagination');
   });
+
+  // Regression test: the list endpoint is intentionally public (no auth
+  // required), but that must not let anyone enumerate comments on someone
+  // else's unpublished draft just by knowing its ID.
+  it('treats an unpublished blog as not found for an anonymous or non-author viewer', async () => {
+    const service = new CommentService();
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', published: false, authorId: 'author-1' });
+
+    await expect(service.listComments('blog-1', 1, 20)).rejects.toThrow('Blog not found');
+    await expect(service.listComments('blog-1', 1, 20, 'someone-else')).rejects.toThrow('Blog not found');
+  });
+
+  it('lets the draft author list comments on their own unpublished blog', async () => {
+    const service = new CommentService();
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', published: false, authorId: 'author-1' });
+    prismaMock.comment.findMany.mockResolvedValue([]);
+    prismaMock.comment.count.mockResolvedValue(0);
+
+    await expect(service.listComments('blog-1', 1, 20, 'author-1')).resolves.toEqual({
+      comments: [], total: 0, page: 1, totalPages: 0,
+    });
+  });
 });
 
 describe('CommentService.createComment', () => {
   it('creates a top-level comment and increments the analytics counter', async () => {
     const service = new CommentService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1' });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', published: true, authorId: 'author-1' });
     const comment = { id: 'comment-1', blogId: 'blog-1', userId: 'user-1', content: 'Nice post' };
     prismaMock.comment.create.mockResolvedValue(comment);
 
@@ -73,7 +95,7 @@ describe('CommentService.createComment', () => {
 
   it('creates a reply when parentId points to a valid top-level comment on the same blog', async () => {
     const service = new CommentService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1' });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', published: true, authorId: 'author-1' });
     prismaMock.comment.findUnique.mockResolvedValue({ id: 'parent-1', blogId: 'blog-1', parentId: null, deletedAt: null });
     prismaMock.comment.create.mockResolvedValue({ id: 'reply-1' });
 
@@ -86,7 +108,7 @@ describe('CommentService.createComment', () => {
 
   it('rejects replying to a reply (only one level of nesting supported)', async () => {
     const service = new CommentService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1' });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', published: true, authorId: 'author-1' });
     prismaMock.comment.findUnique.mockResolvedValue({ id: 'reply-1', blogId: 'blog-1', parentId: 'parent-1', deletedAt: null });
 
     await expect(service.createComment('blog-1', 'user-1', 'nested reply', 'reply-1'))
@@ -96,7 +118,7 @@ describe('CommentService.createComment', () => {
 
   it('rejects a parentId that does not exist on this blog', async () => {
     const service = new CommentService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1' });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', published: true, authorId: 'author-1' });
     prismaMock.comment.findUnique.mockResolvedValue({ id: 'parent-1', blogId: 'other-blog', parentId: null, deletedAt: null });
 
     await expect(service.createComment('blog-1', 'user-1', 'reply', 'parent-1'))
@@ -107,6 +129,15 @@ describe('CommentService.createComment', () => {
     const service = new CommentService();
     prismaMock.blog.findUnique.mockResolvedValue(null);
     await expect(service.createComment('missing', 'user-1', 'hello')).rejects.toThrow('Blog not found');
+  });
+
+  it('rejects commenting on someone else\'s unpublished draft', async () => {
+    const service = new CommentService();
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', published: false, authorId: 'author-1' });
+
+    await expect(service.createComment('blog-1', 'someone-else', 'hello'))
+      .rejects.toThrow('Blog not found');
+    expect(prismaMock.comment.create).not.toHaveBeenCalled();
   });
 });
 

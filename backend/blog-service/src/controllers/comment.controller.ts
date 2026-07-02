@@ -41,7 +41,7 @@ export class CommentController {
 
     try {
       const { page, limit } = paginationQuerySchema.parse(req.query)
-      const result = await this.commentService.listComments(id, page, limit);
+      const result = await this.commentService.listComments(id, page, limit, req.user?.id);
       return res.json(result)
     } catch (error) {
       logger.error('Error listing comments:', error)

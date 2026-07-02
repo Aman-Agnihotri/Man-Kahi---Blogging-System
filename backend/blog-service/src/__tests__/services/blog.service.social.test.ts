@@ -46,7 +46,7 @@ const updateBlogIndexMock = updateBlogIndex as jest.Mock;
 describe('BlogService likes', () => {
   it('creates a Like row and increments the analytics counter only on first like', async () => {
     const service = new BlogService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null, published: true, authorId: 'author-1' });
     prismaMock.like.findUnique.mockResolvedValue(null);
     prismaMock.blogAnalytics.update.mockResolvedValue({ likes: 1 });
 
@@ -63,7 +63,7 @@ describe('BlogService likes', () => {
 
   it('is idempotent - repeat likes do not re-create the row or increment again', async () => {
     const service = new BlogService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null, published: true, authorId: 'author-1' });
     prismaMock.like.findUnique.mockResolvedValue({ id: 'like-1', blogId: 'blog-1', userId: 'user-1' });
     prismaMock.blogAnalytics.findUnique.mockResolvedValue({ likes: 5 });
 
@@ -83,6 +83,27 @@ describe('BlogService likes', () => {
     await expect(service.likeBlog('blog-1', 'user-1')).rejects.toThrow('Blog not found');
 
     expect(prismaMock.like.create).not.toHaveBeenCalled();
+  });
+
+  // Regression test: liking must respect the same visibility rule as
+  // reading a blog - otherwise any authenticated user could like (and by
+  // the success/failure response, confirm the existence of) someone
+  // else's unpublished draft just by knowing its ID.
+  it('rejects liking someone else\'s unpublished draft', async () => {
+    const service = new BlogService();
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null, published: false, authorId: 'author-1' });
+
+    await expect(service.likeBlog('blog-1', 'someone-else')).rejects.toThrow('Blog not found');
+    expect(prismaMock.like.create).not.toHaveBeenCalled();
+  });
+
+  it('lets the author like their own unpublished draft', async () => {
+    const service = new BlogService();
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null, published: false, authorId: 'author-1' });
+    prismaMock.like.findUnique.mockResolvedValue(null);
+    prismaMock.blogAnalytics.update.mockResolvedValue({ likes: 1 });
+
+    await expect(service.likeBlog('blog-1', 'author-1')).resolves.toEqual({ liked: true, likesCount: 1 });
   });
 
   it('deletes a Like row and decrements the counter only if a like existed', async () => {
@@ -119,7 +140,7 @@ describe('BlogService likes', () => {
 describe('BlogService bookmarks', () => {
   it('creates a Bookmark row idempotently with no analytics counter', async () => {
     const service = new BlogService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null, published: true, authorId: 'author-1' });
     prismaMock.bookmark.findUnique.mockResolvedValue(null);
 
     const result = await service.bookmarkBlog('blog-1', 'user-1');
@@ -131,7 +152,7 @@ describe('BlogService bookmarks', () => {
 
   it('does not re-create a bookmark that already exists', async () => {
     const service = new BlogService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null, published: true, authorId: 'author-1' });
     prismaMock.bookmark.findUnique.mockResolvedValue({ id: 'bookmark-1' });
 
     const result = await service.bookmarkBlog('blog-1', 'user-1');
@@ -144,6 +165,14 @@ describe('BlogService bookmarks', () => {
     const service = new BlogService();
     prismaMock.blog.findUnique.mockResolvedValue(null);
     await expect(service.bookmarkBlog('missing', 'user-1')).rejects.toThrow('Blog not found');
+  });
+
+  it('rejects bookmarking someone else\'s unpublished draft', async () => {
+    const service = new BlogService();
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null, published: false, authorId: 'author-1' });
+
+    await expect(service.bookmarkBlog('blog-1', 'someone-else')).rejects.toThrow('Blog not found');
+    expect(prismaMock.bookmark.create).not.toHaveBeenCalled();
   });
 
   it('removes a bookmark idempotently', async () => {

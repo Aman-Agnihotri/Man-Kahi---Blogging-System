@@ -554,9 +554,13 @@ export class BlogService {
   async likeBlog(blogId: string, userId: string) {
     const blog = await prisma.blog.findUnique({
       where: { id: blogId },
-      select: { id: true, deletedAt: true },
+      select: { id: true, deletedAt: true, published: true, authorId: true },
     });
-    if (!blog || blog.deletedAt) {
+    // Same visibility rule as reading a blog by slug: a draft is only
+    // interactable by its own author. Without this, any authenticated
+    // user could like/bookmark/comment on someone else's unpublished
+    // draft just by guessing or otherwise obtaining its ID.
+    if (!blog || blog.deletedAt || !this.canReadBlog(blog, userId)) {
       throw new Error('Blog not found');
     }
 
@@ -583,6 +587,11 @@ export class BlogService {
   }
 
   async unlikeBlog(blogId: string, userId: string) {
+    // Deliberately no canReadBlog visibility check here (unlike likeBlog):
+    // removing your own prior like must stay possible even if the blog
+    // was unpublished after you liked it - you already know it exists,
+    // there's no new information disclosed, and otherwise a like placed
+    // while public would become permanently un-removable via the API.
     const blog = await prisma.blog.findUnique({
       where: { id: blogId },
       select: { id: true, deletedAt: true },
@@ -618,9 +627,9 @@ export class BlogService {
   async bookmarkBlog(blogId: string, userId: string) {
     const blog = await prisma.blog.findUnique({
       where: { id: blogId },
-      select: { id: true, deletedAt: true },
+      select: { id: true, deletedAt: true, published: true, authorId: true },
     });
-    if (!blog || blog.deletedAt) {
+    if (!blog || blog.deletedAt || !this.canReadBlog(blog, userId)) {
       throw new Error('Blog not found');
     }
 
@@ -635,6 +644,8 @@ export class BlogService {
   }
 
   async unbookmarkBlog(blogId: string, userId: string) {
+    // Same reasoning as unlikeBlog: no visibility check, removing your
+    // own bookmark must stay possible regardless of current visibility.
     const blog = await prisma.blog.findUnique({
       where: { id: blogId },
       select: { id: true, deletedAt: true },
