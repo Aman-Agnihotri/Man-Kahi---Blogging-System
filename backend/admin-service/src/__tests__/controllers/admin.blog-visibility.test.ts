@@ -4,6 +4,7 @@ import axios from 'axios';
 import { jest } from '@jest/globals';
 import { trackAdminError, trackExternalCall } from '@middlewares/metrics.middleware';
 import logger from '@shared/utils/logger';
+import prisma from '@shared/utils/prismaClient';
 
 // Mock logger
 jest.mock('@shared/utils/logger', () => ({
@@ -29,8 +30,16 @@ describe('AdminController - Blog Visibility', () => {
     mockRequest = {
       params: { blogId: 'cm3x9k2p40000ab12cd34ef56' },
       body: { visible: true },
-      headers: { authorization: 'Bearer test-token' }
-    };
+      headers: { authorization: 'Bearer test-token' },
+      user: {
+        id: 'admin-1',
+        email: 'admin@test.com',
+        username: 'admin',
+        roles: ['admin'],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    } as unknown as Partial<Request>;
 
     // Reset all mocks before each test
     jest.clearAllMocks();
@@ -62,6 +71,15 @@ describe('AdminController - Blog Visibility', () => {
     );
     expect(jsonMock).toHaveBeenCalledWith(mockBlogData);
     expect(trackExternalCall).toHaveBeenCalledWith('blog', 'visibility');
+    expect((prisma as any).auditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorId: 'admin-1',
+        action: 'blog.visibility',
+        targetType: 'blog',
+        targetId: 'cm3x9k2p40000ab12cd34ef56',
+        metadata: { visible: true }
+      }
+    });
   });
 
   it('should return 404 for non-existent blog', async () => {

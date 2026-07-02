@@ -467,4 +467,387 @@ router.put(
     }
 );
 
+/**
+ * @swagger
+ * /admin/blog/{blogId}:
+ *   delete:
+ *     tags:
+ *       - Admin
+ *     summary: Delete abusive content (hard takedown)
+ *     description: Delegates to blog-service's DELETE /api/blogs/:blogId/moderate to permanently remove a blog.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: blogId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Blog deleted successfully
+ *       404:
+ *         description: Blog not found
+ *       502:
+ *         description: Blog service unavailable
+ */
+router.delete(
+    '/blog/:blogId',
+    trackAdminOperation('delete_blog'),
+    (req, res, next) => {
+        adminController.deleteBlog(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/users:
+ *   get:
+ *     tags:
+ *       - Admin
+ *     summary: List users for management
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Matches against username or email (case-insensitive contains).
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, suspended, deleted]
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ */
+router.get(
+    '/users',
+    trackAdminOperation('list_users'),
+    (req, res, next) => {
+        adminController.listUsers(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/users/{userId}/suspend:
+ *   put:
+ *     tags:
+ *       - Admin
+ *     summary: Suspend a user
+ *     description: Admin-initiated, reversible account suspension.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: User suspended successfully
+ *       400:
+ *         description: User already suspended
+ *       404:
+ *         description: User not found
+ */
+router.put(
+    '/users/:userId/suspend',
+    trackAdminOperation('suspend_user'),
+    (req, res, next) => {
+        adminController.suspendUser(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/users/{userId}/unsuspend:
+ *   put:
+ *     tags:
+ *       - Admin
+ *     summary: Reverse a user suspension
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User unsuspended successfully
+ *       400:
+ *         description: User is not suspended
+ *       404:
+ *         description: User not found
+ */
+router.put(
+    '/users/:userId/unsuspend',
+    trackAdminOperation('unsuspend_user'),
+    (req, res, next) => {
+        adminController.unsuspendUser(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/roles:
+ *   get:
+ *     tags:
+ *       - Admin
+ *     summary: List all roles with their permissions
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Roles retrieved successfully
+ */
+router.get(
+    '/roles',
+    trackAdminOperation('list_roles'),
+    (req, res, next) => {
+        adminController.listRoles(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/users/{userId}/roles:
+ *   post:
+ *     tags:
+ *       - Admin
+ *     summary: Assign a role to a user
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               roleId:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Role assigned successfully
+ *       404:
+ *         description: User or role not found
+ *       409:
+ *         description: User already has this role
+ */
+router.post(
+    '/users/:userId/roles',
+    trackAdminOperation('assign_role'),
+    (req, res, next) => {
+        adminController.assignRole(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/users/{userId}/roles/{roleId}:
+ *   delete:
+ *     tags:
+ *       - Admin
+ *     summary: Revoke a role from a user
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: roleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Role revoked successfully
+ *       404:
+ *         description: The user does not have this role
+ */
+router.delete(
+    '/users/:userId/roles/:roleId',
+    trackAdminOperation('revoke_role'),
+    (req, res, next) => {
+        adminController.revokeRole(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/reports:
+ *   get:
+ *     tags:
+ *       - Admin
+ *     summary: List reported content
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [open, resolved, dismissed]
+ *           default: open
+ *     responses:
+ *       200:
+ *         description: Reports retrieved successfully
+ */
+router.get(
+    '/reports',
+    trackAdminOperation('list_reports'),
+    (req, res, next) => {
+        adminController.listReports(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/reports/{reportId}/resolve:
+ *   put:
+ *     tags:
+ *       - Admin
+ *     summary: Resolve an open report
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: reportId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               actionTaken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Report resolved successfully
+ *       400:
+ *         description: Report is not open
+ *       404:
+ *         description: Report not found
+ */
+router.put(
+    '/reports/:reportId/resolve',
+    trackAdminOperation('resolve_report'),
+    (req, res, next) => {
+        adminController.resolveReport(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/reports/{reportId}/dismiss:
+ *   put:
+ *     tags:
+ *       - Admin
+ *     summary: Dismiss an open report
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: reportId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Report dismissed successfully
+ *       400:
+ *         description: Report is not open
+ *       404:
+ *         description: Report not found
+ */
+router.put(
+    '/reports/:reportId/dismiss',
+    trackAdminOperation('dismiss_report'),
+    (req, res, next) => {
+        adminController.dismissReport(req, res).catch(next);
+    }
+);
+
+/**
+ * @swagger
+ * /admin/audit-log:
+ *   get:
+ *     tags:
+ *       - Admin
+ *     summary: List admin audit log entries
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: action
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: actorId
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Audit log entries retrieved successfully
+ */
+router.get(
+    '/audit-log',
+    trackAdminOperation('list_audit_log'),
+    (req, res, next) => {
+        adminController.getAuditLog(req, res).catch(next);
+    }
+);
+
 export default router;

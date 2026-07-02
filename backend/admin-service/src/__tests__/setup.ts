@@ -23,6 +23,29 @@ jest.mock('@shared/utils/prismaClient', () => ({
       update: jest.fn()
     },
     user: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn()
+    },
+    userRole: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      delete: jest.fn()
+    },
+    role: {
+      findMany: jest.fn(),
+      findUnique: jest.fn()
+    },
+    report: {
+      findMany: jest.fn(),
+      count: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn()
+    },
+    auditLog: {
+      create: jest.fn(),
+      findMany: jest.fn(),
       count: jest.fn()
     },
     tag: {
@@ -37,6 +60,7 @@ jest.mock('axios', () => ({
   default: {
     get: jest.fn(),
     put: jest.fn(),
+    delete: jest.fn(),
     create: jest.fn().mockReturnThis(),
     isAxiosError: (error: any) => error.isAxiosError === true
   }
