@@ -73,6 +73,33 @@ describe('BlogService contract fixes', () => {
     expect(cacheMock.set).toHaveBeenCalledWith('same-title-1', JSON.stringify(blogRecord));
   });
 
+  it('sets publishedAt when creating a blog as published, leaves it null for a draft', async () => {
+    const service = new BlogService();
+    prismaMock.blog.findFirst.mockResolvedValue(null);
+    prismaMock.blog.create.mockResolvedValue(blogRecord);
+
+    await service.createBlog({
+      title: 'Same Title',
+      content: '# Same Title\n\nBody',
+      authorId: 'author-1',
+      published: true,
+    });
+    expect(prismaMock.blog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ publishedAt: expect.any(Date) }),
+    }));
+
+    prismaMock.blog.create.mockClear();
+    await service.createBlog({
+      title: 'Same Title',
+      content: '# Same Title\n\nBody',
+      authorId: 'author-1',
+      published: false,
+    });
+    expect(prismaMock.blog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ publishedAt: null }),
+    }));
+  });
+
   it('allows authors to read their own cached drafts without counting a public view', async () => {
     const service = new BlogService();
     const draftBlog = {
@@ -194,6 +221,36 @@ describe('BlogService contract fixes', () => {
     }));
     expect(cacheMock.invalidate).toHaveBeenCalledWith('same-title');
     expect(cacheMock.invalidate).toHaveBeenCalledWith('updated-title');
+  });
+
+  it('sets publishedAt only on the first transition from unpublished to published', async () => {
+    const service = new BlogService();
+    prismaMock.blog.update.mockResolvedValue(blogRecord);
+
+    // First publish: currently unpublished, no publishedAt yet -> should set it.
+    prismaMock.blog.findUnique.mockResolvedValue({
+      authorId: 'author-1',
+      slug: 'same-title',
+      published: false,
+      publishedAt: null,
+      tags: [],
+    });
+    await service.updateBlog('blog-1', 'author-1', { published: true });
+    expect(prismaMock.blog.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ published: true, publishedAt: expect.any(Date) }),
+    }));
+
+    // Already published: re-sending published:true should not reset publishedAt.
+    prismaMock.blog.update.mockClear();
+    prismaMock.blog.findUnique.mockResolvedValue({
+      authorId: 'author-1',
+      slug: 'same-title',
+      published: true,
+      publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+      tags: [],
+    });
+    await service.updateBlog('blog-1', 'author-1', { published: true });
+    expect(prismaMock.blog.update.mock.calls[0][0].data).not.toHaveProperty('publishedAt');
   });
 
   it('deletes blogs by ID and returns the deleted blog metadata', async () => {

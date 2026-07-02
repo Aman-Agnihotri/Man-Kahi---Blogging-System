@@ -95,6 +95,7 @@ export class BlogService {
         content: processedContent,
         description: data.description,
         published: data.published ?? false,
+        publishedAt: data.published ? new Date() : null,
         authorId: data.authorId,
         ...(coverImage && { coverImage }),
         ...(data.categoryId && { categoryId: data.categoryId }),
@@ -251,6 +252,8 @@ export class BlogService {
       select: {
         authorId: true,
         slug: true,
+        published: true,
+        publishedAt: true,
         tags: {
           include: {
             tag: true,
@@ -290,6 +293,10 @@ export class BlogService {
       ? await this.generateUniqueSlug(data.title, id)
       : undefined
 
+    // First transition from unpublished to published sets publishedAt;
+    // it's never set at all otherwise, and re-publishing shouldn't reset it.
+    const isFirstPublish = data.published === true && !blog.published && !blog.publishedAt
+
     // Update blog
     const updatedBlog = await prisma.blog.update({
       where: { id },
@@ -302,6 +309,7 @@ export class BlogService {
         ...(coverImage && { coverImage }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.published !== undefined && { published: data.published }),
+        ...(isFirstPublish && { publishedAt: new Date() }),
         ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
         ...(data.tags && {
           tags: {
