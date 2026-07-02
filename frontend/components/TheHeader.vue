@@ -101,7 +101,8 @@
     { label: 'Profile', path: `/user/profile/${auth.user?.username}`, icon: 'ri-user-line' },
     { label: 'Dashboard', path: '/user/dashboard', icon: 'ri-dashboard-line' },
     { label: 'Stories', path: '/user/stories', icon: 'ri-book-line' },
-    { label: 'Settings', path: '/user/settings', icon: 'ri-settings-line' }
+    { label: 'Settings', path: '/user/settings', icon: 'ri-settings-line' },
+    ...(auth.isAdmin ? [{ label: 'Admin', path: '/admin/dashboard', icon: 'ri-shield-user-line' }] : [])
   ])
 
   const handleSignOut = async () => {
