@@ -251,15 +251,16 @@ schedule exists yet - run `backup-postgres.sh` on a cron/scheduled task
 appropriate to your acceptable data-loss window (daily is a reasonable
 starting point for a single-server deployment).
 
-**Verification status:** these scripts have been written and reviewed,
-but restoring into a genuinely clean/fresh Postgres volume has not been
-executed end-to-end in the environment this was authored in - that sandbox
-has no network access to pull Docker images at all (`docker compose up`
-fails resolving `docker.io`), so no container could be started to test
-against. Before relying on these in a real deployment, run
-`docker compose down -v && docker compose up -d --build`, `backup-postgres.sh`
-against some seeded data, `down -v` again for a truly clean volume, `up`
-again, then `restore-postgres.sh` and confirm the data is back.
+**Verification status (2026-07-02):** tested end-to-end against a real
+Docker daemon. Took a backup of a running stack's seeded data (4 users, 3
+blogs), ran `docker compose down` followed by `docker volume rm
+<project>_postgres-data` for a genuinely fresh volume (not just `down -v`
+on the whole stack, to leave Elasticsearch/Redis/MinIO data untouched),
+brought the stack back up (`init-db` recreated the schema with no manual
+steps, confirmed 0 rows), ran `restore-postgres.sh --force`, and confirmed
+every row came back identical. The app itself was re-verified working
+correctly against the restored data afterward via a full browser
+click-through.
 
 ### Redis (cache/session data - safe to lose, persistence is a nice-to-have)
 

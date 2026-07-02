@@ -31,7 +31,8 @@ Turn ManKahi into a professional-grade blogging platform that runs well on a hom
   - Core loop pages (home, explore/search, post view, write/edit, dashboard, stories, admin moderation) are fully wired. Categories browsing and public profile pages remain dummy - deliberately deferred, see Phase 3 notes.
 - [x] Backend API contracts are cleaned up.
   - Auth, blog, analytics, and admin services all typecheck and pass their full test suites independently (verified 2026-07-02). Note: none of the four services nor `backend/shared` had ever had `npm install`/`prisma generate` run outside Docker — see the new `backend/shared/scripts/generate-client.js` and each service's `prisma:generate`/`pretest` scripts, now required for local (non-Docker) dev and CI.
-- [ ] Tests cover core user and admin workflows.
+- [x] Tests cover core user and admin workflows.
+  - 127 backend tests passing (`npm test` from repo root), including regression coverage for every live-verification bug fixed in this pass. See the Definition of Done section for the full list of what was found and fixed by actually running the stack.
 - [x] README links to product, architecture, deployment, and action-plan docs.
 
 ## Architecture Direction
@@ -89,10 +90,10 @@ Purpose: make the project deploy cleanly on a laptop or one Linux server.
 ### Development Compose
 
 - [x] Keep `docker/compose/docker-compose.yml` as the official development stack.
-- [ ] Verify hot reload works for frontend and backend services.
-  - Could not execute in this environment: the sandbox this pass was done in has no network access to pull Docker images (`docker compose up` fails resolving `docker.io`), so no container could actually be started. Reviewed the config instead: `docker-compose.yml`'s dev services bind-mount source (`../../frontend:/app`, `../../backend/<service>:/app/<service>`) with an anonymous volume protecting `node_modules`, and run `npm run dev` (`nuxt dev` / `ts-node-dev --respawn`), which is the standard, normally-reliable pattern for this - but it has not been empirically confirmed working end-to-end here. Please verify on a machine with normal Docker Hub access before checking this off for real.
-- [ ] Verify database initialization works from a clean volume.
-  - Same execution limitation as above. Did find and fix a real bug that would have broken this: `docker/compose/.env.example`'s `DATABASE_URL` used `${POSTGRES_USER}:${POSTGRES_PASSWORD}` shell-style interpolation, which Docker Compose's `env_file:` mechanism does not expand - every service would have received a literal, broken connection string on first boot. Fixed to literal values with a comment warning they must be kept in sync by hand. `docker/scripts/init-db.sh` (creates the database + `uuid-ossp`/`pg_trgm` extensions) and `backend/init-service` (runs `prisma db push` since no migrations exist yet, only `schema.prisma`) both look correct on review, but haven't been exercised against an actual clean volume here either.
+- [x] Verify hot reload works for frontend and backend services.
+  - Live-verified with a real Docker daemon: edited backend source under a running container and confirmed `ts-node-dev --respawn --poll` picked up the change without a manual restart (the `--poll` flag was added specifically because plain fs-event watching does not reliably fire across Docker Desktop's bind-mount layer on Windows). One caveat found during this pass: edits to `backend/shared` (bind-mounted separately, outside each service's own watched root) do **not** trigger `ts-node-dev`'s watcher - a manual `docker compose restart <service>` is needed after changing shared middleware/config. Frontend hot reload (`nuxt dev` + `vite.server.watch.usePolling`) confirmed working via live edits reflected in the browser without a manual reload.
+- [x] Verify database initialization works from a clean volume.
+  - Live-verified twice: removed the `postgres-data` volume entirely and ran `docker compose up -d` from scratch - the `init-db` service (Prisma `db push` against the shared schema) recreated every table with no manual steps, and all 12 containers came up healthy. Also found and fixed two real bugs that would have broken this on a genuinely fresh checkout: (1) `docker/compose/.env.example`'s `DATABASE_URL` used `${POSTGRES_USER}:${POSTGRES_PASSWORD}` shell-style interpolation, which Docker Compose's `env_file:` mechanism does not expand - fixed to literal values. (2) `docker/scripts/init-db.sh` had CRLF line endings from a Windows checkout, corrupting its `#!/bin/sh` shebang and crashing the Postgres init container on every clean-volume start - fixed by normalizing to LF and adding `.gitattributes` (`*.sh text eol=lf`) so it can't regress on future Windows checkouts.
 - [x] Verify health checks for auth, blog, analytics, admin, nginx, Postgres, Redis, and Elasticsearch.
 - [x] Add clear commands for start, stop, rebuild, reset, logs, and health checks.
 - [x] Document required local prerequisites: Docker, Docker Compose, ports, env file.
@@ -133,8 +134,8 @@ Purpose: make the project deploy cleanly on a laptop or one Linux server.
   - No snapshot repo; documented that the index is fully rebuildable from Postgres via the existing `syncBlogsToElasticsearch()`.
 - [x] Document where backups are stored.
 - [x] Document how often backups should run.
-- [ ] Test restore against a clean local volume.
-  - **Not done.** Same environment limitation noted throughout this pass: no Docker image pull access in this sandbox, so the scripts above are written and reviewed but not executed against a real container. See the verification-status note in `docs/DEPLOYMENT.md`'s Backups And Restore section for the exact steps to run before trusting these in production.
+- [x] Test restore against a clean local volume.
+  - Live-verified end-to-end: took a real backup (`backup-postgres.sh`, `pg_dump --format=custom`) of the running stack's data (4 users, 3 blogs), tore the stack down, removed the `postgres-data` volume entirely, brought the stack back up on a genuinely fresh volume (confirmed 0 rows, schema recreated by `init-db`), ran `restore-postgres.sh --force` against it, and confirmed every row came back identical (same usernames, same blog titles/published state). Re-verified the running app still served the restored data correctly through the browser afterward.
 
 Acceptance criteria:
 
@@ -199,6 +200,7 @@ Purpose: make existing services internally consistent before expanding features.
   - `updateBlogVisibility()`'s regex required a `blog-` prefix that real `cuid()` IDs never have. Replaced with `z.string().min(1).regex(/^[a-zA-Z0-9_-]+$/)` and updated `admin.blog-visibility.test.ts` fixtures to a realistic cuid-shaped id and a genuinely-invalid id.
 - [x] Confirm RBAC requirements for each admin endpoint.
   - Verified `admin.routes.ts` top to bottom: `router.use(adminMiddleware)` (which includes `authenticate({ roles: ['admin'] })`) is registered before every route (`/dashboard`, `/analytics/blog/:blogId`, `/analytics/user/:userId`, `/analytics/trending`, `/analytics/tags`, `/blog/:blogId/visibility`); no route is registered earlier and none opts out. No changes needed.
+  - **Correction found by live testing (2026-07-02):** the route wiring above was correct, but every one of those role checks actually *crashed* at runtime with `req.isAuthenticated is not a function` - static review had no way to catch this, since it's a real Express method on paper (declared via module augmentation in `backend/shared/middlewares/auth/types.ts`) that simply nothing in this JWT-only codebase ever attaches (that signature is Passport.js's session API). Fixed `isAuthenticatedRequest()`/`handleOAuthStrategy()` to check `req.user` presence directly instead. Separately, admin-service's own axios calls to analytics-service never forwarded the caller's bearer token, so even after the crash was fixed, the dashboard stats panel still 401'd - added an `authHeaders()` helper forwarding `req.headers.authorization` to all five admin->analytics call sites. And the blog-visibility toggle wrote `published` straight to Postgres via admin-service's own Prisma client, bypassing blog-service's Elasticsearch reindex and Redis cache invalidation entirely, so "Hide" never actually hid anything from search/home - added `BlogService.setVisibility()`/`BlogController.updateVisibility()` (admin-only, no author-ownership check) in blog-service and switched admin-service to call that endpoint instead of touching Postgres directly. All three confirmed fixed live: dashboard stats load, and Hide/Publish now actually add/remove a post from the home page.
 - [x] Ensure dashboard user counts reflect real user lifecycle.
   - `getDashboardStats()`'s `totalUsers` was filtered by `emailVerified: true`, but no email-verification flow is implemented anywhere (registration never sets it), so this always read 0 regardless of real signups. Changed to count all users with `deletedAt: null`. Also added `deletedAt: null` to the `totalBlogs` count and to the blog lookups in `getUserAnalytics()`/`getTrendingContent()`, which previously could include soft-deleted blogs.
 - [x] Add tests for dashboard, blog analytics, user analytics, trending, tags, and visibility.
@@ -311,9 +313,24 @@ Acceptance criteria:
 
 Purpose: make the app understandable when it is running.
 
-- [ ] Ensure every service exposes `/health`.
-- [ ] Ensure every service exposes `/metrics`.
+Out of scope for this pass beyond what the Definition of Done requires
+(per the original phase ordering, Phase 5 is only pursued once 1-4 are
+fully done, and only "to the extent DoD requires"). One bug was found and
+fixed anyway because it blocked the DoD's "metrics work" item entirely:
+`ENABLE_METRICS` was never set in any env file, so every service's
+`/metrics` route 404'd unconditionally and Prometheus's scrape targets
+were permanently down. Fixed by setting it in `.env.development` and
+documenting it in both example env files - see the Definition of Done
+section for the live-verification details. The rest of this phase
+(structured logs with request IDs, alerting, an operational runbook,
+Grafana dashboard provisioning) remains genuinely not done.
+
+- [x] Ensure every service exposes `/health`.
+  - Live-verified: `docker compose ps` reports every service (auth, blog, analytics, admin, nginx, Postgres, Redis, Elasticsearch, MinIO, Prometheus, Grafana) as `healthy`, both on normal startup and after the fresh-volume rebuild during the backup/restore test.
+- [x] Ensure every service exposes `/metrics`.
+  - The routes always existed; they were gated behind `ENABLE_METRICS`, which nothing ever set - see the note above.
 - [ ] Fix Prometheus scrape config for the actual runtime.
+  - Not needed - live-verified Prometheus's existing `static_configs` (`mankahi-auth:3001` etc.) already resolve and scrape correctly via Docker's embedded DNS once `/metrics` itself stopped 404ing.
 - [ ] Fix Grafana provisioning for current metrics.
 - [ ] Add structured logs with service name and request IDs.
 - [ ] Add nginx access/error log volume.
@@ -456,41 +473,44 @@ Acceptance criteria:
 
 ## Definition Of Done For The Professional MVP
 
-A note on verification limits for this pass (2026-07-02): every item below
-that touches a running stack (Docker Compose, a live database, a browser)
-could only be verified statically here - unit/integration tests, `tsc`/
-`nuxi typecheck`, and careful manual code review against the real Prisma
-schema and actual request/response contracts, cross-checking every call
-site. This sandbox has no network access to pull Docker images at all, so
-no container could be started, and no browser was available either. That
-review process did catch and fix several real, serious bugs along the way
-(login was completely broken by a reversed `verifyPassword` argument
-order; every publish/draft toggle would have 400'd via multipart form
-data; `DATABASE_URL` would never have resolved on a fresh volume) - so the
-code-level confidence is real, not just "should work in theory." But per
-this project's own instructions, that is not the same thing as clicking
-through it in a browser, and none of the items below are checked off on
-the strength of static review alone. Run `docker/scripts/smoke-test.sh`
-(backend core loop, no browser needed) and a manual click-through in a
-browser to close the loop and check these off for real.
+Update (2026-07-02, live verification pass): the previous pass through
+this checklist was static-only (no Docker network access in that
+sandbox). This pass ran the real stack end-to-end with a live Docker
+daemon and a real Chromium browser (Chrome DevTools MCP) - every item
+below is now checked against actual running behavior, not code review.
+That process found and fixed several more real bugs that static review
+had missed entirely: a CRLF-corrupted `init-db.sh` shebang that crashed
+Postgres on every clean-volume start; a broken nginx route split that
+made bare `POST /api/blogs` 404; `publishedAt` never being written or
+indexed; a stale Elasticsearch soft-delete leak; a frontend type mismatch
+that silently rendered "Unknown" authors on search results; a redundant
+nginx `proxy_cache` layer serving stale data independently of the
+already-fixed Redis cache; every RBAC-gated admin route crashing on a
+Passport.js method (`req.isAuthenticated()`) that nothing in this
+JWT-only codebase ever attaches; admin-service's calls to
+analytics-service never forwarding the caller's bearer token; the admin
+blog-visibility toggle writing straight to Postgres and never reaching
+Elasticsearch, so "Hide" never actually hid anything; and every service's
+`/metrics` endpoint 404ing because `ENABLE_METRICS` was never set
+anywhere. All of the above are fixed and re-verified live.
 
-- [ ] One command starts local development reliably.
-  - `docker compose up -d --build` is that command; a real `DATABASE_URL` bug that would have broken every service on first boot is now fixed (see Phase 1 notes). Not run against a live daemon here.
+- [x] One command starts local development reliably.
+  - `docker compose up -d` (after images are built once) starts all 12 containers healthy from a completely fresh `postgres-data` volume - verified twice: once during initial stack bring-up, once as part of the backup/restore test below (volume removed, stack brought back up, `init-db` recreated the schema with no manual steps).
 - [ ] One documented path deploys to a single server.
-  - Documented in `docs/DEPLOYMENT.md`; config validates (`docker compose config`); not runtime-tested on a real machine.
+  - Documented in `docs/DEPLOYMENT.md`; `docker-compose.prod.yml` config validates (`docker compose config`). Still not runtime-tested on an actual second machine with real TLS/secrets - doing so is outside what a local sandbox can exercise.
 - [x] Only nginx is public in production.
-- [ ] A user can register, log in, write, publish, edit, delete, and view blogs.
-  - Every backend contract bug blocking this flow that was found is fixed (see Phase 2 notes, especially the `verifyPassword` and multipart-boolean bugs), and the frontend is fully wired against those real contracts (Phase 3). Not click-tested in a browser.
-- [ ] Search works from real indexed content.
-  - Blog-service's `/search` now supports both keyword search and query-less browsing against real Elasticsearch data, wired on the explore/home pages. Not run against a live Elasticsearch instance here.
-- [ ] User dashboard and stories use real data.
-  - Fully wired to `getMyBlogs()`; honest stats only (no fabricated aggregates). Not click-tested.
-- [ ] Admin can view dashboard data and moderate blog visibility.
-  - New `/admin/dashboard` page + new `GET /api/admin/blogs` moderation-listing endpoint (didn't exist before - there was no way to even see hidden blogs to restore them). Not click-tested.
-- [ ] Backups and restores are documented and tested.
-  - Documented and scripted (Phase 1); restore has not been executed against a real clean volume (no Docker access here) - see the verification-status note in `docs/DEPLOYMENT.md`.
-- [ ] Logs, health checks, and metrics work.
-  - Out of scope for this pass per the requested phase ordering (Phase 5, gated on 1-4 being fully done - Phase 1 isn't fully done because of the live-verification gap above). Health check endpoints/config exist from prior work; not independently re-verified here.
-- [ ] Core workflows have automated tests.
-  - Backend: yes, thoroughly - auth (21 tests), blog (25), analytics (17), admin (56), all passing via `npm test` from the repo root. Frontend: typecheck only, no automated component/e2e tests (documented gap in Phase 6).
+- [x] A user can register, log in, write, publish, edit, delete, and view blogs.
+  - Live-verified twice: once via `docker/scripts/smoke-test.sh` (curl-based, all steps pass), once via an actual browser click-through of the full loop (register -> auto-login -> dashboard -> write -> publish -> view by slug -> edit -> dashboard showing updated stats -> delete with confirm dialog).
+- [x] Search works from real indexed content.
+  - Live-verified in-browser on the home and explore pages against real Elasticsearch data, including a real publish date and correct author/tags after fixing the type-shape mismatch and the three-layer (nginx/Redis/Elasticsearch) caching bugs described above.
+- [x] User dashboard and stories use real data.
+  - Live-verified: Total Stories/Published/Drafts counts and the Recent Stories table reflect real Postgres data; edit and delete both round-trip correctly and the dashboard reflects the change immediately afterward.
+- [x] Admin can view dashboard data and moderate blog visibility.
+  - Live-verified after fixing the three bugs above (RBAC crash, missing auth-header forwarding, no-op visibility write): dashboard stats (Total Blogs/Users/Views/Reads/Engagement) load correctly, and toggling Hide/Publish on a real post actually removes/restores it from the home page, not just the admin table.
+- [x] Backups and restores are documented and tested.
+  - Live-verified end-to-end: took a real backup with `backup-postgres.sh` against the running stack, tore the stack down, removed the `postgres-data` volume entirely (genuinely fresh, not just an empty database), brought the stack back up (schema recreated by the `init-db` service with no manual steps), confirmed the fresh database was empty, ran `restore-postgres.sh` against it, and confirmed every row (4 users, 3 blogs, matching usernames/titles) came back identical. Re-verified the app itself still worked correctly against the restored data via the browser afterward.
+- [x] Logs, health checks, and metrics work.
+  - Health checks: `docker compose ps` reports every service healthy, both on normal startup and after the fresh-volume rebuild. Logs: used continuously throughout this pass (`docker compose logs`) to diagnose every bug above - readable and useful. Metrics: found `ENABLE_METRICS` was never set in any env file, so every service's `/metrics` route permanently 404'd and Prometheus's scrape targets were all reported down; fixed by setting it in `.env.development` and documenting it in both example env files, then confirmed live via Prometheus's own `/api/v1/targets` (all four backend-services targets healthy) and a real query (`auth_process_cpu_seconds_total`) returning actual scraped data.
+- [x] Core workflows have automated tests.
+  - 127 backend tests passing via `npm test` from the repo root: auth (21), blog (32, including new regression coverage for the visibility/publishedAt fixes), analytics (17), admin (57, including new coverage for the auth-forwarding and visibility-delegation fixes). Frontend: typecheck only, no automated component/e2e tests (documented gap - out of scope per the original phase ordering, which stops at Phase 6's backend-focused test command).
 - [x] README links to this action plan.
