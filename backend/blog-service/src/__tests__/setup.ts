@@ -29,6 +29,7 @@ jest.mock('@shared/config/redis', () => ({
   searchCache: {
     get: jest.fn(),
     set: jest.fn(),
+    invalidateAll: jest.fn(),
   },
   redis: {
     ping: jest.fn(),

@@ -36,5 +36,21 @@ export default defineNuxtConfig({
       // name (apiUrl) is what Nuxt auto-maps that env var onto.
       apiUrl: process.env.NUXT_PUBLIC_API_URL ?? 'http://localhost:8080'
     }
-  }
+  },
+  // Docker Desktop's bind-mount file sharing (used for hot reload in
+  // docker-compose.yml) does not forward native filesystem change events
+  // into the container on Windows/Mac hosts, so Vite's default watcher
+  // never notices host-side edits and hot reload silently does nothing.
+  // Gated behind an env var (set by docker-compose.yml) rather than always
+  // on, since polling isn't needed - and costs extra CPU - for native
+  // `npm run dev` on the host.
+  ...(process.env.VITE_USE_POLLING === 'true' && {
+    vite: {
+      server: {
+        watch: {
+          usePolling: true,
+        },
+      },
+    },
+  }),
 })

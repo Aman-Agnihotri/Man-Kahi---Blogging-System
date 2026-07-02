@@ -7,7 +7,7 @@
     "predev": "npm run prisma:generate",
     "prebuild": "npm run prisma:generate",
     "pretest": "npm run prisma:generate",
-    "dev": "ts-node-dev -r tsconfig-paths/register --respawn --transpile-only src/server.ts",
+    "dev": "ts-node-dev -r tsconfig-paths/register --respawn --poll --transpile-only src/server.ts",
     "build": "tsc --project tsconfig.json",
     "start": "node dist/server.js",
     "pretypecheck": "npm run prisma:generate",

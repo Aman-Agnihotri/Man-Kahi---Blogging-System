@@ -247,7 +247,10 @@ export const searchBlogsElastic = async (options: SearchOptions): Promise<Search
       index: BLOG_INDEX,
       body: {
         query: {
-          bool: { must },
+          // deleteBlog() soft-deletes (sets deletedAt) and updates the ES
+          // doc accordingly, but this query never excluded it - a "deleted"
+          // post kept appearing in search/browse results indefinitely.
+          bool: { must, must_not: [{ exists: { field: 'deletedAt' } }] },
         },
         sort,
         from: (page - 1) * limit,

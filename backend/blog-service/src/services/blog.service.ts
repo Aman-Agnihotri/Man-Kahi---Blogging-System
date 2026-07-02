@@ -1,7 +1,7 @@
 import { prisma } from '@shared/utils/prismaClient'
 import { processMarkdown, validateMarkdown } from '@utils/markdown'
 import { indexBlog, updateBlogIndex } from '@utils/elasticsearch'
-import { blogCache } from '@shared/config/redis'
+import { blogCache, searchCache } from '@shared/config/redis'
 import { processImage } from '@config/upload'
 import slugify from 'slugify'
 import logger from '@shared/utils/logger'
@@ -164,6 +164,7 @@ export class BlogService {
     // Cache the blog
     logger.debug(`Caching blog with slug ${slug}`);
     await blogCache.set(slug, JSON.stringify(blog));
+    await searchCache.invalidateAll();
     logger.info(`Blog created successfully in ${Date.now() - startTime}ms: ${blog.id}`);
 
     return blog;
@@ -359,6 +360,7 @@ export class BlogService {
       blogCache.invalidate(blog.slug),
       updatedSlug ? blogCache.invalidate(updatedSlug) : null,
       blogCache.set(updatedBlog.slug, JSON.stringify(updatedBlog)),
+      searchCache.invalidateAll(),
     ]);
 
     logger.info(`Blog updated successfully in ${Date.now() - startTime}ms: ${id}`);
@@ -393,7 +395,8 @@ export class BlogService {
 
     await Promise.all([
       blogCache.invalidate(blog.slug),
-      updateBlogIndex(id, { deletedAt })
+      updateBlogIndex(id, { deletedAt }),
+      searchCache.invalidateAll(),
     ]);
 
     logger.info(`Blog deleted successfully: ${id}`);

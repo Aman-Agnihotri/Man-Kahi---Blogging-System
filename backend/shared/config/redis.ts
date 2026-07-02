@@ -396,6 +396,32 @@ export const searchCache = {
       logger.error('Error getting search results from cache:', error);
       return null;
     }
+  },
+
+  /**
+   * Drops every cached search result page. The cache key is derived from
+   * the full search params object (query/page/limit/sortBy/category/tags),
+   * so a single blog create/update/delete can invalidate an unbounded set
+   * of keys - there's no way to target just the affected ones. Blowing
+   * away the whole namespace on any write is the correct tradeoff: a
+   * worst case of one extra Elasticsearch round trip on the next search,
+   * versus a deleted post staying "findable" (or a new one staying
+   * invisible) for up to CACHE_TTL.SEARCH.
+   */
+  invalidateAll: async (): Promise<void> => {
+    try {
+      const pattern = `${REDIS_KEYS.SEARCH}*`;
+      let cursor = '0';
+      do {
+        const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        cursor = nextCursor;
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      } while (cursor !== '0');
+    } catch (error) {
+      logger.error('Error invalidating search cache:', error);
+    }
   }
 };
 

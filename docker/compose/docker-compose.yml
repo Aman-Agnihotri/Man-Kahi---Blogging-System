@@ -344,6 +344,10 @@ services:
             - .env.development
         environment:
             - NUXT_PUBLIC_API_URL=http://localhost:8080
+            # Docker Desktop's bind-mount file sharing doesn't forward native
+            # filesystem change events into the container on Windows/Mac
+            # hosts - without polling, hot reload silently does nothing.
+            - VITE_USE_POLLING=true
         volumes:
             - ../../frontend:/app
             - /app/node_modules
