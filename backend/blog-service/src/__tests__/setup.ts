@@ -10,6 +10,47 @@ const prismaMock = {
   tag: {
     findMany: jest.fn(),
   },
+  blogAnalytics: {
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
+  blogRevision: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+  },
+  like: {
+    create: jest.fn(),
+    delete: jest.fn(),
+    findUnique: jest.fn(),
+  },
+  bookmark: {
+    count: jest.fn(),
+    create: jest.fn(),
+    delete: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+  },
+  comment: {
+    count: jest.fn(),
+    create: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
+  category: {
+    count: jest.fn(),
+    create: jest.fn(),
+    delete: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
+  report: {
+    create: jest.fn(),
+    findFirst: jest.fn(),
+  },
 };
 
 jest.mock('@shared/utils/prismaClient', () => ({

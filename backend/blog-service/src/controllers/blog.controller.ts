@@ -30,9 +30,25 @@ const createBlogSchema = z.object({
   categoryId: z.string().optional(),
   tags: z.array(z.string()).optional(),
   published: booleanish.optional(),
+  metaTitle: z.string().max(200).optional(),
+  metaDescription: z.string().max(1000).optional(),
+  canonicalUrl: z.string().url().max(255).optional(),
 })
 
 const updateBlogSchema = createBlogSchema.partial()
+
+const trendingQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+})
+
+const paginationQuerySchema = z.object({
+  page: z.string().transform(Number).optional(),
+  limit: z.string().transform(Number).optional(),
+})
+
+const reportBlogSchema = z.object({
+  reason: z.string().min(10).max(500),
+})
 
 const searchQuerySchema = z.object({
   // Optional: an absent/empty query lists published blogs (e.g. sorted by
@@ -594,6 +610,287 @@ export class BlogController {
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch user blogs due to an unexpected error'
+      })
+    }
+  }
+
+  // Admin moderation delete (no author-ownership check, mirrors
+  // updateVisibility exactly - see BlogService.adminDelete)
+  async moderateDelete(req: Request, res: Response): Promise<Response> {
+    const { id } = req.params
+    if (!id) {
+      return res.status(400).json({
+        message: 'Blog ID is required',
+        details: 'The blog ID parameter is missing from the request URL'
+      });
+    }
+
+    try {
+      const dbTimer = trackDbOperation('delete', 'blog');
+      await this.blogService.adminDelete(id);
+      dbTimer.end();
+
+      return res.json({ message: 'Blog deleted', id })
+    } catch (error) {
+      logger.error('Error moderating (admin-deleting) blog:', error)
+
+      if (error instanceof Error) {
+        trackError('business_logic', error.message, 'blog-service');
+        if (error.message === 'Blog not found') {
+          return res.status(404).json({
+            message: 'Blog not found',
+            details: 'The specified blog post does not exist'
+          })
+        }
+      }
+
+      logger.error('Unexpected error moderating blog:', error)
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to delete blog post due to an unexpected error'
+      })
+    }
+  }
+
+  // Like a blog (idempotent)
+  async like(req: Request, res: Response): Promise<Response> {
+    let dbTimer;
+    const { id } = req.params
+    if (!id) {
+      return res.status(400).json({
+        message: 'Blog ID is required',
+        details: 'The blog ID parameter is missing from the request URL'
+      });
+    }
+
+    try {
+      dbTimer = trackDbOperation('create', 'like');
+      const result = await this.blogService.likeBlog(id, req.user!.id);
+      dbTimer.end();
+      return res.json(result)
+    } catch (error) {
+      if (dbTimer) dbTimer.end('failure');
+      logger.error('Error liking blog:', error)
+
+      if (error instanceof Error) {
+        trackError('business_logic', error.message, 'blog-service');
+        if (error.message === 'Blog not found') {
+          return res.status(404).json({
+            message: 'Blog not found',
+            details: 'The specified blog post does not exist'
+          })
+        }
+      }
+
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to like blog post due to an unexpected error'
+      })
+    }
+  }
+
+  // Unlike a blog (idempotent)
+  async unlike(req: Request, res: Response): Promise<Response> {
+    let dbTimer;
+    const { id } = req.params
+    if (!id) {
+      return res.status(400).json({
+        message: 'Blog ID is required',
+        details: 'The blog ID parameter is missing from the request URL'
+      });
+    }
+
+    try {
+      dbTimer = trackDbOperation('delete', 'like');
+      const result = await this.blogService.unlikeBlog(id, req.user!.id);
+      dbTimer.end();
+      return res.json(result)
+    } catch (error) {
+      if (dbTimer) dbTimer.end('failure');
+      logger.error('Error unliking blog:', error)
+
+      if (error instanceof Error) {
+        trackError('business_logic', error.message, 'blog-service');
+        if (error.message === 'Blog not found') {
+          return res.status(404).json({
+            message: 'Blog not found',
+            details: 'The specified blog post does not exist'
+          })
+        }
+      }
+
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to unlike blog post due to an unexpected error'
+      })
+    }
+  }
+
+  // Bookmark a blog (idempotent)
+  async bookmark(req: Request, res: Response): Promise<Response> {
+    const { id } = req.params
+    if (!id) {
+      return res.status(400).json({
+        message: 'Blog ID is required',
+        details: 'The blog ID parameter is missing from the request URL'
+      });
+    }
+
+    try {
+      const result = await this.blogService.bookmarkBlog(id, req.user!.id);
+      return res.json(result)
+    } catch (error) {
+      logger.error('Error bookmarking blog:', error)
+
+      if (error instanceof Error && error.message === 'Blog not found') {
+        return res.status(404).json({
+          message: 'Blog not found',
+          details: 'The specified blog post does not exist'
+        })
+      }
+
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to bookmark blog post due to an unexpected error'
+      })
+    }
+  }
+
+  // Remove a bookmark (idempotent)
+  async unbookmark(req: Request, res: Response): Promise<Response> {
+    const { id } = req.params
+    if (!id) {
+      return res.status(400).json({
+        message: 'Blog ID is required',
+        details: 'The blog ID parameter is missing from the request URL'
+      });
+    }
+
+    try {
+      const result = await this.blogService.unbookmarkBlog(id, req.user!.id);
+      return res.json(result)
+    } catch (error) {
+      logger.error('Error removing bookmark:', error)
+
+      if (error instanceof Error && error.message === 'Blog not found') {
+        return res.status(404).json({
+          message: 'Blog not found',
+          details: 'The specified blog post does not exist'
+        })
+      }
+
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to remove bookmark due to an unexpected error'
+      })
+    }
+  }
+
+  // List the current user's bookmarked blogs
+  async getBookmarks(req: Request, res: Response): Promise<Response> {
+    try {
+      const { page, limit } = paginationQuerySchema.parse(req.query)
+      const result = await this.blogService.getUserBookmarks(req.user!.id, page, limit);
+      return res.json(result)
+    } catch (error) {
+      logger.error('Error fetching bookmarks:', error)
+
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: 'Invalid query parameters',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        })
+      }
+
+      if (error instanceof Error && error.message === 'Invalid pagination') {
+        return res.status(400).json({
+          message: 'Invalid pagination parameters',
+          details: 'Page or limit values are invalid'
+        })
+      }
+
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch bookmarks due to an unexpected error'
+      })
+    }
+  }
+
+  // Trending blogs (public) - could be Redis-cached with a short TTL later
+  // if traffic warranted it; not needed at current scale.
+  async getTrending(req: Request, res: Response): Promise<Response> {
+    try {
+      const { limit } = trendingQuerySchema.parse(req.query)
+      const blogs = await this.blogService.getTrendingBlogs(limit ?? 10);
+      return res.json(blogs)
+    } catch (error) {
+      logger.error('Error fetching trending blogs:', error)
+
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: 'Invalid query parameters',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        })
+      }
+
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch trending blogs due to an unexpected error'
+      })
+    }
+  }
+
+  // Report a blog for moderation review
+  async report(req: Request, res: Response): Promise<Response> {
+    const { id } = req.params
+    if (!id) {
+      return res.status(400).json({
+        message: 'Blog ID is required',
+        details: 'The blog ID parameter is missing from the request URL'
+      });
+    }
+
+    try {
+      const { reason } = reportBlogSchema.parse(req.body)
+      const report = await this.blogService.reportBlog(id, req.user!.id, reason);
+      return res.status(201).json(report)
+    } catch (error) {
+      logger.error('Error reporting blog:', error)
+
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        })
+      }
+
+      if (error instanceof Error) {
+        switch (error.message) {
+          case 'Blog not found':
+            return res.status(404).json({
+              message: 'Blog not found',
+              details: 'The specified blog post does not exist'
+            })
+          case 'Report already exists':
+            return res.status(409).json({
+              message: 'Report already exists',
+              details: 'You have already reported this blog post and it is still under review'
+            })
+        }
+      }
+
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to report blog post due to an unexpected error'
       })
     }
   }

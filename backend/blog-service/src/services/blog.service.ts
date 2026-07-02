@@ -15,6 +15,9 @@ interface CreateBlogInput {
   published?: boolean
   authorId: string
   file?: Express.Multer.File
+  metaTitle?: string
+  metaDescription?: string
+  canonicalUrl?: string
 }
 
 interface UpdateBlogInput {
@@ -25,6 +28,9 @@ interface UpdateBlogInput {
   tags?: string[]
   published?: boolean
   file?: Express.Multer.File
+  metaTitle?: string
+  metaDescription?: string
+  canonicalUrl?: string
 }
 
 interface BlogVisibilitySnapshot {
@@ -37,6 +43,25 @@ interface BlogVisibilitySnapshot {
 export class BlogService {
   private canReadBlog(blog: BlogVisibilitySnapshot, userId?: string): boolean {
     return blog.published || (!!userId && blog.authorId === userId)
+  }
+
+  // Snapshots the blog's current (pre-update) content as a BlogRevision row.
+  // Shared by updateBlog (auto-capture on content change) and
+  // restoreRevision (capture what was live before rewriting it).
+  private async captureRevision(
+    blogId: string,
+    authorId: string,
+    currentContent: string,
+    currentVersion: number
+  ): Promise<void> {
+    await prisma.blogRevision.create({
+      data: {
+        blogId,
+        version: currentVersion,
+        content: currentContent,
+        createdBy: authorId,
+      },
+    });
   }
 
   private async generateUniqueSlug(title: string, excludeBlogId?: string): Promise<string> {
@@ -99,6 +124,9 @@ export class BlogService {
         authorId: data.authorId,
         ...(coverImage && { coverImage }),
         ...(data.categoryId && { categoryId: data.categoryId }),
+        ...(data.metaTitle !== undefined && { metaTitle: data.metaTitle }),
+        ...(data.metaDescription !== undefined && { metaDescription: data.metaDescription }),
+        ...(data.canonicalUrl !== undefined && { canonicalUrl: data.canonicalUrl }),
         ...(data.tags && {
           tags: {
             create: data.tags.map(tagName => ({
@@ -255,6 +283,8 @@ export class BlogService {
         slug: true,
         published: true,
         publishedAt: true,
+        content: true,
+        version: true,
         tags: {
           include: {
             tag: true,
@@ -284,6 +314,14 @@ export class BlogService {
       processedContent = processMarkdown(data.content);
     }
 
+    // Capture a snapshot of the pre-update content as a revision, but only
+    // when the (processed) content is actually changing - resubmitting the
+    // same content shouldn't create a no-op revision entry.
+    const isContentChanging = processedContent !== undefined && processedContent !== blog.content;
+    if (isContentChanging) {
+      await this.captureRevision(id, authorId, blog.content, blog.version);
+    }
+
     let coverImage: string | undefined;
     if (data.file) {
       logger.debug('Processing updated blog image');
@@ -307,11 +345,15 @@ export class BlogService {
           slug: updatedSlug,
         }),
         ...(processedContent && { content: processedContent }),
+        ...(isContentChanging && { version: blog.version + 1 }),
         ...(coverImage && { coverImage }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.published !== undefined && { published: data.published }),
         ...(isFirstPublish && { publishedAt: new Date() }),
         ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
+        ...(data.metaTitle !== undefined && { metaTitle: data.metaTitle }),
+        ...(data.metaDescription !== undefined && { metaDescription: data.metaDescription }),
+        ...(data.canonicalUrl !== undefined && { canonicalUrl: data.canonicalUrl }),
         ...(data.tags && {
           tags: {
             deleteMany: {},
@@ -472,5 +514,323 @@ export class BlogService {
 
     logger.info(`Blog deleted successfully: ${id}`);
     return blog;
+  }
+
+  // Admin moderation takedown - deliberately no author-ownership check (the
+  // route is gated on the admin role instead), mirroring setVisibility's
+  // approach exactly. Reuses the same soft-delete + reindex + cache
+  // invalidation as the author-initiated deleteBlog above.
+  async adminDelete(id: string) {
+    logger.debug(`Admin deleting blog: ${id}`);
+
+    const blog = await prisma.blog.findUnique({
+      where: { id },
+      select: { id: true, slug: true, published: true },
+    });
+
+    if (!blog) {
+      logger.warn(`Blog not found for admin deletion: ${id}`);
+      throw new Error('Blog not found');
+    }
+
+    const deletedAt = new Date();
+    await prisma.blog.update({
+      where: { id },
+      data: { deletedAt },
+    });
+
+    await Promise.all([
+      blogCache.invalidate(blog.slug),
+      updateBlogIndex(id, { deletedAt }),
+      searchCache.invalidateAll(),
+    ]);
+
+    logger.info(`Blog admin-deleted successfully: ${id}`);
+    return blog;
+  }
+
+  // --- Likes ---------------------------------------------------------
+
+  async likeBlog(blogId: string, userId: string) {
+    const blog = await prisma.blog.findUnique({
+      where: { id: blogId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!blog || blog.deletedAt) {
+      throw new Error('Blog not found');
+    }
+
+    const existingLike = await prisma.like.findUnique({
+      where: { blogId_userId: { blogId, userId } },
+    });
+
+    if (existingLike) {
+      const analytics = await prisma.blogAnalytics.findUnique({
+        where: { blogId },
+        select: { likes: true },
+      });
+      return { liked: true, likesCount: analytics?.likes ?? 0 };
+    }
+
+    await prisma.like.create({ data: { blogId, userId } });
+    const analytics = await prisma.blogAnalytics.update({
+      where: { blogId },
+      data: { likes: { increment: 1 } },
+      select: { likes: true },
+    });
+
+    return { liked: true, likesCount: analytics.likes };
+  }
+
+  async unlikeBlog(blogId: string, userId: string) {
+    const blog = await prisma.blog.findUnique({
+      where: { id: blogId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!blog || blog.deletedAt) {
+      throw new Error('Blog not found');
+    }
+
+    const existingLike = await prisma.like.findUnique({
+      where: { blogId_userId: { blogId, userId } },
+    });
+
+    if (!existingLike) {
+      const analytics = await prisma.blogAnalytics.findUnique({
+        where: { blogId },
+        select: { likes: true },
+      });
+      return { liked: false, likesCount: analytics?.likes ?? 0 };
+    }
+
+    await prisma.like.delete({ where: { id: existingLike.id } });
+    const analytics = await prisma.blogAnalytics.update({
+      where: { blogId },
+      data: { likes: { decrement: 1 } },
+      select: { likes: true },
+    });
+
+    return { liked: false, likesCount: analytics.likes };
+  }
+
+  // --- Bookmarks -------------------------------------------------------
+
+  async bookmarkBlog(blogId: string, userId: string) {
+    const blog = await prisma.blog.findUnique({
+      where: { id: blogId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!blog || blog.deletedAt) {
+      throw new Error('Blog not found');
+    }
+
+    const existing = await prisma.bookmark.findUnique({
+      where: { blogId_userId: { blogId, userId } },
+    });
+    if (!existing) {
+      await prisma.bookmark.create({ data: { blogId, userId } });
+    }
+
+    return { bookmarked: true };
+  }
+
+  async unbookmarkBlog(blogId: string, userId: string) {
+    const blog = await prisma.blog.findUnique({
+      where: { id: blogId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!blog || blog.deletedAt) {
+      throw new Error('Blog not found');
+    }
+
+    const existing = await prisma.bookmark.findUnique({
+      where: { blogId_userId: { blogId, userId } },
+    });
+    if (existing) {
+      await prisma.bookmark.delete({ where: { id: existing.id } });
+    }
+
+    return { bookmarked: false };
+  }
+
+  async getUserBookmarks(userId: string, page = 1, limit = 10) {
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new Error('Invalid pagination');
+    }
+
+    const where = { userId, blog: { deletedAt: null } };
+
+    const [bookmarks, total] = await Promise.all([
+      prisma.bookmark.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          blog: {
+            include: {
+              author: { select: { id: true, username: true, profileImage: true } },
+              category: true,
+              tags: { include: { tag: true } },
+              analytics: true,
+            },
+          },
+        },
+      }),
+      prisma.bookmark.count({ where }),
+    ]);
+
+    return {
+      blogs: bookmarks.map((b: { blog: unknown }) => b.blog),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // --- Trending ----------------------------------------------------------
+
+  // Not Redis-cached for this first pass - could add a short-TTL cache
+  // (blogCache/searchCache already exist) later if traffic warranted it.
+  async getTrendingBlogs(limit: number) {
+    logger.debug(`Fetching trending blogs, limit=${limit}`);
+    return prisma.blog.findMany({
+      where: { published: true, deletedAt: null },
+      orderBy: { analytics: { views: 'desc' } },
+      take: limit,
+      include: {
+        author: { select: { id: true, username: true, profileImage: true } },
+        category: true,
+        tags: { include: { tag: true } },
+        analytics: true,
+      },
+    });
+  }
+
+  // --- Reporting -----------------------------------------------------------
+
+  async reportBlog(blogId: string, reporterId: string, reason: string) {
+    const blog = await prisma.blog.findUnique({
+      where: { id: blogId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!blog || blog.deletedAt) {
+      throw new Error('Blog not found');
+    }
+
+    const existingOpenReport = await prisma.report.findFirst({
+      where: { targetType: 'blog', targetId: blogId, reporterId, status: 'open' },
+    });
+    if (existingOpenReport) {
+      throw new Error('Report already exists');
+    }
+
+    return prisma.report.create({
+      data: { targetType: 'blog', targetId: blogId, reporterId, reason },
+    });
+  }
+
+  // --- Revisions -----------------------------------------------------------
+
+  async listRevisions(blogId: string, requesterId: string, requesterRoles: string[]) {
+    const blog = await prisma.blog.findUnique({
+      where: { id: blogId },
+      select: { id: true, authorId: true },
+    });
+    if (!blog) {
+      throw new Error('Blog not found');
+    }
+
+    const isAdmin = requesterRoles.some(role => role.toLowerCase() === 'admin');
+    if (blog.authorId !== requesterId && !isAdmin) {
+      throw new Error('Not authorized');
+    }
+
+    return prisma.blogRevision.findMany({
+      where: { blogId },
+      orderBy: { version: 'desc' },
+      select: { id: true, version: true, createdAt: true, createdBy: true, comment: true },
+    });
+  }
+
+  async getRevision(blogId: string, revisionId: string, requesterId: string, requesterRoles: string[]) {
+    const blog = await prisma.blog.findUnique({
+      where: { id: blogId },
+      select: { id: true, authorId: true },
+    });
+    if (!blog) {
+      throw new Error('Blog not found');
+    }
+
+    const isAdmin = requesterRoles.some(role => role.toLowerCase() === 'admin');
+    if (blog.authorId !== requesterId && !isAdmin) {
+      throw new Error('Not authorized');
+    }
+
+    const revision = await prisma.blogRevision.findUnique({ where: { id: revisionId } });
+    if (!revision || revision.blogId !== blogId) {
+      throw new Error('Revision not found');
+    }
+
+    return revision;
+  }
+
+  async restoreRevision(blogId: string, revisionId: string, authorId: string) {
+    const startTime = Date.now();
+    logger.debug(`Restoring blog ${blogId} to revision ${revisionId}`, { authorId });
+
+    const blog = await prisma.blog.findUnique({
+      where: { id: blogId },
+      select: { authorId: true, slug: true, content: true, version: true },
+    });
+    if (!blog) {
+      throw new Error('Blog not found');
+    }
+    if (blog.authorId !== authorId) {
+      throw new Error('Not authorized');
+    }
+
+    const revision = await prisma.blogRevision.findUnique({ where: { id: revisionId } });
+    if (!revision || revision.blogId !== blogId) {
+      throw new Error('Revision not found');
+    }
+
+    const validation = validateMarkdown(revision.content);
+    if (!validation.isValid) {
+      logger.error('Invalid markdown content in revision restore');
+      throw new Error('Invalid markdown content');
+    }
+    const processedContent = processMarkdown(revision.content);
+
+    // Capture what's currently live as a new revision before overwriting it.
+    await this.captureRevision(blogId, authorId, blog.content, blog.version);
+
+    const updatedBlog = await prisma.blog.update({
+      where: { id: blogId },
+      data: {
+        content: processedContent,
+        version: blog.version + 1,
+      },
+      include: {
+        author: { select: { id: true, username: true, profileImage: true } },
+        category: true,
+        tags: { include: { tag: true } },
+        analytics: true,
+      },
+    });
+
+    await updateBlogIndex(blogId, {
+      content: updatedBlog.content,
+      updatedAt: updatedBlog.updatedAt,
+    });
+
+    await Promise.all([
+      blogCache.invalidate(blog.slug),
+      blogCache.set(updatedBlog.slug, JSON.stringify(updatedBlog)),
+      searchCache.invalidateAll(),
+    ]);
+
+    logger.info(`Blog ${blogId} restored to revision ${revisionId} in ${Date.now() - startTime}ms`);
+    return updatedBlog;
   }
 }
