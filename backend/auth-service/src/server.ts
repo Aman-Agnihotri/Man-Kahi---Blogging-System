@@ -7,6 +7,7 @@ import { RedisStore } from 'connect-redis'
 import logger from '@shared/utils/logger'
 import authRoutes from '@routes/auth.routes'
 import { oauthRoutes } from '@routes/oauth.routes'
+import profileRoutes from '@routes/profile.routes'
 import { passport } from '@controllers/passport.controller'
 import { prisma } from '@shared/utils/prismaClient'
 import { redis } from '@shared/config/redis'
@@ -145,6 +146,7 @@ setupSwagger(app, 'Auth Service', [
 // block and the documented GOOGLE_CALLBACK_URL (/api/auth/google/callback).
 app.use('/api/auth', authRoutes)
 app.use('/api/auth', oauthRoutes)
+app.use('/api/auth', profileRoutes)
 
 // Global error handler
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

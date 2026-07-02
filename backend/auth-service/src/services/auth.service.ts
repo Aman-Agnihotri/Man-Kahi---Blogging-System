@@ -17,6 +17,20 @@ interface LoginInput {
     password: string
 }
 
+// Thrown by login() when the account has been suspended by an admin
+// (User.suspendedAt set - see admin-service). Kept as a distinct Error
+// subclass (rather than a plain Error) so the controller can surface
+// suspendedReason in the response body without re-querying the database.
+export class AccountSuspendedError extends Error {
+    public readonly reason: string | null
+
+    constructor(reason: string | null) {
+        super('Account is suspended')
+        this.name = 'AccountSuspendedError'
+        this.reason = reason
+    }
+}
+
 export class AuthService {
     async register(input: RegisterInput): Promise<LoginResponse> {
         const dbTimer = trackDbOperation('insert', 'user');
@@ -150,6 +164,16 @@ export class AuthService {
                 dbTimer.end();
                 trackError('auth', 'invalid_password', 'login');
                 throw new Error('Invalid credentials')
+            }
+
+            // Credentials are valid - but a suspended account must still be
+            // rejected before any tokens are issued (coordination point with
+            // admin-service, which sets suspendedAt/suspendedReason).
+            // Mirrors the lockedUntil check above in shape.
+            if (user.suspendedAt) {
+                dbTimer.end();
+                trackError('auth', 'account_suspended', 'login');
+                throw new AccountSuspendedError(user.suspendedReason)
             }
 
             // Reset login tracking on successful login

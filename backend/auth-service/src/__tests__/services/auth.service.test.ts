@@ -1,4 +1,4 @@
-import { AuthService } from '@services/auth.service';
+import { AuthService, AccountSuspendedError } from '@services/auth.service';
 import { prismaMock } from '../setup';
 import { verifyPassword } from '@utils/password';
 import { tokenBlacklist } from '@shared/config/redis';
@@ -154,6 +154,24 @@ describe('AuthService', () => {
         where: { id: baseUser.id },
         data: { loginAttempts: 1, lockedUntil: null },
       });
+    });
+
+    it('rejects login for a suspended account with a distinct, reason-carrying error', async () => {
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({
+        ...baseUser,
+        suspendedAt: new Date(),
+        suspendedReason: 'Spam',
+      });
+
+      const error = await authService
+        .login({ email: 'test@example.com', password: 'Password123' })
+        .catch(e => e);
+
+      expect(error).toBeInstanceOf(AccountSuspendedError);
+      expect(error.message).toBe('Account is suspended');
+      expect(error.reason).toBe('Spam');
+      // A suspended account must be rejected before any tokens are issued.
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
     });
 
     it('allows login to succeed again once an expired lock has passed', async () => {

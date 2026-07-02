@@ -25,6 +25,13 @@ const prismaMock = {
   role: {
     findUnique: jest.fn(),
   },
+  follow: {
+    upsert: jest.fn(),
+    deleteMany: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    count: jest.fn(),
+  },
 };
 
 jest.mock('@shared/utils/prismaClient', () => ({
@@ -52,6 +59,14 @@ jest.mock('@middlewares/metrics.middleware', () => ({
   trackError: jest.fn(),
   updateActiveTokens: jest.fn(),
   trackRedisOperation: jest.fn(() => ({ end: jest.fn() })),
+}));
+
+jest.mock('@config/upload', () => ({
+  __esModule: true,
+  processAvatarImage: jest.fn(),
+  avatarUpload: {
+    single: jest.fn(() => jest.fn()),
+  },
 }));
 
 jest.mock('@utils/password', () => ({

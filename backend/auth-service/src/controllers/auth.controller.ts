@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { AuthService } from '@services/auth.service'
+import { AuthService, AccountSuspendedError } from '@services/auth.service'
 import logger from '@shared/utils/logger'
 import { AuthenticatedRequest } from '@shared/middlewares/auth'
 import { RequestHandler } from 'express-serve-static-core'
@@ -107,6 +107,12 @@ export class AuthController {
           message: 'Invalid input',
           errors: error.errors,
         })
+        return
+      }
+
+      if (error instanceof AccountSuspendedError) {
+        trackError('account_suspended', 'login_failed', 'auth');
+        res.status(403).json({ message: error.message, suspendedReason: error.reason })
         return
       }
 
