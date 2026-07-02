@@ -22,7 +22,7 @@
             <i class="ri-menu-line text-2xl"></i>
           </button>
 
-          <template v-if="!user">
+          <template v-if="!auth.isAuthenticated">
             <NuxtLink to="/auth/login" class="hidden md:block text-primary-600 hover:text-primary-800 font-medium">
               Sign In
             </NuxtLink>
@@ -40,8 +40,10 @@
 
             <div class="relative">
               <button @click="isUserMenuOpen = !isUserMenuOpen" class="flex items-center space-x-2">
-                <img :src="user.avatar || 'https://i.pravatar.cc/150?img=4'" alt="User avatar"
-                  class="w-8 h-8 rounded-full border-2 border-primary-200">
+                <span
+                  class="w-8 h-8 rounded-full border-2 border-primary-200 bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold uppercase">
+                  {{ auth.user?.username?.charAt(0) }}
+                </span>
               </button>
 
               <div v-if="isUserMenuOpen"
@@ -69,7 +71,7 @@
             class="text-primary-600 hover:text-primary-800 font-medium">
             {{ item.label }}
           </NuxtLink>
-          <template v-if="!user">
+          <template v-if="!auth.isAuthenticated">
             <NuxtLink to="/auth/login" class="text-primary-600 hover:text-primary-800 font-medium">
               Sign In
             </NuxtLink>
@@ -85,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-  const user = ref(null) // Dummy user state
+  const auth = useAuthStore()
   const isUserMenuOpen = ref(false)
   const isMobileMenuOpen = ref(false)
 
@@ -95,16 +97,16 @@
     { label: 'About', path: '/docs/about' }
   ]
 
-  const userMenuItems = [
-    { label: 'Profile', path: '/user/profile', icon: 'ri-user-line' },
+  const userMenuItems = computed(() => [
+    { label: 'Profile', path: `/user/profile/${auth.user?.username}`, icon: 'ri-user-line' },
     { label: 'Dashboard', path: '/user/dashboard', icon: 'ri-dashboard-line' },
-    { label: 'Stories', path: '/stories', icon: 'ri-book-line' },
+    { label: 'Stories', path: '/user/stories', icon: 'ri-book-line' },
     { label: 'Settings', path: '/user/settings', icon: 'ri-settings-line' }
-  ]
+  ])
 
-  const handleSignOut = () => {
-    // Handle sign out logic
-    user.value = null
+  const handleSignOut = async () => {
     isUserMenuOpen.value = false
+    await auth.logout()
+    await navigateTo('/')
   }
 </script>

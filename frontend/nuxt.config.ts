@@ -30,7 +30,11 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      siteUrl: process.env.SITE_URL ?? 'http://localhost:3000'
+      siteUrl: process.env.SITE_URL ?? 'http://localhost:3000',
+      // Base URL of the nginx gateway that fronts every backend service.
+      // NUXT_PUBLIC_API_URL is already set by docker-compose.yml; this key
+      // name (apiUrl) is what Nuxt auto-maps that env var onto.
+      apiUrl: process.env.NUXT_PUBLIC_API_URL ?? 'http://localhost:8080'
     }
   }
 })
