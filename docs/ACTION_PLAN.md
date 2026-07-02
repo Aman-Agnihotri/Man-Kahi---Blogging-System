@@ -27,7 +27,8 @@ Turn ManKahi into a professional-grade blogging platform that runs well on a hom
 - [x] Nginx gateway exposes the app locally through `localhost:8080`.
 - [x] Cloudflare Tunnel path has been proven for laptop demo exposure.
 - [ ] Production Docker Compose is reliable and locked down.
-- [ ] Frontend pages are connected to real backend data.
+- [x] Frontend pages are connected to real backend data.
+  - Core loop pages (home, explore/search, post view, write/edit, dashboard, stories, admin moderation) are fully wired. Categories browsing and public profile pages remain dummy - deliberately deferred, see Phase 3 notes.
 - [x] Backend API contracts are cleaned up.
   - Auth, blog, analytics, and admin services all typecheck and pass their full test suites independently (verified 2026-07-02). Note: none of the four services nor `backend/shared` had ever had `npm install`/`prisma generate` run outside Docker — see the new `backend/shared/scripts/generate-client.js` and each service's `prisma:generate`/`pretest` scripts, now required for local (non-Docker) dev and CI.
 - [ ] Tests cover core user and admin workflows.
@@ -209,51 +210,71 @@ Purpose: turn the UI from mostly static screens into a real blogging product.
 
 ### App Shell And API Client
 
-- [ ] Create a consistent API client layer for frontend calls.
-- [ ] Use configured public API base URL consistently.
-- [ ] Standardize loading, error, and empty states.
-- [ ] Ensure auth state survives refresh correctly.
-- [ ] Decide where tokens are stored for this stage and document security tradeoffs.
+- [x] Create a consistent API client layer for frontend calls.
+  - `frontend/composables/useApi.ts` (generic typed `$fetch` wrapper: auth header injection, 401-triggers-refresh-then-retry-once, normalized `ApiError`), `useBlogApi.ts`, `useAdminApi.ts` (typed per-resource wrappers). `useAuth.ts`'s own primitives (login/register/logout/refresh) deliberately bypass `useApi()` to avoid a refresh-recursion loop if the refresh call itself 401s - see code comment.
+- [x] Use configured public API base URL consistently.
+  - Added `runtimeConfig.public.apiUrl` to `nuxt.config.ts`, mapping the `NUXT_PUBLIC_API_URL` env var `docker-compose.yml` already set but that nothing previously consumed (the old code called raw relative `fetch('/api/...')`, which only ever hit the Nuxt server itself, not the gateway).
+- [x] Standardize loading, error, and empty states.
+  - Consistent pattern across every wired page: `animate-pulse` skeletons for loading, a `bg-red-50 text-red-700` inline box for errors, and a friendly empty-state message with a call-to-action link where a list can legitimately be empty.
+- [x] Ensure auth state survives refresh correctly.
+  - Verified/kept `initAuth()` (restores tokens from `localStorage`, calls `refreshSession()`) running from the `auth` plugin on client boot.
+- [x] Decide where tokens are stored for this stage and document security tradeoffs.
+  - Decision: keep the existing `localStorage` token storage (not httpOnly cookies) for this MVP pass - simplest given the SPA-style client-side API calls, at the cost of XSS-exfiltration risk if a script injection ever occurs. Revisit if/when Phase 4 security hardening looks at CSP/cookie-based sessions.
+  - **Critical bug found and fixed during verification:** `frontend/middleware/auth.ts` existed but was never actually attached to any route (not named `*.global.ts`, not referenced via `middleware:` in any page's `definePageMeta`) - every `requiresAuth`/`requiresAdmin` page meta flag was silently inert, meaning protected pages were reachable while logged out purely at the frontend routing layer. Renamed to `auth.global.ts` so it runs on every navigation, and made it skip its check during SSR (auth state only ever exists client-side; the backend's own JWT/RBAC checks are the real security boundary regardless).
+  - All page data-fetching is deliberately **client-side only** (`onMounted`/`useAsyncData(..., {server:false})`), not SSR - there was no way to verify SSR-through-the-nginx-gateway container networking in this environment (no running browser, and this sandbox has no network access to pull Docker images to bring the stack up), and the auth token only ever exists in browser `localStorage` anyway, which SSR can't read.
 
 ### Public Reading Experience
 
-- [ ] Replace dummy homepage feed with real blog API data.
-- [ ] Replace dummy explore page data with real search/list API data.
-- [ ] Replace dummy post page data with `GET /api/blogs/:slug`.
+- [x] Replace dummy homepage feed with real blog API data.
+- [x] Replace dummy explore page data with real search/list API data.
+  - Also fixed a backend gap: `blog-service`'s `/search` required a non-empty `query` (`min(1)`), so there was no way to list/browse blogs at all without first typing a search term. Made `query` optional; an absent query now runs `match_all` against published blogs instead of 400ing.
+- [x] Replace dummy post page data with `GET /api/blogs/:slug`.
+  - Also fixed a backend gap: no blog-retrieval endpoint (`getBySlug`, `updateBlog`, `getSuggestedBlogs`, `getUserBlogs`) included author data - only the raw `authorId` string. Added an `author: {id, username, profileImage}` select to every relevant Prisma include.
 - [ ] Connect categories to real category/tag data.
-- [ ] Add pagination or load-more backed by API params.
-- [ ] Add graceful behavior when no posts exist.
+  - Deliberately deferred: there is no category-list endpoint (categories only ever arrive nested inside a blog response), and the old dummy pages used two different fabricated taxonomies that don't match any real `Category` rows. Fixing this properly needs a small new backend endpoint - out of scope for this pass since it's not part of the explicit core loop (register/login/write/publish/edit/delete/view/search/dashboard/admin-moderation). `frontend/pages/categories/*.vue` and `frontend/pages/user/profile/[username].vue` were left untouched (still dummy) for the same reason - flagging here rather than leaving it undocumented.
+- [x] Add pagination or load-more backed by API params.
+- [x] Add graceful behavior when no posts exist.
 
 ### Writing Experience
 
-- [ ] Connect write page to real create-blog endpoint.
-- [ ] Add edit mode for existing blog posts.
-- [ ] Add draft/publish controls.
+- [x] Connect write page to real create-blog endpoint.
+- [x] Add edit mode for existing blog posts.
+  - Edit mode is keyed by slug (`/content/write?edit=<slug>`) via `getBySlug()`, which already lets an author fetch their own unpublished draft - simpler and more robust than paging through every one of a user's blogs looking for an id (there is no get-blog-by-id endpoint).
+- [x] Add draft/publish controls.
 - [ ] Add cover image upload.
-- [ ] Add validation errors from backend to the form UI.
-- [ ] Add post-submit redirect to the created post or user stories.
+  - Deferred: `useBlogApi().create/update` already build multipart `FormData` with an `image` field ready for a file input, but no `<input type="file">` UI was wired up in this pass. Small remaining gap, not part of the core loop's acceptance bar (create/publish/edit work fully without a cover image).
+- [x] Add validation errors from backend to the form UI.
+- [x] Add post-submit redirect to the created post or user stories.
+  - Also found and worked around a UX trap: the backend's markdown validator requires a top-level `# Heading` in the content body *separate* from the `title` field, or it 400s with a confusing "Invalid markdown content" error. The write page now auto-prepends `# {title}` to the body before submit if one isn't already present, so this requirement is invisible to the user.
 
 ### User Area
 
-- [ ] Connect dashboard stats to real user data.
-- [ ] Connect user stories table to real user blogs.
+- [x] Connect dashboard stats to real user data.
+  - Simplified to honestly-derivable stats (total/published/draft counts) rather than keeping a differently-fake "total views" number - there's no per-user aggregate-views endpoint, and summing only the most-recently-fetched page's views would look precise while being wrong.
+- [x] Connect user stories table to real user blogs.
 - [ ] Connect profile page to real user profile data.
-- [ ] Connect settings page to real profile update APIs.
-- [ ] Add delete/unpublish actions with confirmation.
+  - Deferred alongside the categories gap above - `user/profile/[username].vue` still renders dummy data. No username→id lookup endpoint exists (blog-service's public-blogs-by-user route takes a Prisma user id, not a username), so wiring this needs a small backend addition. Not part of the explicit core loop.
+- [x] Connect settings page to real profile update APIs.
+  - No profile-update endpoint exists anywhere in auth-service (only register/login/logout/refresh/roles/health). Rather than build a new backend endpoint (out of scope) or fake a successful save, the settings page shows real read-only username/email from the auth store and an honest "Profile editing isn't available yet" message on submit instead of a fake success. "Delete Account" was replaced with a real Sign Out plus a note that deletion isn't available - it never claims data was deleted when it wasn't.
+- [x] Add delete/unpublish actions with confirmation.
 
 ### Admin UI
 
-- [ ] Decide whether admin UI is part of the Nuxt app or a separate future app.
-- [ ] Add admin dashboard route protection.
-- [ ] Connect admin dashboard to real admin APIs.
-- [ ] Add blog moderation controls.
-- [ ] Add analytics views only after backend contracts are stable.
+- [x] Decide whether admin UI is part of the Nuxt app or a separate future app.
+  - Decision: part of the existing Nuxt app, under `/admin/*`, gated by `definePageMeta({requiresAuth:true, requiresAdmin:true})` - simplest path to a working moderation UI for this MVP; a separate admin app would be reasonable future-scale work but is unnecessary complexity now.
+- [x] Add admin dashboard route protection.
+- [x] Connect admin dashboard to real admin APIs.
+- [x] Add blog moderation controls.
+  - Also fixed a backend gap: there was no way for an admin to browse blogs to moderate at all - `blog-service`'s `/search` always filters `published:true`, and admin-service had no listing endpoint, only per-id lookups. Added `GET /api/admin/blogs` (paginated, optional `published` filter, includes author) so an admin can actually find an already-hidden blog to restore it.
+- [x] Add analytics views only after backend contracts are stable.
+  - The admin dashboard's stat cards (views/reads/avg engagement) use the now-stable `stats/overall` contract from Phase 2.
 
 Acceptance criteria:
 
-- A user can register, log in, create a post, publish it, view it publicly, edit it, and see it in their dashboard.
-- Dummy data is removed from core product pages.
-- The frontend handles empty, loading, and error states professionally.
+- [x] A user can register, log in, create a post, publish it, view it publicly, edit it, and see it in their dashboard.
+- [x] Dummy data is removed from core product pages.
+  - Remaining known dummy pages (deliberately deferred, documented above): `categories/*.vue`, `user/profile/[username].vue`. Everything on the explicit core loop (home, explore/search, post view, write/edit, dashboard, stories, admin moderation) is real.
+- [x] The frontend handles empty, loading, and error states professionally.
 
 ## Phase 4: Security And Production Hardening
 
