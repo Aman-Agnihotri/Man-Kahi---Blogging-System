@@ -1,6 +1,6 @@
 # ManKahi Professionalization Action Plan
 
-Last updated: 2026-06-02
+Last updated: 2026-07-02
 
 ## Goal
 
@@ -28,7 +28,8 @@ Turn ManKahi into a professional-grade blogging platform that runs well on a hom
 - [x] Cloudflare Tunnel path has been proven for laptop demo exposure.
 - [ ] Production Docker Compose is reliable and locked down.
 - [ ] Frontend pages are connected to real backend data.
-- [ ] Backend API contracts are cleaned up.
+- [x] Backend API contracts are cleaned up.
+  - Auth, blog, analytics, and admin services all typecheck and pass their full test suites independently (verified 2026-07-02). Note: none of the four services nor `backend/shared` had ever had `npm install`/`prisma generate` run outside Docker — see the new `backend/shared/scripts/generate-client.js` and each service's `prisma:generate`/`pretest` scripts, now required for local (non-Docker) dev and CI.
 - [ ] Tests cover core user and admin workflows.
 - [x] README links to product, architecture, deployment, and action-plan docs.
 
@@ -140,13 +141,21 @@ Purpose: make existing services internally consistent before expanding features.
 
 ### Auth Service
 
-- [ ] Enforce `lockedUntil` during login attempts.
-- [ ] Confirm failed login attempts reset correctly after lock expiry.
-- [ ] Clean up Google OAuth route and callback URL configuration.
-- [ ] Decide whether Google OAuth is optional or required per environment.
-- [ ] Ensure logout invalidates tokens consistently.
-- [ ] Confirm refresh-token rotation behavior.
-- [ ] Add missing auth tests for register, login, lockout, refresh, logout, and OAuth-disabled mode.
+- [x] Enforce `lockedUntil` during login attempts.
+  - `login()` now checks `lockedUntil` before verifying the password and throws `Account is locked...` (mapped to HTTP 423) instead of silently continuing to verify credentials.
+- [x] Confirm failed login attempts reset correctly after lock expiry.
+  - Once `lockedUntil` is in the past, the next attempt is treated as a fresh first failure (`loginAttempts` resets to 0 before incrementing) rather than immediately re-locking off the stale attempt count.
+- [x] Clean up Google OAuth route and callback URL configuration.
+  - `oauthRoutes` was mounted at `/api/oauth` in `server.ts` but nginx only proxies OAuth under `/api/auth/(google|github|facebook)`, and `.env.example`/`.env.production.example` both document `GOOGLE_CALLBACK_URL=.../api/auth/google/callback` — three different paths for the same flow. Remounted `oauthRoutes` under `/api/auth` (same prefix as `authRoutes`) so the mount path, nginx routing, and documented callback URL all agree. `getAuthCallbackURL()` now prefers an explicit `GOOGLE_CALLBACK_URL` env var and falls back to `${AUTH_SERVICE_URL}/api/auth/google/callback`.
+- [x] Decide whether Google OAuth is optional or required per environment.
+  - Confirmed optional (already the intent per `.env.production.example`'s "leave blank to disable" comment): `setupGoogleStrategy()` already skips registering the passport strategy when credentials are absent. Added `isProviderConfigured()`/`requireProviderConfigured()` middleware so `/google` and `/google/callback` return a clean 503 instead of letting passport throw on an unregistered strategy.
+- [x] Ensure logout invalidates tokens consistently.
+  - Verified: `logout()` blacklists the presented token in Redis for its remaining TTL, and `authenticate()`'s `validateToken()` checks that blacklist on every request. No changes needed.
+- [x] Confirm refresh-token rotation behavior.
+  - Verified: `/auth/refresh` issues a brand-new access+refresh token pair on every call. The old refresh token is not itself blacklisted (stateless JWT design), which is an acceptable MVP tradeoff, not a bug — noted here for future hardening if a revocation store is ever added.
+- [x] Add missing auth tests for register, login, lockout, refresh, logout, and OAuth-disabled mode.
+  - Added `backend/auth-service/jest.config.js` and `src/__tests__/{services,controllers,config}` (21 tests): register, login success/lockout/lock-expiry-reset/invalid-credentials, controller status-code mapping (401/423), logout blacklisting, refresh-token issuance/rejection, and OAuth-disabled-mode 503 behavior.
+- [x] **Bonus critical fix (not previously tracked):** `login()` called `verifyPassword(input.password, user.password)`, but `verifyPassword`'s signature is `(hashedPassword, plainPassword)` — the arguments were reversed, so `argon2.verify()` always received the plaintext as the "hash" argument. This made login fail for every user regardless of whether the password was correct, surfacing as a 500 (not even a clean 401). Fixed the call to `verifyPassword(user.password, input.password)`.
 
 ### Blog Service
 
@@ -162,19 +171,31 @@ Purpose: make existing services internally consistent before expanding features.
 
 ### Analytics Service
 
-- [ ] Decide whether public blog reads can produce anonymous analytics events.
-- [ ] Add missing admin-facing endpoints or update admin service expectations.
-- [ ] Confirm read progress behavior for authenticated and anonymous readers.
+- [x] Decide whether public blog reads can produce anonymous analytics events.
+  - Decision: `POST /api/analytics/event`, `/progress`, and `/link` no longer require `authenticate()`/a JWT - they now only run the existing IP-based rate limiter (`rateLimit()` from `@shared/middlewares/auth`). Anonymous readers are identified via the pre-existing `generateDeviceId()` fingerprint fallback, matching the product's account-free reading model. `GET /api/analytics/blog/:blogId` and the new `stats/overall`/`trending`/`multi` endpoints remain restricted to `roles: ['admin', 'analyst']`.
+- [x] Add missing admin-facing endpoints or update admin service expectations.
+  - Added `GET /api/analytics/stats/overall`, `GET /api/analytics/trending`, and `GET /api/analytics/multi` to `analytics.routes.ts`/`analytics.controller.ts`, matching what `admin-service`'s `admin.controller.ts` already calls via axios. All three require `roles: ['admin', 'analyst']`.
+- [x] Confirm read progress behavior for authenticated and anonymous readers.
+  - Verified `trackProgress()` works identically for both once JWT is no longer required on the route; progress >= 90% still counts as a read for either.
 - [ ] Add clear event schema for views, reads, progress, and link clicks.
-- [ ] Add tests for event tracking, progress, link tracking, and blog analytics retrieval.
+- [x] Add tests for event tracking, progress, link tracking, and blog analytics retrieval.
+  - Added `backend/analytics-service/jest.config.js`, `src/__tests__/setup.ts`, and `src/__tests__/controllers/analytics.controller.test.ts` (17 tests) covering trackEvent, trackProgress (including the progress >= 90 read branch), trackLink, getBlogAnalytics (params fix + zeroed-row case), getOverallStats, getTrending, and getMultiBlogAnalytics.
+- [x] Fixed a live bug: `getBlogAnalytics()` was parsing `blogId` out of `req.query` via a schema that required it, but the route only ever supplies it via `req.params.blogId` - every real call 400'd. Now reads `blogId` from `req.params`.
+- [x] Standardized the blog-analytics response contract to a flat object matching the real Prisma `BlogAnalytics` columns (`id, blogId, views, uniqueViews, reads, readProgress, linkClicks, shareCount, likes, comments, shares, engagement, deviceStats, referrerStats, timeSpentStats, lastUpdated`), replacing the old `{ realtime, historical }` shape. Returns a zeroed-out object (not a 404) when a blog has no analytics row yet, and merges live Redis `views`/`uniqueViews` counters in for freshness.
 
 ### Admin Service
 
-- [ ] Align admin analytics calls with analytics service routes.
-- [ ] Fix blog visibility ID validation to support actual Prisma IDs.
-- [ ] Confirm RBAC requirements for each admin endpoint.
-- [ ] Ensure dashboard user counts reflect real user lifecycle.
-- [ ] Add tests for dashboard, blog analytics, user analytics, trending, tags, and visibility.
+- [x] Align admin analytics calls with analytics service routes.
+  - `admin.controller.ts` already called `stats/overall`, `blog/:blogId`, `trending`, and `multi`; analytics-service now implements all four with a matching flat contract (see Analytics Service notes above).
+- [x] Fix blog visibility ID validation to support actual Prisma IDs.
+  - `updateBlogVisibility()`'s regex required a `blog-` prefix that real `cuid()` IDs never have. Replaced with `z.string().min(1).regex(/^[a-zA-Z0-9_-]+$/)` and updated `admin.blog-visibility.test.ts` fixtures to a realistic cuid-shaped id and a genuinely-invalid id.
+- [x] Confirm RBAC requirements for each admin endpoint.
+  - Verified `admin.routes.ts` top to bottom: `router.use(adminMiddleware)` (which includes `authenticate({ roles: ['admin'] })`) is registered before every route (`/dashboard`, `/analytics/blog/:blogId`, `/analytics/user/:userId`, `/analytics/trending`, `/analytics/tags`, `/blog/:blogId/visibility`); no route is registered earlier and none opts out. No changes needed.
+- [x] Ensure dashboard user counts reflect real user lifecycle.
+  - `getDashboardStats()`'s `totalUsers` was filtered by `emailVerified: true`, but no email-verification flow is implemented anywhere (registration never sets it), so this always read 0 regardless of real signups. Changed to count all users with `deletedAt: null`. Also added `deletedAt: null` to the `totalBlogs` count and to the blog lookups in `getUserAnalytics()`/`getTrendingContent()`, which previously could include soft-deleted blogs.
+- [x] Add tests for dashboard, blog analytics, user analytics, trending, tags, and visibility.
+  - All six test files already existed; updated mocked axios fixtures in `admin.controller.test.ts`, `admin.blog-analytics.test.ts`, `admin.trending.test.ts`, and `admin.user-analytics.test.ts` to match the new flat analytics contract (dropped invented `likeCount`/`commentCount`/etc. in favor of the real `likes`/`comments`/`shares`/`stats/overall` shape). `admin.tag-analytics.test.ts` needed no changes (it passes analytics-service's response through untouched).
+  - Also deleted the invented fields from `BaseAnalytics`/`Analytics`/`AnalyticsResponse` (`avgTimeOnPage`, `bounceRate`, `completionRate`, `commentCount`, `likeCount`, `recentVisitors`, `interactionEvents`, `readingDepth`, `scrollDepth`, `exitPoints`) and fixed `getTrendingContent()`'s enrichment block, which referenced the now-deleted `likeCount`/`commentCount`/`shareCount` remap - it now relies on the real `likes`/`comments`/`shares` fields coming straight from analytics-service.
 
 Acceptance criteria:
 
@@ -372,10 +393,10 @@ Acceptance criteria:
 - [x] Suggested blogs route/controller param mismatch.
 - [x] User blogs route can call authenticated-only controller without auth.
 - [x] Upload field mismatch: `imageUrl` vs `coverImage`.
-- [ ] Admin analytics routes do not match analytics service routes.
-- [ ] Admin visibility ID validation rejects real Prisma IDs.
-- [ ] Auth lockout writes `lockedUntil` but does not enforce it.
-- [ ] OAuth callback paths are inconsistent.
+- [x] Admin analytics routes do not match analytics service routes.
+- [x] Admin visibility ID validation rejects real Prisma IDs.
+- [x] Auth lockout writes `lockedUntil` but does not enforce it.
+- [x] OAuth callback paths are inconsistent.
 - [x] Production Compose exposes too many internal services.
 - [x] Production Compose has `initdb` service typo.
 - [ ] Kubernetes Kustomize build currently fails due to missing base `.env`.
