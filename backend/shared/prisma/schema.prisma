@@ -24,17 +24,32 @@ model User {
     blogs          Blog[] // User's authored blogs
     roles          UserRole[] // User's assigned roles
     oAuthProviders OAuthProvider[] // User's OAuth connections
+    likes          Like[]
+    comments       Comment[]
+    bookmarks      Bookmark[]
+    following      Follow[]   @relation("Follower") // Users this user follows
+    followers      Follow[]   @relation("Following") // Users following this user
+    reports        Report[] // Content this user has reported
+    auditLogs      AuditLog[] // Admin actions this user has performed
 
     // Profile-specific fields
-    bio           String?   @db.Text
-    profileImage  String?   @db.VarChar(255)
-    lastLoginAt   DateTime? @db.Timestamp(6)
-    emailVerified Boolean   @default(false)
+    bio               String?   @db.Text
+    profileImage      String?   @db.VarChar(255)
+    socialLinks       Json?     @db.JsonB // e.g. { "twitter": "...", "github": "...", "website": "..." }
+    notificationPrefs Json?     @db.JsonB // e.g. { "emailOnComment": true, "emailOnFollow": false }
+    lastLoginAt       DateTime? @db.Timestamp(6)
+    emailVerified     Boolean   @default(false)
 
     // Analytics and tracking
     lastIp        String?   @db.VarChar(45)
     loginAttempts Int       @default(0)
     lockedUntil   DateTime? @db.Timestamp(6)
+
+    // Account status (distinct from deletedAt: suspension is admin-initiated
+    // and reversible; deletedAt is the existing self-service
+    // deletion/deactivation path, same soft-delete pattern as Blog)
+    suspendedAt     DateTime? @db.Timestamp(6)
+    suspendedReason String?   @db.Text
 
     @@index([email])
     @@index([username])
@@ -105,6 +120,9 @@ model Blog {
     category   Category?      @relation(fields: [categoryId], references: [id])
     analytics  BlogAnalytics?
     revision   BlogRevision[]
+    likes      Like[]
+    comments   Comment[]
+    bookmarks  Bookmark[]
 
     // Indexes for common query patterns
     @@index([title])
@@ -345,4 +363,106 @@ model Permission {
     @@index([slug])
     @@index([resourceType, action])
     @@map("permissions")
+}
+
+// A user's like on a blog post. One like per user per blog; BlogAnalytics.likes
+// is a denormalized counter kept in sync by the service layer for fast reads.
+model Like {
+    id        String   @id @default(cuid())
+    blogId    String
+    blog      Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt DateTime @default(now()) @db.Timestamp(6)
+
+    @@unique([blogId, userId])
+    @@index([userId])
+    @@map("likes")
+}
+
+// A user's bookmark (save-for-later) on a blog post.
+model Bookmark {
+    id        String   @id @default(cuid())
+    blogId    String
+    blog      Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt DateTime @default(now()) @db.Timestamp(6)
+
+    @@unique([blogId, userId])
+    @@index([userId])
+    @@map("bookmarks")
+}
+
+// A comment on a blog post. Supports one level of threaded replies via
+// parentId; moderation uses the same soft-delete pattern as Blog/User
+// (deletedAt) rather than a hard delete, so reply threads don't orphan.
+model Comment {
+    id        String    @id @default(cuid())
+    blogId    String
+    blog      Blog      @relation(fields: [blogId], references: [id], onDelete: Cascade)
+    userId    String
+    user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    content   String    @db.Text
+    parentId  String?
+    parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+    replies   Comment[] @relation("CommentReplies")
+    createdAt DateTime  @default(now()) @db.Timestamp(6)
+    updatedAt DateTime  @updatedAt @db.Timestamp(6)
+    deletedAt DateTime? @db.Timestamp(6)
+
+    @@index([blogId, createdAt])
+    @@index([parentId])
+    @@map("comments")
+}
+
+// A follower/following relationship between two users.
+model Follow {
+    id          String   @id @default(cuid())
+    followerId  String
+    follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+    followingId String
+    following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+    createdAt   DateTime @default(now()) @db.Timestamp(6)
+
+    @@unique([followerId, followingId])
+    @@index([followingId])
+    @@map("follows")
+}
+
+// A user-submitted report against a piece of content (blog or comment),
+// queued for admin review. targetType/targetId is a loose polymorphic
+// reference rather than two separate report models, since the review
+// workflow (list open reports, resolve/dismiss) is identical either way.
+model Report {
+    id         String    @id @default(cuid())
+    targetType String    @db.VarChar(20) // "blog" | "comment"
+    targetId   String
+    reporterId String
+    reporter   User      @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+    reason     String    @db.Text
+    status     String    @default("open") @db.VarChar(20) // open | resolved | dismissed
+    createdAt  DateTime  @default(now()) @db.Timestamp(6)
+    resolvedAt DateTime? @db.Timestamp(6)
+    resolvedBy String?
+
+    @@index([status, createdAt])
+    @@index([targetType, targetId])
+    @@map("reports")
+}
+
+// A record of an admin-initiated moderation action, for the admin audit log.
+model AuditLog {
+    id         String   @id @default(cuid())
+    actorId    String
+    actor      User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+    action     String   @db.VarChar(100) // e.g. "blog.visibility", "user.suspend", "role.assign"
+    targetType String   @db.VarChar(50)
+    targetId   String
+    metadata   Json?    @db.JsonB
+    createdAt  DateTime @default(now()) @db.Timestamp(6)
+
+    @@index([actorId, createdAt])
+    @@index([action, createdAt])
+    @@map("audit_logs")
 }
