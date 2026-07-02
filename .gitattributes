@@ -1,0 +1,6 @@
+# Shell scripts are executed inside Linux containers (bind-mounted or
+# COPY'd verbatim) - a CRLF line ending corrupts the shebang line
+# (`#!/bin/sh` becomes `#!/bin/sh\r`, "bad interpreter: No such file or
+# directory") and breaks the script entirely. Force LF regardless of the
+# checkout platform's core.autocrlf setting.
+*.sh text eol=lf
