@@ -1,0 +1,19 @@
+{
+  "name": "mankahi",
+  "private": true,
+  "description": "Root-level orchestration scripts for the ManKahi monorepo. Each backend service and the frontend remain independent npm projects (no workspaces) - these scripts just shell out to each one in turn, matching how they're built independently in Docker.",
+  "scripts": {
+    "install:all": "npm install --prefix backend/shared && npm install --prefix backend/auth-service && npm install --prefix backend/blog-service && npm install --prefix backend/analytics-service && npm install --prefix backend/admin-service && npm install --prefix frontend",
+    "test": "npm run test:auth && npm run test:blog && npm run test:analytics && npm run test:admin",
+    "test:auth": "npm run test --prefix backend/auth-service",
+    "test:blog": "npm run test --prefix backend/blog-service",
+    "test:analytics": "npm run test --prefix backend/analytics-service",
+    "test:admin": "npm run test --prefix backend/admin-service",
+    "typecheck": "npm run typecheck:auth && npm run typecheck:blog && npm run typecheck:analytics && npm run typecheck:admin && npm run typecheck:frontend",
+    "typecheck:auth": "npm run typecheck --prefix backend/auth-service",
+    "typecheck:blog": "npm run typecheck --prefix backend/blog-service",
+    "typecheck:analytics": "npm run typecheck --prefix backend/analytics-service",
+    "typecheck:admin": "npm run typecheck --prefix backend/admin-service",
+    "typecheck:frontend": "npm run typecheck --prefix frontend"
+  }
+}
