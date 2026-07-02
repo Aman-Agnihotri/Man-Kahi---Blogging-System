@@ -239,7 +239,11 @@ async function handleJwtStrategy(req: Request): Promise<boolean> {
 }
 
 function handleOAuthStrategy(req: Request): boolean {
-    return req.isAuthenticated();
+    // OAuth logins (see auth-service/src/config/oauth.ts) issue a JWT on
+    // callback rather than maintaining a Passport session, so there is no
+    // separate OAuth-session check here - req.user is populated the same
+    // way as the jwt strategy, via handleJwtStrategy elsewhere in the chain.
+    return req.user !== undefined;
 }
 
 function extractBearerToken(req: Request): string | null {

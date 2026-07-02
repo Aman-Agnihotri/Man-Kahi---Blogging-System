@@ -302,6 +302,54 @@ export class BlogController {
     }
   }
 
+  // Update blog visibility (admin moderation - no author-ownership check,
+  // see BlogService.setVisibility)
+  async updateVisibility(req: Request, res: Response): Promise<Response> {
+    try {
+      const { id } = req.params
+      if (!id) {
+        return res.status(400).json({
+          message: 'Blog ID is required',
+          details: 'The blog ID parameter is missing from the request URL'
+        });
+      }
+
+      const published = z.boolean().parse(req.body.published)
+
+      const dbTimer = trackDbOperation('update', 'blog');
+      const blog = await this.blogService.setVisibility(id, published);
+      dbTimer.end();
+
+      return res.json(blog)
+    } catch (error) {
+      logger.error('Error updating blog visibility:', error)
+
+      if (error instanceof z.ZodError) {
+        trackError('validation', 'update_blog_visibility', 'blog-service');
+        return res.status(400).json({
+          message: 'Invalid input data',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        })
+      }
+
+      if (error instanceof Error && error.message === 'Blog not found') {
+        return res.status(404).json({
+          message: 'Blog not found',
+          details: 'The specified blog post does not exist'
+        })
+      }
+
+      logger.error('Unexpected error updating blog visibility:', error)
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to update blog visibility due to an unexpected error'
+      })
+    }
+  }
+
   // Delete blog
   async delete(req: Request, res: Response): Promise<Response> {
     let dbTimer;

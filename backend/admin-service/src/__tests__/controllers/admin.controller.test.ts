@@ -107,6 +107,26 @@ describe('AdminController', () => {
       );
     });
 
+    it('forwards the caller bearer token to analytics-service', async () => {
+      mockRequest.headers = { authorization: 'Bearer test-token' };
+
+      ((prisma.blog.count as jest.MockedFunction<any>).mockResolvedValue(100));
+      ((prisma.user.count as jest.MockedFunction<any>).mockResolvedValue(50));
+      ((axios.get as jest.MockedFunction<any>).mockResolvedValue(mockAnalyticsResponse));
+
+      await adminController.getDashboardStats(
+        mockRequest as Request,
+        mockResponse as Response
+      );
+
+      expect(axios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/stats/overall'),
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer test-token' }
+        })
+      );
+    });
+
     it('should return 400 for invalid timeframe', async () => {
       mockRequest.query = { timeframe: 'invalid' };
 

@@ -179,7 +179,7 @@ router.put(
   createServiceRateLimit('admin') as RequestHandler,
   trackBlogOperation('update_blog_visibility') as RequestHandler,
   ((req: Request, res: Response, next: NextFunction) => {
-    blogController.update(req, res).catch(next);
+    blogController.updateVisibility(req, res).catch(next);
   }) as RequestHandler
 );
 

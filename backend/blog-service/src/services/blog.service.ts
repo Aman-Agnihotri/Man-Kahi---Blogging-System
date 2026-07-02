@@ -377,6 +377,67 @@ export class BlogService {
     return updatedBlog;
   }
 
+  // Admin moderation path - unlike updateBlog, deliberately has no
+  // author-ownership check (the route is gated on the admin role instead),
+  // and only ever touches published/publishedAt. Reuses the same
+  // Elasticsearch reindex + Redis cache invalidation as updateBlog so a
+  // hidden blog actually disappears from search/home instead of just
+  // flipping a column no reader-facing query paths re-check.
+  async setVisibility(id: string, published: boolean) {
+    const startTime = Date.now();
+    logger.debug(`Admin updating blog visibility: ${id}`, { published });
+
+    const blog = await prisma.blog.findUnique({
+      where: { id },
+      select: { slug: true, published: true, publishedAt: true },
+    });
+
+    if (!blog) {
+      logger.warn(`Blog not found for visibility update: ${id}`);
+      throw new Error('Blog not found');
+    }
+
+    const isFirstPublish = published === true && !blog.published && !blog.publishedAt;
+
+    const updatedBlog = await prisma.blog.update({
+      where: { id },
+      data: {
+        published,
+        ...(isFirstPublish && { publishedAt: new Date() }),
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            profileImage: true,
+          },
+        },
+        category: true,
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
+        analytics: true,
+      },
+    });
+
+    await updateBlogIndex(id, {
+      published: updatedBlog.published,
+      publishedAt: updatedBlog.publishedAt,
+    });
+
+    await Promise.all([
+      blogCache.invalidate(blog.slug),
+      blogCache.set(updatedBlog.slug, JSON.stringify(updatedBlog)),
+      searchCache.invalidateAll(),
+    ]);
+
+    logger.info(`Blog visibility updated in ${Date.now() - startTime}ms: ${id}`);
+    return updatedBlog;
+  }
+
   async deleteBlog(id: string, authorId: string) {
     logger.debug(`Attempting to delete blog: ${id}`, { authorId });
 

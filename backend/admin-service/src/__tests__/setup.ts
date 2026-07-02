@@ -36,6 +36,7 @@ jest.mock('axios', () => ({
   __esModule: true,
   default: {
     get: jest.fn(),
+    put: jest.fn(),
     create: jest.fn().mockReturnThis(),
     isAxiosError: (error: any) => error.isAxiosError === true
   }
@@ -43,6 +44,7 @@ jest.mock('axios', () => ({
 
 // Set up test environment variables
 process.env['ANALYTICS_SERVICE_URL'] = 'http://analytics-service:3003';
+process.env['BLOG_SERVICE_URL'] = 'http://blog-service:3002';
 
 // Mock metrics tracking to avoid actual metrics collection
 jest.mock('@middlewares/metrics.middleware', () => ({

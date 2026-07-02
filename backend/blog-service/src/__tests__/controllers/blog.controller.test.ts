@@ -11,6 +11,7 @@ type MockBlogService = {
   deleteBlog: jest.Mock;
   getBlogBySlug: jest.Mock;
   updateBlog: jest.Mock;
+  setVisibility: jest.Mock;
 };
 
 type MockSearchService = {
@@ -35,6 +36,7 @@ const createController = () => {
     deleteBlog: jest.fn(),
     getBlogBySlug: jest.fn(),
     updateBlog: jest.fn(),
+    setVisibility: jest.fn(),
   } as MockBlogService;
   const searchService = {
     getPopularTags: jest.fn(),
@@ -165,6 +167,33 @@ describe('BlogController contract fixes', () => {
     expect(blogService.deleteBlog).toHaveBeenCalledWith('blog-1', 'author-1');
     expect(updateActiveBlogCount).toHaveBeenCalledWith(-1);
     expect(res.json).toHaveBeenCalledWith({ message: 'Blog deleted successfully' });
+  });
+
+  it('updates visibility via setVisibility without requiring req.user (admin moderation route has no ownership check)', async () => {
+    const { controller, blogService } = createController();
+    const res = createResponse();
+    blogService.setVisibility.mockResolvedValue({ id: 'blog-1', published: false });
+
+    await controller.updateVisibility(asRequest({
+      params: { id: 'blog-1' },
+      body: { published: false },
+    }), res);
+
+    expect(blogService.setVisibility).toHaveBeenCalledWith('blog-1', false);
+    expect(res.json).toHaveBeenCalledWith({ id: 'blog-1', published: false });
+  });
+
+  it('rejects non-boolean visibility payloads with a 400', async () => {
+    const { controller, blogService } = createController();
+    const res = createResponse();
+
+    await controller.updateVisibility(asRequest({
+      params: { id: 'blog-1' },
+      body: { published: 'not-a-boolean' },
+    }), res);
+
+    expect(blogService.setVisibility).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 
   it('passes uploaded files through update requests', async () => {

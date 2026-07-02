@@ -5,7 +5,6 @@ declare global {
     namespace Express {
         interface Request {
             user?: AuthenticatedUser;
-            isAuthenticated(): this is { user: AuthenticatedUser };
         }
     }
 }
@@ -15,9 +14,12 @@ export interface AuthenticatedRequest extends Request {
     user: AuthenticatedUser;
 }
 
-// Type guard to check if request is authenticated
+// Type guard to check if request is authenticated. Auth in this codebase is
+// stateless JWT (handleJwtStrategy sets req.user directly) - there is no
+// Passport session middleware anywhere, so req.user presence is the only
+// signal available.
 export function isAuthenticatedRequest(req: Request): req is AuthenticatedRequest {
-    return req.isAuthenticated() && req.user !== undefined;
+    return req.user !== undefined;
 }
 
 export interface AuthenticatedUser {

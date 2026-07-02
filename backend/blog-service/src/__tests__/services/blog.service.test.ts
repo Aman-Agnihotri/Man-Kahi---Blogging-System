@@ -1,6 +1,6 @@
 import { BlogService } from '@services/blog.service';
 import { prisma } from '@shared/utils/prismaClient';
-import { blogCache } from '@shared/config/redis';
+import { blogCache, searchCache } from '@shared/config/redis';
 import { processImage } from '@config/upload';
 import { indexBlog, updateBlogIndex } from '@utils/elasticsearch';
 
@@ -18,6 +18,10 @@ const cacheMock = blogCache as unknown as {
   invalidate: jest.Mock;
   incrementViews: jest.Mock;
   set: jest.Mock;
+};
+
+const searchCacheMock = searchCache as unknown as {
+  invalidateAll: jest.Mock;
 };
 
 const processImageMock = processImage as jest.Mock;
@@ -279,6 +283,73 @@ describe('BlogService contract fixes', () => {
     expect(cacheMock.invalidate).toHaveBeenCalledWith('same-title');
     expect(updateBlogIndexMock).toHaveBeenCalledWith('blog-1', {
       deletedAt,
+    });
+  });
+
+  describe('setVisibility (admin moderation)', () => {
+    // Regression test: admin-service used to write `published` straight to
+    // Postgres via its own Prisma client, bypassing this reindex/cache
+    // invalidation entirely - a hidden blog stayed visible in search/home
+    // indefinitely because Elasticsearch and the Redis search cache never
+    // heard about the change. setVisibility is the fix: same reindex +
+    // invalidation as updateBlog, but with no author-ownership check since
+    // the caller is already gated on the admin role at the route level.
+    it('hides a published blog without requiring author ownership', async () => {
+      const service = new BlogService();
+      prismaMock.blog.findUnique.mockResolvedValue({
+        slug: 'same-title',
+        published: true,
+        publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      const updated = { ...blogRecord, published: false, publishedAt: null as Date | null };
+      prismaMock.blog.update.mockResolvedValue(updated);
+
+      const result = await service.setVisibility('blog-1', false);
+
+      expect(result).toBe(updated);
+      expect(prismaMock.blog.update).toHaveBeenCalledWith({
+        where: { id: 'blog-1' },
+        data: { published: false },
+        include: expect.any(Object),
+      });
+      expect(updateBlogIndexMock).toHaveBeenCalledWith('blog-1', {
+        published: updated.published,
+        publishedAt: updated.publishedAt,
+      });
+      expect(cacheMock.invalidate).toHaveBeenCalledWith('same-title');
+      expect(searchCacheMock.invalidateAll).toHaveBeenCalled();
+    });
+
+    it('sets publishedAt on first publish via moderation, leaves it alone on republish', async () => {
+      const service = new BlogService();
+      prismaMock.blog.findUnique.mockResolvedValue({
+        slug: 'same-title',
+        published: false,
+        publishedAt: null,
+      });
+      prismaMock.blog.update.mockResolvedValue(blogRecord);
+
+      await service.setVisibility('blog-1', true);
+      expect(prismaMock.blog.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ published: true, publishedAt: expect.any(Date) }),
+      }));
+
+      prismaMock.blog.update.mockClear();
+      prismaMock.blog.findUnique.mockResolvedValue({
+        slug: 'same-title',
+        published: true,
+        publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      await service.setVisibility('blog-1', true);
+      expect(prismaMock.blog.update.mock.calls[0][0].data).not.toHaveProperty('publishedAt');
+    });
+
+    it('throws Blog not found for an unknown ID rather than upserting', async () => {
+      const service = new BlogService();
+      prismaMock.blog.findUnique.mockResolvedValue(null);
+
+      await expect(service.setVisibility('missing-blog', false)).rejects.toThrow('Blog not found');
+      expect(prismaMock.blog.update).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { AdminController } from '@controllers/admin.controller';
-import prisma from '@shared/utils/prismaClient';
+import axios from 'axios';
 import { jest } from '@jest/globals';
-import { trackAdminError, trackDbOperation } from '@middlewares/metrics.middleware';
+import { trackAdminError, trackExternalCall } from '@middlewares/metrics.middleware';
 import logger from '@shared/utils/logger';
 
 // Mock logger
@@ -28,7 +28,8 @@ describe('AdminController - Blog Visibility', () => {
     } as Partial<Response>;
     mockRequest = {
       params: { blogId: 'cm3x9k2p40000ab12cd34ef56' },
-      body: { visible: true }
+      body: { visible: true },
+      headers: { authorization: 'Bearer test-token' }
     };
 
     // Reset all mocks before each test
@@ -46,35 +47,29 @@ describe('AdminController - Blog Visibility', () => {
     }
   };
 
-  it('should update blog visibility successfully', async () => {
-    ((prisma.blog.update as jest.MockedFunction<any>).mockResolvedValue(mockBlogData));
+  it('should update blog visibility successfully by delegating to blog-service', async () => {
+    ((axios.put as jest.MockedFunction<any>).mockResolvedValue({ data: mockBlogData }));
 
     await adminController.updateBlogVisibility(
       mockRequest as Request,
       mockResponse as Response
     );
 
-    expect(prisma.blog.update).toHaveBeenCalledWith({
-      where: { id: 'cm3x9k2p40000ab12cd34ef56' },
-      data: { published: true },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            email: true
-          }
-        }
-      }
-    });
+    expect(axios.put).toHaveBeenCalledWith(
+      expect.stringContaining('/api/blogs/cm3x9k2p40000ab12cd34ef56/visibility'),
+      { published: true },
+      { headers: { Authorization: 'Bearer test-token' } }
+    );
     expect(jsonMock).toHaveBeenCalledWith(mockBlogData);
-    expect(trackDbOperation).toHaveBeenCalledWith('update', 'blog');
+    expect(trackExternalCall).toHaveBeenCalledWith('blog', 'visibility');
   });
 
   it('should return 404 for non-existent blog', async () => {
-    const notFoundError = new Error('Blog not found');
-    (notFoundError as any).name = 'PrismaClientKnownRequestError';
-    ((prisma.blog.update as jest.MockedFunction<any>).mockRejectedValue(notFoundError));
+    const notFoundError = Object.assign(new Error('Request failed with status code 404'), {
+      isAxiosError: true,
+      response: { status: 404 }
+    });
+    ((axios.put as jest.MockedFunction<any>).mockRejectedValue(notFoundError));
 
     await adminController.updateBlogVisibility(
       mockRequest as Request,
@@ -93,30 +88,26 @@ describe('AdminController - Blog Visibility', () => {
     );
   });
 
-  it('should return 403 for unauthorized update', async () => {
-    const authError = new Error('Not authorized');
-    ((prisma.blog.update as jest.MockedFunction<any>).mockRejectedValue(authError));
+  it('should return 502 when blog-service is unreachable', async () => {
+    const networkError = Object.assign(new Error('connect ECONNREFUSED'), {
+      isAxiosError: true
+    });
+    ((axios.put as jest.MockedFunction<any>).mockRejectedValue(networkError));
 
     await adminController.updateBlogVisibility(
       mockRequest as Request,
       mockResponse as Response
     );
 
-    expect(mockResponse.status).toHaveBeenCalledWith(403);
+    expect(mockResponse.status).toHaveBeenCalledWith(502);
     expect(jsonMock).toHaveBeenCalledWith({
-      message: 'Not authorized',
-      details: 'You do not have permission to update this blog'
+      message: 'Service unavailable',
+      details: 'Blog service is not responding'
     });
-    expect(logger.error).toHaveBeenCalledWith(
-      'Error updating blog visibility:',
-      authError
-    );
+    expect(trackAdminError).toHaveBeenCalledWith('blog_visibility_update_error');
   });
 
   it('should return 400 for invalid visibility value', async () => {
-    const invalidVisibilityError = new Error('Invalid visibility state');
-    ((prisma.blog.update as jest.MockedFunction<any>).mockRejectedValue(invalidVisibilityError));
-
     await adminController.updateBlogVisibility(
       {
         ...mockRequest,
@@ -125,6 +116,7 @@ describe('AdminController - Blog Visibility', () => {
       mockResponse as Response
     );
 
+    expect(axios.put).not.toHaveBeenCalled();
     expect(mockResponse.status).toHaveBeenCalledWith(400);
     expect(jsonMock).toHaveBeenCalledWith({
       message: 'Invalid visibility state',
@@ -132,7 +124,7 @@ describe('AdminController - Blog Visibility', () => {
     });
     expect(logger.error).toHaveBeenCalledWith(
       'Error updating blog visibility:',
-      invalidVisibilityError
+      expect.any(Error)
     );
   });
 
@@ -147,6 +139,7 @@ describe('AdminController - Blog Visibility', () => {
       mockResponse as Response
     );
 
+    expect(axios.put).not.toHaveBeenCalled();
     expect(mockResponse.status).toHaveBeenCalledWith(400);
     expect(jsonMock).toHaveBeenCalledWith({
       message: 'Invalid input data',
@@ -170,6 +163,7 @@ describe('AdminController - Blog Visibility', () => {
       mockResponse as Response
     );
 
+    expect(axios.put).not.toHaveBeenCalled();
     expect(mockResponse.status).toHaveBeenCalledWith(400);
     expect(jsonMock).toHaveBeenCalledWith({
       message: 'Invalid input data',
@@ -196,6 +190,7 @@ describe('AdminController - Blog Visibility', () => {
       mockResponse as Response
     );
 
+    expect(axios.put).not.toHaveBeenCalled();
     expect(mockResponse.status).toHaveBeenCalledWith(400);
     expect(jsonMock).toHaveBeenCalledWith({
       message: 'Invalid input data',
@@ -208,9 +203,9 @@ describe('AdminController - Blog Visibility', () => {
     );
   });
 
-  it('should handle database errors gracefully', async () => {
-    const dbError = new Error('Database error');
-    ((prisma.blog.update as jest.MockedFunction<any>).mockRejectedValue(dbError));
+  it('should handle unexpected errors gracefully', async () => {
+    const unexpectedError = new Error('Something else went wrong');
+    ((axios.put as jest.MockedFunction<any>).mockRejectedValue(unexpectedError));
 
     await adminController.updateBlogVisibility(
       mockRequest as Request,
@@ -225,7 +220,7 @@ describe('AdminController - Blog Visibility', () => {
     expect(trackAdminError).toHaveBeenCalledWith('blog_visibility_update_error');
     expect(logger.error).toHaveBeenCalledWith(
       'Error updating blog visibility:',
-      dbError
+      unexpectedError
     );
   });
 });

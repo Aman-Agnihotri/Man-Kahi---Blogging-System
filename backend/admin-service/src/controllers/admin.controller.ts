@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import type { ExtendedBlog, Blog, User, Tag } from '@shared/utils/prismaClient';
+import type { ExtendedBlog, Blog, Tag } from '@shared/utils/prismaClient';
 import prisma from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
 import axios from 'axios';
@@ -71,9 +71,23 @@ const dateRangeSchema = z.preprocess((val) => {
 
 export class AdminController {
   private readonly analyticsServiceUrl: string;
+  private readonly blogServiceUrl: string;
 
   constructor() {
     this.analyticsServiceUrl = process.env['ANALYTICS_SERVICE_URL'] ?? 'http://analytics-service:3003';
+    this.blogServiceUrl = process.env['BLOG_SERVICE_URL'] ?? 'http://blog-service:3002';
+  }
+
+  // analytics-service's /stats/overall, /blog/:id, /trending and /multi
+  // routes all require a JWT with an admin/analyst role - every call site
+  // below was calling them with no Authorization header at all, so they
+  // always 401'd. These routes are only ever reached via admin.routes.ts,
+  // which has already authenticated the caller as an admin, so forwarding
+  // that same bearer token through is correct rather than minting a
+  // separate service credential.
+  private authHeaders(req: Request): { Authorization: string } | undefined {
+    const header = req.headers?.authorization;
+    return header ? { Authorization: header } : undefined;
   }
 
   // List blogs for moderation, regardless of published state. Every other
@@ -155,11 +169,12 @@ export class AdminController {
       const analyticsTimer = trackExternalCall('analytics', 'stats/overall');
       const analyticsResponse = await axios.get(
         `${this.analyticsServiceUrl}/api/analytics/stats/overall`,
-        { 
+        {
           params: dateRange ? {
             start: dateRange.start,
             end: dateRange.end
-          } : { timeframe }
+          } : { timeframe },
+          headers: this.authHeaders(req)
         }
       );
       analyticsTimer.end();
@@ -224,11 +239,12 @@ export class AdminController {
       const analyticsTimer = trackExternalCall('analytics', `blog/${blogId}`);
       const analyticsResponse = await axios.get(
         `${this.analyticsServiceUrl}/api/analytics/blog/${blogId}`,
-        { 
+        {
           params: dateRange ? {
             start: dateRange.start,
             end: dateRange.end
-          } : { timeframe }
+          } : { timeframe },
+          headers: this.authHeaders(req)
         }
       );
       analyticsTimer.end();
@@ -308,7 +324,8 @@ export class AdminController {
           params: dateRange ? {
             start: dateRange.start,
             end: dateRange.end
-          } : { timeframe }
+          } : { timeframe },
+          headers: this.authHeaders(req)
         });
         timer.end();
         return response;
@@ -384,11 +401,12 @@ export class AdminController {
       const analyticsTimer = trackExternalCall('analytics', 'trending');
       const analyticsResponse = await axios.get(
         `${this.analyticsServiceUrl}/api/analytics/trending`,
-        { 
+        {
           params: dateRange ? {
             start: dateRange.start,
             end: dateRange.end
-          } : { timeframe }
+          } : { timeframe },
+          headers: this.authHeaders(req)
         }
       );
       analyticsTimer.end();
@@ -485,15 +503,16 @@ export class AdminController {
           const timer = trackExternalCall('analytics', 'multi');
           const analyticsResponse = await axios.get(
             `${this.analyticsServiceUrl}/api/analytics/multi`,
-            { 
+            {
               params: dateRange ? {
                 blogIds,
                 start: dateRange.start,
                 end: dateRange.end
-              } : { 
+              } : {
                 blogIds,
                 timeframe
-              }
+              },
+              headers: this.authHeaders(req)
             }
           );
           timer.end();
@@ -554,7 +573,15 @@ export class AdminController {
     }
   }
 
-  // Update blog visibility
+  // Update blog visibility. Delegates to blog-service's PUT
+  // /api/blogs/:id/visibility rather than writing `published` directly via
+  // Prisma here: blog-service's write path is what keeps the Elasticsearch
+  // index and Redis caches in sync, and neither of those is reachable from
+  // here (Elasticsearch client setup lives only in blog-service). Writing
+  // straight to Postgres, as this used to do, left a hidden blog fully
+  // visible on the home page and search results indefinitely - confirmed
+  // live: toggling "Hide" flipped the DB row but the post kept showing up
+  // everywhere reads come from Elasticsearch.
   async updateBlogVisibility(req: Request, res: Response): Promise<Response> {
     try {
       // Check required parameters first
@@ -589,40 +616,35 @@ export class AdminController {
         throw new Error('Invalid visibility state');
       }
 
-      const dbTimer = trackDbOperation('update', 'blog');
-      const blog = await (prisma as any).blog.update({
-        where: { id: req.params['blogId'] },
-        data: { published: visible },
-        include: {
-          author: {
-            select: {
-              id: true,
-              username: true,
-              email: true
-            }
-          }
-        }
-      }) as Blog & { author: Pick<User, 'id' | 'username' | 'email'> };
-      dbTimer.end();
+      const externalTimer = trackExternalCall('blog', 'visibility');
+      const response = await axios.put(
+        `${this.blogServiceUrl}/api/blogs/${req.params['blogId']}/visibility`,
+        { published: visible },
+        { headers: this.authHeaders(req) }
+      );
+      externalTimer.end();
 
-      return res.json(blog);
+      return res.json(response.data);
     } catch (error) {
       logger.error('Error updating blog visibility:', error);
-      if (error instanceof Error) {
-        if (error.name === 'PrismaClientKnownRequestError') {
+
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
           trackAdminError('blog_not_found_error');
           return res.status(404).json({
             message: 'Blog not found',
             details: 'The specified blog does not exist'
           });
         }
-        
+        trackAdminError('blog_visibility_update_error');
+        return res.status(502).json({
+          message: 'Service unavailable',
+          details: 'Blog service is not responding'
+        });
+      }
+
+      if (error instanceof Error) {
         switch (error.message) {
-          case 'Not authorized':
-            return res.status(403).json({
-              message: 'Not authorized',
-              details: 'You do not have permission to update this blog'
-            });
           case 'Invalid visibility state':
             return res.status(400).json({
               message: 'Invalid visibility state',
@@ -645,7 +667,7 @@ export class AdminController {
             });
         }
       }
-      
+
       trackAdminError('blog_visibility_update_error');
       logger.error('Unexpected error updating blog visibility:', error);
       return res.status(500).json({
