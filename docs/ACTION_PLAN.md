@@ -90,7 +90,9 @@ Purpose: make the project deploy cleanly on a laptop or one Linux server.
 
 - [x] Keep `docker/compose/docker-compose.yml` as the official development stack.
 - [ ] Verify hot reload works for frontend and backend services.
+  - Could not execute in this environment: the sandbox this pass was done in has no network access to pull Docker images (`docker compose up` fails resolving `docker.io`), so no container could actually be started. Reviewed the config instead: `docker-compose.yml`'s dev services bind-mount source (`../../frontend:/app`, `../../backend/<service>:/app/<service>`) with an anonymous volume protecting `node_modules`, and run `npm run dev` (`nuxt dev` / `ts-node-dev --respawn`), which is the standard, normally-reliable pattern for this - but it has not been empirically confirmed working end-to-end here. Please verify on a machine with normal Docker Hub access before checking this off for real.
 - [ ] Verify database initialization works from a clean volume.
+  - Same execution limitation as above. Did find and fix a real bug that would have broken this: `docker/compose/.env.example`'s `DATABASE_URL` used `${POSTGRES_USER}:${POSTGRES_PASSWORD}` shell-style interpolation, which Docker Compose's `env_file:` mechanism does not expand - every service would have received a literal, broken connection string on first boot. Fixed to literal values with a comment warning they must be kept in sync by hand. `docker/scripts/init-db.sh` (creates the database + `uuid-ossp`/`pg_trgm` extensions) and `backend/init-service` (runs `prisma db push` since no migrations exist yet, only `schema.prisma`) both look correct on review, but haven't been exercised against an actual clean volume here either.
 - [x] Verify health checks for auth, blog, analytics, admin, nginx, Postgres, Redis, and Elasticsearch.
 - [x] Add clear commands for start, stop, rebuild, reset, logs, and health checks.
 - [x] Document required local prerequisites: Docker, Docker Compose, ports, env file.
@@ -120,14 +122,19 @@ Purpose: make the project deploy cleanly on a laptop or one Linux server.
 
 ### Backups And Restore
 
-- [ ] Add Postgres backup script.
-- [ ] Add Postgres restore script.
-- [ ] Add MinIO/upload backup guidance.
-- [ ] Add Redis persistence guidance.
-- [ ] Add Elasticsearch snapshot guidance or local export fallback.
-- [ ] Document where backups are stored.
-- [ ] Document how often backups should run.
+- [x] Add Postgres backup script.
+  - `docker/scripts/backup-postgres.sh` - `pg_dump --format=custom` via `docker exec`, reads `POSTGRES_USER`/`POSTGRES_DB` from inside the container so it works for either env file.
+- [x] Add Postgres restore script.
+  - `docker/scripts/restore-postgres.sh` - `pg_restore --clean --if-exists`, confirms before overwriting unless `--force`.
+- [x] Add MinIO/upload backup guidance.
+- [x] Add Redis persistence guidance.
+  - Already has AOF persistence on (`--appendonly yes`); documented why it's intentionally excluded from the backup script (reconstructable/non-critical cache data).
+- [x] Add Elasticsearch snapshot guidance or local export fallback.
+  - No snapshot repo; documented that the index is fully rebuildable from Postgres via the existing `syncBlogsToElasticsearch()`.
+- [x] Document where backups are stored.
+- [x] Document how often backups should run.
 - [ ] Test restore against a clean local volume.
+  - **Not done.** Same environment limitation noted throughout this pass: no Docker image pull access in this sandbox, so the scripts above are written and reviewed but not executed against a real container. See the verification-status note in `docs/DEPLOYMENT.md`'s Backups And Restore section for the exact steps to run before trusting these in production.
 
 Acceptance criteria:
 

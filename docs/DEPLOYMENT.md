@@ -80,7 +80,7 @@ loop against the gateway with one command:
 
 ```bash
 cd docker/compose
-./scripts/smoke-test.sh
+../scripts/smoke-test.sh
 ```
 
 Set `SMOKE_TEST_BASE_URL` if the gateway isn't at the default
@@ -223,9 +223,79 @@ Remaining production work:
 
 - runtime-test the production stack on a clean machine
 - verify production Dockerfiles start every service correctly
-- add backup and restore scripts
 - decide how Grafana should be accessed privately
 - configure real TLS/domain behavior for nginx or Cloudflare
+
+## Backups And Restore
+
+### PostgreSQL (primary data - back this up)
+
+```bash
+# Back up (writes a timestamped .dump file to docker/backups/ by default)
+docker/scripts/backup-postgres.sh -e development
+docker/scripts/backup-postgres.sh -e production
+
+# Restore (destructive - drops and recreates objects covered by the dump)
+docker/scripts/restore-postgres.sh docker/backups/mankahi-development-20260702-120000.dump -e development
+```
+
+Both scripts read `POSTGRES_USER`/`POSTGRES_DB` from inside the running
+container itself (already set there via `env_file`), so they work
+identically regardless of which env file started the stack. Backups use
+`pg_dump --format=custom` (`restore-postgres.sh` expects that format).
+
+Where backups are stored: `docker/backups/` by default (gitignored - never
+commit real data), or pass `-o <dir>` to write elsewhere (e.g. a mounted
+network share or object storage sync target). How often: no automated
+schedule exists yet - run `backup-postgres.sh` on a cron/scheduled task
+appropriate to your acceptable data-loss window (daily is a reasonable
+starting point for a single-server deployment).
+
+**Verification status:** these scripts have been written and reviewed,
+but restoring into a genuinely clean/fresh Postgres volume has not been
+executed end-to-end in the environment this was authored in - that sandbox
+has no network access to pull Docker images at all (`docker compose up`
+fails resolving `docker.io`), so no container could be started to test
+against. Before relying on these in a real deployment, run
+`docker compose down -v && docker compose up -d --build`, `backup-postgres.sh`
+against some seeded data, `down -v` again for a truly clean volume, `up`
+again, then `restore-postgres.sh` and confirm the data is back.
+
+### Redis (cache/session data - safe to lose, persistence is a nice-to-have)
+
+Already configured with AOF persistence (`redis-server --appendonly yes`,
+see `docker-compose.yml`) writing into the `redis-data` named volume, so a
+container restart doesn't lose the rate-limit counters/token blacklist/
+cache. Redis holds no data that isn't reconstructable from Postgres or
+that would be catastrophic to lose (worst case: users need to log in
+again, caches repopulate on next read), so it is intentionally not
+included in the backup script above.
+
+### Elasticsearch (search index - rebuildable from Postgres)
+
+No snapshot repository is configured. This is acceptable because the
+search index is fully rebuildable from Postgres: blog-service's
+`syncBlogsToElasticsearch()` (`backend/blog-service/src/utils/elasticsearch.ts`)
+re-indexes every blog from the database in batches. If the `es-data`
+volume is ever lost, recreate the index and re-run that function (there is
+currently no CLI entrypoint wired up for it - it needs to be invoked from
+a one-off script or a temporary route; a small `npm run reindex` script is
+a reasonable Phase 5+ follow-up).
+
+### MinIO / uploaded cover images
+
+Cover images live in the `minio-data` named volume. For a single-server
+deployment, back it up the same way as any other Docker named volume, e.g.:
+
+```bash
+docker run --rm -v mankahi-dev-compose_minio-data:/data -v "$(pwd)/docker/backups":/backup alpine \
+  tar czf /backup/minio-$(date +%Y%m%d-%H%M%S).tar.gz -C /data .
+```
+
+(Confirm the exact volume name with `docker volume ls` - Compose prefixes
+it with the project name, which differs between the dev and prod compose
+files.) Restoring is the reverse: stop the `minio` container, extract the
+tarball back into the volume, restart.
 
 ## Kubernetes Status
 

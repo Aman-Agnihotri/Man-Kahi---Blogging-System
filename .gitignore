@@ -33,6 +33,7 @@ logs/
 
 # Docker
 .docker/
+docker/backups/
 
 # Kubernetes Secrets
 **/kubernetes/**/secrets.yaml
