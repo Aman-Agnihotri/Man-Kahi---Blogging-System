@@ -46,16 +46,128 @@
           </span>
         </div>
 
-        <div class="mb-2">
+        <div class="mb-2 flex space-x-2">
+          <button
+            type="button"
+            @click="activeTab = 'write'"
+            class="px-4 py-1.5 rounded-t-lg text-sm font-medium"
+            :class="activeTab === 'write' ? 'bg-primary-100 text-primary-800' : 'text-primary-500 hover:text-primary-700'"
+          >
+            Write
+          </button>
+          <button
+            type="button"
+            @click="activeTab = 'preview'"
+            class="px-4 py-1.5 rounded-t-lg text-sm font-medium"
+            :class="activeTab === 'preview' ? 'bg-primary-100 text-primary-800' : 'text-primary-500 hover:text-primary-700'"
+          >
+            Preview
+          </button>
+        </div>
+
+        <div v-if="activeTab === 'write'" class="mb-2">
           <textarea
             v-model="content"
             placeholder="Write your story in Markdown..."
             class="w-full h-96 p-4 rounded-lg border-primary-200 focus:border-primary-500 focus:ring-primary-500 font-mono text-sm"
           ></textarea>
         </div>
+        <div
+          v-else
+          class="mb-2 h-96 overflow-y-auto p-4 rounded-lg border border-primary-200 prose prose-sm max-w-none"
+        >
+          <div v-if="content.trim()" v-html="previewHtml"></div>
+          <p v-else class="text-primary-400">Nothing to preview yet.</p>
+        </div>
         <p class="text-sm text-primary-500 mb-6">
           {{ content.length }}/100 characters minimum. Markdown supported.
         </p>
+
+        <div class="mb-6 border border-primary-200 rounded-lg">
+          <button
+            type="button"
+            @click="showSeoFields = !showSeoFields"
+            class="w-full flex items-center justify-between px-4 py-3 text-left text-primary-700 font-medium"
+          >
+            <span>SEO settings (optional)</span>
+            <span>{{ showSeoFields ? '−' : '+' }}</span>
+          </button>
+          <div v-if="showSeoFields" class="px-4 pb-4 space-y-4 border-t border-primary-100 pt-4">
+            <div>
+              <label class="block text-sm font-medium text-primary-700 mb-1">Meta title</label>
+              <input
+                v-model="metaTitle"
+                type="text"
+                maxlength="200"
+                placeholder="Defaults to the post title"
+                class="w-full rounded-lg border-primary-200 focus:border-primary-500 focus:ring-primary-500"
+              />
+              <p class="text-xs text-primary-400 mt-1">{{ metaTitle.length }}/200 characters</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-primary-700 mb-1">Meta description</label>
+              <textarea
+                v-model="metaDescription"
+                maxlength="1000"
+                rows="3"
+                placeholder="Shown in search engine results"
+                class="w-full rounded-lg border-primary-200 focus:border-primary-500 focus:ring-primary-500"
+              ></textarea>
+              <p class="text-xs text-primary-400 mt-1">{{ metaDescription.length }}/1000 characters</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-primary-700 mb-1">Canonical URL</label>
+              <input
+                v-model="canonicalUrl"
+                type="url"
+                placeholder="https://example.com/original-post"
+                class="w-full rounded-lg border-primary-200 focus:border-primary-500 focus:ring-primary-500"
+              />
+              <p class="text-xs text-primary-400 mt-1">Set this if this post was originally published elsewhere.</p>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="editSlug" class="mb-6 border border-primary-200 rounded-lg">
+          <button
+            type="button"
+            @click="toggleRevisions"
+            class="w-full flex items-center justify-between px-4 py-3 text-left text-primary-700 font-medium"
+          >
+            <span>Version history</span>
+            <span>{{ showRevisions ? '−' : '+' }}</span>
+          </button>
+          <div v-if="showRevisions" class="px-4 pb-4 border-t border-primary-100 pt-4">
+            <div v-if="loadingRevisions" class="text-sm text-primary-500">Loading revisions...</div>
+            <div v-else-if="revisionsError" class="text-sm text-red-600">{{ revisionsError }}</div>
+            <div v-else-if="revisions.length === 0" class="text-sm text-primary-500">No earlier versions yet.</div>
+            <ul v-else class="divide-y divide-primary-100">
+              <li v-for="rev in revisions" :key="rev.id" class="py-3">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                  <button
+                    type="button"
+                    @click="viewRevision(rev.id)"
+                    class="text-sm text-primary-700 hover:text-primary-900 font-medium"
+                  >
+                    Version {{ rev.version }} · {{ formatDateTime(rev.createdAt) }}
+                  </button>
+                  <button
+                    type="button"
+                    :disabled="restoringRevisionId === rev.id"
+                    @click="restoreRevisionAndReload(rev.id)"
+                    class="text-sm px-3 py-1 border-2 border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 disabled:opacity-50"
+                  >
+                    {{ restoringRevisionId === rev.id ? 'Restoring...' : 'Restore this version' }}
+                  </button>
+                </div>
+                <div v-if="expandedRevisionId === rev.id" class="mt-2 p-3 bg-primary-50 rounded-lg text-sm">
+                  <p v-if="loadingRevisionContent" class="text-primary-500">Loading...</p>
+                  <pre v-else class="whitespace-pre-wrap font-mono text-xs text-primary-800">{{ expandedRevisionContent }}</pre>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
 
         <div v-if="errorMessage" class="mb-6 bg-red-50 text-red-700 p-3 rounded-lg text-sm">
           {{ errorMessage }}
@@ -86,7 +198,8 @@
 </template>
 
 <script setup lang="ts">
-import type { Blog } from '~/types/blog';
+import { marked } from 'marked';
+import type { Blog, BlogRevisionSummary } from '~/types/blog';
 
 definePageMeta({ requiresAuth: true });
 
@@ -108,6 +221,113 @@ const saving = ref(false);
 const publishOnSave = ref(false);
 const loadingExisting = ref(false);
 let existingBlog: Blog | null = null;
+// Mirrors `existingBlog.id` in a ref so the template/revisions code below can
+// react to it (the `existingBlog` variable itself is intentionally plain,
+// matching this file's existing convention of not making it reactive).
+const existingBlogId = ref<string | null>(null);
+
+// SEO metadata - optional, tucked behind the "SEO settings" disclosure below.
+const metaTitle = ref('');
+const metaDescription = ref('');
+const canonicalUrl = ref('');
+const showSeoFields = ref(false);
+
+// Write/Preview tab for the markdown editor.
+const activeTab = ref<'write' | 'preview'>('write');
+
+/**
+ * Client-side rendering for the Preview tab. This project has no
+ * markdown-to-HTML rendering on the frontend otherwise - the backend
+ * independently renders markdown to HTML via its own `processMarkdown`
+ * pipeline when a post is saved (see post/[slug].vue, which just renders
+ * the server-produced HTML with v-html). Using `marked` (already a
+ * dependency here) client-side gives a close, but not guaranteed
+ * pixel-identical, approximation of that server-side rendering - it is a
+ * separate implementation/config from whatever the backend runs, so treat
+ * this preview as "close enough while writing", not a byte-for-byte match.
+ */
+const previewHtml = computed(() => marked.parse(content.value, { async: false }) as string);
+
+// --- Version history (edit mode only) -------------------------------------
+
+const showRevisions = ref(false);
+const revisions = ref<BlogRevisionSummary[]>([]);
+const loadingRevisions = ref(false);
+const revisionsError = ref('');
+const expandedRevisionId = ref<string | null>(null);
+const expandedRevisionContent = ref<string | null>(null);
+const loadingRevisionContent = ref(false);
+const restoringRevisionId = ref<string | null>(null);
+
+function formatDateTime(date: string) {
+  return new Date(date).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+async function toggleRevisions() {
+  showRevisions.value = !showRevisions.value;
+  if (!showRevisions.value || !existingBlogId.value || revisions.value.length > 0) return;
+
+  loadingRevisions.value = true;
+  revisionsError.value = '';
+  try {
+    revisions.value = await blogApi.getRevisions(existingBlogId.value);
+  } catch (error) {
+    revisionsError.value = normalizeApiError(error).message;
+  } finally {
+    loadingRevisions.value = false;
+  }
+}
+
+async function viewRevision(revisionId: string) {
+  if (expandedRevisionId.value === revisionId) {
+    expandedRevisionId.value = null;
+    return;
+  }
+  expandedRevisionId.value = revisionId;
+  if (!existingBlogId.value) return;
+
+  loadingRevisionContent.value = true;
+  expandedRevisionContent.value = null;
+  try {
+    const revision = await blogApi.getRevision(existingBlogId.value, revisionId);
+    expandedRevisionContent.value = revision.content;
+  } catch (error) {
+    expandedRevisionContent.value = `Failed to load this revision: ${normalizeApiError(error).message}`;
+  } finally {
+    loadingRevisionContent.value = false;
+  }
+}
+
+/** Restores a past revision, then reloads its content straight into the editor so the change is visible immediately. */
+async function restoreRevisionAndReload(revisionId: string) {
+  if (!existingBlogId.value) return;
+
+  restoringRevisionId.value = revisionId;
+  revisionsError.value = '';
+  try {
+    const restored = await blogApi.restoreRevision(existingBlogId.value, revisionId);
+    existingBlog = restored;
+    title.value = restored.title;
+    content.value = restored.content;
+    tags.value = restored.tags.map((t) => t.tag.name);
+    metaTitle.value = restored.metaTitle ?? '';
+    metaDescription.value = restored.metaDescription ?? '';
+    canonicalUrl.value = restored.canonicalUrl ?? '';
+    expandedRevisionId.value = null;
+    // The restore itself creates a new revision entry, so refresh the list.
+    revisions.value = await blogApi.getRevisions(existingBlogId.value);
+  } catch (error) {
+    revisionsError.value = normalizeApiError(error).message;
+  } finally {
+    restoringRevisionId.value = null;
+  }
+}
 
 // Fetched client-side only (onMounted, not a top-level await): this page's
 // data depends on the auth token, which is only available in the browser
@@ -120,9 +340,13 @@ onMounted(async () => {
   try {
     const found = await blogApi.getBySlug(editSlug.value);
     existingBlog = found;
+    existingBlogId.value = found.id;
     title.value = found.title;
     content.value = found.content;
     tags.value = found.tags.map((t) => t.tag.name);
+    metaTitle.value = found.metaTitle ?? '';
+    metaDescription.value = found.metaDescription ?? '';
+    canonicalUrl.value = found.canonicalUrl ?? '';
   } catch {
     errorMessage.value = 'Story not found, or you do not have permission to edit it.';
   } finally {
@@ -177,6 +401,9 @@ async function save(publish: boolean) {
       content: contentWithTitleHeading(),
       tags: tags.value,
       published: publish,
+      metaTitle: metaTitle.value.trim() || undefined,
+      metaDescription: metaDescription.value.trim() || undefined,
+      canonicalUrl: canonicalUrl.value.trim() || undefined,
     };
 
     const saved = existingBlog
