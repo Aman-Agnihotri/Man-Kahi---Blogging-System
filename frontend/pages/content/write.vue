@@ -180,7 +180,7 @@
             @click="save(false)"
             class="px-6 py-2 border-2 border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 disabled:opacity-50"
           >
-            {{ saving && !publishOnSave ? 'Saving...' : 'Save Draft' }}
+            {{ saving && !publishOnSave ? 'Saving...' : (existingBlogPublished ? 'Save Changes' : 'Save Draft') }}
           </button>
 
           <button
@@ -221,10 +221,11 @@ const saving = ref(false);
 const publishOnSave = ref(false);
 const loadingExisting = ref(false);
 let existingBlog: Blog | null = null;
-// Mirrors `existingBlog.id` in a ref so the template/revisions code below can
-// react to it (the `existingBlog` variable itself is intentionally plain,
+// Mirrors `existingBlog.id`/`.published` in refs so the template can react
+// to them (the `existingBlog` variable itself is intentionally plain,
 // matching this file's existing convention of not making it reactive).
 const existingBlogId = ref<string | null>(null);
+const existingBlogPublished = ref(false);
 
 // SEO metadata - optional, tucked behind the "SEO settings" disclosure below.
 const metaTitle = ref('');
@@ -315,6 +316,7 @@ async function restoreRevisionAndReload(revisionId: string) {
   try {
     const restored = await blogApi.restoreRevision(existingBlogId.value, revisionId);
     existingBlog = restored;
+    existingBlogPublished.value = restored.published;
     title.value = restored.title;
     content.value = restored.contentMarkdown ?? restored.content;
     tags.value = restored.tags.map((t) => t.tag.name);
@@ -343,6 +345,7 @@ onMounted(async () => {
     const found = await blogApi.getBySlug(editSlug.value);
     existingBlog = found;
     existingBlogId.value = found.id;
+    existingBlogPublished.value = found.published;
     title.value = found.title;
     // Prefer the raw markdown source - posts saved before this field
     // existed fall back to the rendered HTML (best effort; re-saving will
@@ -401,11 +404,18 @@ async function save(publish: boolean) {
   publishOnSave.value = publish;
 
   try {
+    // "Save Draft" on an ALREADY-PUBLISHED post must not silently
+    // unpublish it - it should just save the edits. Only "Publish"
+    // (publish=true) or saving a brand-new post ever changes the
+    // published flag; editing an existing post's draft state preserves
+    // whatever it already was.
+    const published = publish || (existingBlog ? existingBlog.published : false);
+
     const input = {
       title: title.value.trim(),
       content: contentWithTitleHeading(),
       tags: tags.value,
-      published: publish,
+      published,
       metaTitle: metaTitle.value.trim() || undefined,
       metaDescription: metaDescription.value.trim() || undefined,
       canonicalUrl: canonicalUrl.value.trim() || undefined,
