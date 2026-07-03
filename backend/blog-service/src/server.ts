@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import { buildCorsOptions } from '@shared/config/cors'
 import helmet from 'helmet'
 import path from 'path'
 import fs from 'fs'
@@ -70,8 +71,8 @@ const PORT = parseInt(env.PORT, 10)
 
 // Middleware
 app.use(helmet()) // Security headers
-app.use(cors()) // CORS support
-app.use(express.json()) // Parse JSON bodies
+app.use(cors(buildCorsOptions('blog-service'))) // CORS support
+app.use(express.json({ limit: '1mb' })) // Parse JSON bodies - explicit limit (higher than other services since post content can be long markdown)
 
 // Static files for blog images
 app.use('/uploads/images', express.static(path.join(__dirname, '../uploads/images')))

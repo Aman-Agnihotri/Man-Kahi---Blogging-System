@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import { buildCorsOptions } from '@shared/config/cors'
 import helmet from 'helmet'
 import dotenv from 'dotenv'
 import session from 'express-session'
@@ -73,8 +74,8 @@ const SESSION_SECRET = env.SESSION_SECRET
 
 // Middleware
 app.use(helmet()) // Security headers
-app.use(cors()) // CORS support
-app.use(express.json()) // Parse JSON bodies
+app.use(cors(buildCorsOptions('auth-service'))) // CORS support
+app.use(express.json({ limit: '256kb' })) // Parse JSON bodies - explicit limit, was relying on Express's implicit 100kb default
 
 // Enhanced request logging middleware
 app.use((req, res, next) => {

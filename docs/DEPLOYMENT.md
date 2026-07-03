@@ -190,6 +190,8 @@ cp .env.production.example .env.production
 
 Replace every placeholder in `.env.production`, especially secrets, passwords, `PUBLIC_APP_URL`, `FRONTEND_URL`, `SITE_URL`, `CORS_ORIGIN`, and `GOOGLE_CALLBACK_URL`.
 
+Also edit `docker/nginx/nginx.conf`'s `map $http_origin $cors_allowed_origin` block to add your real production domain(s) - this is separate from the `CORS_ORIGIN` env var above (that one governs each backend service's own CORS check; this one governs the nginx gateway's, which is what a browser actually talks to). Nginx isn't templated from env vars in this setup, so it needs a direct edit. Leaving it as just `localhost`/`127.0.0.1` means any cross-origin request from your real domain gets silently rejected by the browser.
+
 Validate the production Compose config with:
 
 ```bash

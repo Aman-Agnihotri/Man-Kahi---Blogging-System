@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { buildCorsOptions } from '@shared/config/cors';
 import helmet from 'helmet';
 import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
@@ -92,8 +93,8 @@ app.use((req, res, next) => {
 
 // Security middleware
 app.use(helmet());
-app.use(cors());
-app.use(express.json());
+app.use(cors(buildCorsOptions('admin-service')));
+app.use(express.json({ limit: '256kb' })); // explicit limit, was relying on Express's implicit 100kb default
 
 // Setup Swagger documentation
 setupSwagger(app as any, 'Admin Service', [

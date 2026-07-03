@@ -1,5 +1,6 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import { buildCorsOptions } from '@shared/config/cors';
 import helmet from 'helmet';
 import path from 'path';
 import { prisma } from '@shared/utils/prismaClient';
@@ -63,10 +64,10 @@ logger.info('Setting up middleware...');
 app.use(helmet());
 logger.info('Helmet security middleware configured');
 
-app.use(cors());
+app.use(cors(buildCorsOptions('analytics-service')));
 logger.info('CORS middleware configured');
 
-app.use(express.json());
+app.use(express.json({ limit: '256kb' })); // explicit limit, was relying on Express's implicit 100kb default
 logger.info('JSON body parser configured');
 
 app.use((req: Request, res: Response, next: NextFunction) => {
