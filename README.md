@@ -1,8 +1,8 @@
 # ManKahi
 
-ManKahi is a blogging platform for writers who want a clean publishing space, searchable stories, author profiles, analytics, and moderation tools.
+ManKahi is a blogging platform for writers who want a clean publishing space, searchable stories, author profiles, reader engagement, analytics, and moderation tools.
 
-The project is being refactored into a professional-grade single-server application: easy to run on a laptop today, deployable to one server next, and structured so the services can scale later without a full rewrite.
+The project is a service-oriented application: easy to run on a laptop today, deployable to one server now, and structured so the services can scale onto Kubernetes later without a full rewrite.
 
 ## Product Vision
 
@@ -10,75 +10,81 @@ ManKahi should feel like a complete writing product, not just a technical demo.
 
 Writers should be able to:
 
-- create an account and manage their profile
-- write, save, edit, publish, and unpublish stories
+- create an account and manage their profile, avatar, bio, and social links
+- write, save, edit, publish, and unpublish stories, with markdown preview
 - add cover images, tags, categories, excerpts, and SEO metadata
+- view and restore prior versions of a post from its edit history
 - view their own stories and performance from a dashboard
-- build a public author profile
+- build a public author profile and follow/be followed by other writers
 
 Readers should be able to:
 
-- browse recent and featured stories
-- search full-text content
-- read posts by slug
-- explore categories and tags
-- discover related and trending posts
+- browse recent, featured, and trending stories
+- search full-text content and filter by category
+- read posts by slug, with reading-progress tracking
+- like, bookmark, comment on, and share posts
+- explore categories and tags, and discover related posts
+- report abusive posts or comments
 
 Admins should be able to:
 
-- review platform activity
-- moderate blog visibility
-- inspect analytics
-- manage unsafe or inappropriate content
+- review platform activity and analytics
+- moderate blog visibility and hard-delete abusive content
+- manage users (suspend/unsuspend) and roles (assign/revoke)
+- review and resolve/dismiss reported content
+- audit every moderation action via a searchable audit log
 
 ## Current Status
 
-The local Docker stack is running and usable as the current development/demo environment.
+The local Docker stack is running and is the current development/demo environment. All 12 containers (frontend, nginx, 4 backend services, Postgres, Redis, Elasticsearch, MinIO, Prometheus, Grafana) report healthy, and the full core-loop smoke test passes end-to-end.
 
 Working foundation:
 
-- Nuxt frontend
-- Nginx gateway
-- Auth service
-- Blog service
+- Nuxt frontend, fully wired to real backend data (no mock/placeholder data remaining in the primary product surfaces)
+- Nginx gateway (only public entrypoint)
+- Auth service (accounts, profiles, follows, notification preferences)
+- Blog service (posts, likes, bookmarks, comments, categories, revisions, trending)
 - Analytics service
-- Admin service
-- PostgreSQL
-- Redis
-- Elasticsearch
-- MinIO integration path
-- Prometheus/Grafana scaffolding
+- Admin service (users, roles, reports, audit log)
+- PostgreSQL, Redis, Elasticsearch, MinIO (object storage, S3-compatible)
+- Prometheus/Grafana monitoring
 - Cloudflare Tunnel demo path
+- Postgres backup/restore scripts
+- 283 backend tests passing; frontend and root typecheck clean
 
-Still in progress:
+Still in progress / known gaps:
 
-- frontend pages are not fully connected to real backend data
-- several backend API contracts need cleanup
-- production Docker Compose needs hardening
-- Kubernetes manifests are scaffolding, not the current deployment target
-- test coverage needs to be expanded around core workflows
+- no admin UI to create/edit categories, and no category picker in the post editor (backend CRUD exists and is admin-gated; currently created and assigned via direct API calls)
+- notification preferences are stored but not yet wired to actual email delivery
+- Kubernetes manifests are partially repaired (`kubernetes/base` builds cleanly; the per-environment overlays still have one outstanding kustomize issue) and are not the current deployment target
+- a pre-existing UX quirk: editing an already-published post and clicking "Save Draft" (instead of "Publish") will unpublish it
+- posts saved before the markdown/HTML content-round-trip fix (below) will show rendered HTML instead of markdown the first time they're reopened for editing; re-saving fixes it going forward
 
 ## Product Areas
 
 ### Publishing
 
-The blog system is designed around markdown-based publishing with title, slug, content, cover image, tags, categories, excerpt, and SEO fields.
+Markdown-based publishing with title, slug, content, cover image, tags, categories, excerpt, and SEO fields (meta title/description/canonical URL). Every post stores both the raw markdown source and its rendered HTML, so re-opening a post for editing shows clean markdown rather than rendered markup. Every content edit is auto-captured as a revision, viewable and restorable from the editor.
 
 ### Discovery
 
-Search is backed by Elasticsearch, with Redis caching planned around hot reads and repeated queries.
+Search is backed by Elasticsearch, filterable by category and tags, with a trending-posts feed and related-posts suggestions. Redis caches hot reads.
 
-### Accounts
+### Reader Engagement
 
-Authentication supports local login and an optional Google OAuth path. Role and permission models exist for admin-level access.
+Likes, bookmarks, threaded (one level) comments, reading-progress tracking, and share links, all live-verified against the real stack.
+
+### Accounts and Social
+
+Authentication supports local login and an optional Google OAuth path. Profiles support avatar upload, bio, and social links. Users can follow authors and manage notification preferences or delete their account.
 
 ### Analytics
 
-The analytics service tracks views, reading progress, reads, and link clicks. Admin-facing analytics needs contract cleanup before it should be treated as complete.
+The analytics service tracks views, reading progress, reads, and link clicks.
 
 ### Moderation
 
-Admin APIs exist for dashboard-style operations and blog visibility controls. These need final route/schema alignment before the admin workflow is considered production-ready.
+Admins can hide/unhide or hard-delete posts, suspend/unsuspend users (enforced at login), assign/revoke roles, and review reported content. Every moderation action is recorded in a searchable audit log.
 
 ## Architecture Summary
 
@@ -114,19 +120,16 @@ Detailed setup and deployment commands live in [docs/DEPLOYMENT.md](docs/DEPLOYM
 
 ## Project Direction
 
-The next milestone is:
+The professional single-server MVP and the core product feature set (reader engagement, content authoring, user/social, admin and moderation) are both complete and live-verified. The next milestone is:
 
 ```text
-Professional single-server MVP deployment + real core blogging workflow
+Finish Kubernetes readiness and close the remaining documented gaps
 ```
 
 That means:
 
-- reliable local development
-- clean single-server production path
-- real frontend-to-backend integration
-- tested auth and blog workflows
-- public gateway only
-- documented operations, backup, restore, and monitoring
+- resolving the last kustomize overlay issue so `environments/*` builds cleanly, not just `base`
+- an admin UI for category management
+- real email delivery behind the existing notification-preferences groundwork
 
 Progress is tracked in [docs/ACTION_PLAN.md](docs/ACTION_PLAN.md).

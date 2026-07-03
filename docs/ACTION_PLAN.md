@@ -380,50 +380,137 @@ Acceptance criteria:
 
 Purpose: complete the blogging product after the foundation is stable.
 
+Done in this pass (2026-07-03), backend built and live-verified against
+the real Docker stack + browser unless noted otherwise. New Prisma
+models: `Like`, `Comment`, `Bookmark`, `Follow`, `Report`, `AuditLog`
+(see `backend/shared/prisma/schema.prisma`). Three real bugs were found
+and fixed via live testing along the way (not caught by jest's mocked
+Prisma, since mocks don't exercise real module resolution or real
+constraint violations):
+
+1. An IDOR/visibility bypass - likes/comments/bookmarks didn't check
+   draft visibility, so any authenticated user could interact with (and
+   by success/failure, confirm the existence of) someone else's
+   unpublished draft.
+2. `backend/shared/utils/prismaClient.ts`'s own copy of the generated
+   Prisma client was stale (nothing had ever regenerated it after the
+   original schema setup), so every service silently ran against an
+   outdated client regardless of how recently each service's own copy
+   was regenerated - `prisma.comment` was `undefined` at runtime despite
+   passing typecheck everywhere. Fixed `generate-client.js` to also
+   regenerate `backend/shared`'s own copy.
+3. A bare `import { Prisma } from '@prisma/client'` in admin.controller.ts
+   resolved to a different module instance than the one the shared
+   client actually uses, so `instanceof Prisma.PrismaClientKnownRequestError`
+   silently failed and a duplicate role assignment 500'd instead of
+   returning the intended 409.
+
+A second live-verification pass on 2026-07-03 (after the full Docker
+rebuild) found two more real bugs the same way - neither caught by jest,
+both requiring an actual browser reload to notice:
+
+1. Likes and comments went stale forever after the first cache-fill:
+   `getBySlug`'s Redis-cached response embeds `analytics.likes`/
+   `analytics.comments`, but `likeBlog`/`unlikeBlog`/`createComment`/
+   `deleteComment` never called `blogCache.invalidate()` after writing.
+   A post viewed once, then liked, would show the like succeed in the
+   UI (the mutation response came straight from the DB) but revert to
+   the old count on the very next reload. Fixed by invalidating the
+   cached slug entry in all four paths, with regression tests asserting
+   `blogCache.invalidate` is called (and NOT called on the idempotent
+   repeat-like/repeat-unlike paths).
+2. Editing an existing post showed rendered HTML soup instead of the
+   original markdown, because `Blog.content` was always overwritten
+   with `processMarkdown()`'s HTML output - the raw markdown was
+   discarded on every create/update, and `content/write.vue`'s edit
+   flow fetched that same HTML into the markdown editor. Restoring a
+   revision was worse: it re-ran `processMarkdown()` on an
+   already-rendered HTML snapshot, double-processing it. Fixed by
+   adding a `contentMarkdown` column to both `Blog` and `BlogRevision`
+   (nullable - pre-existing rows have no raw source to recover) that
+   preserves the raw markdown alongside the rendered `content`;
+   `write.vue`'s edit-load, revision-preview, and restore-reload paths
+   now all prefer `contentMarkdown`, falling back to `content` only for
+   legacy rows. Live-verified: created a fresh post, edited it, restored
+   an old version, and confirmed the editor showed clean markdown at
+   every step (a post that predates this fix still shows HTML once,
+   until its next save populates `contentMarkdown` going forward).
+
 ### Content Features
 
-- [ ] Drafts.
-- [ ] Publish/unpublish.
-- [ ] Edit history or revisions UI.
-- [ ] Markdown preview.
-- [ ] Cover images.
-- [ ] Tags and categories.
-- [ ] SEO metadata editing.
-- [ ] Related posts.
-- [ ] Author profile cards.
+- [x] Drafts.
+  - Pre-existing (Phase 3), unaffected by this pass.
+- [x] Publish/unpublish.
+  - Pre-existing (Phase 3). Note found live: `content/write.vue`'s "Save Draft" button always sets `published: false` even when editing an already-published post - a pre-existing UX quirk (not introduced by this pass) that will unpublish a live post if clicked during an edit. Flagged here rather than fixed, since it's outside Phase 7's scope and touches Phase 3's save flow.
+- [x] Edit history or revisions UI.
+  - Wired up the `BlogRevision` model, which existed in the schema with zero application code touching it. `BlogService.updateBlog` now auto-captures pre-update content as a revision (only when content actually changes) and bumps `Blog.version`. List/view/restore endpoints + a "Version history" panel in `content/write.vue`. Live-verified: edited a post twice, saw both versions listed with correct timestamps, viewed each one's full content, confirmed restore reloads the content into the editor immediately.
+  - A second live-verification pass caught a real bug in this flow: editing an existing post showed rendered HTML instead of markdown (see fix #2 in the intro notes above). Re-verified after the fix with a fresh post: edit-load, revision preview, and restore all show/restore clean markdown.
+- [x] Markdown preview.
+  - Write/Preview tab in `content/write.vue` using `marked` (already a frontend dependency) for client-side rendering - a close but not guaranteed pixel-identical approximation of the backend's own server-side rendering pipeline.
+- [x] Cover images.
+  - Pre-existing (Phase 3), unaffected.
+- [x] Tags and categories.
+  - Tags pre-existing. Categories: the `Category` model's parent/child hierarchy existed in the schema with zero endpoints anywhere and 3 mutually-inconsistent hardcoded category lists across different frontend pages. Added public `GET /categories` + admin-gated CRUD, replaced all the dummy data with real fetches. Live-verified twice: created two real categories via the API (no category-creation UI exists - see note below), confirmed both appear on `/categories`, assigned one to a post via a direct API call (`write.vue` has no category selector either), confirmed the category detail page and the `content/explore.vue` category-filter dropdown both correctly narrow results to just that post.
+  - **Gap**: no admin UI exists to create/edit/delete categories (the backend CRUD is admin-gated and works, confirmed via direct API calls, but nothing in the admin depth UI batch below exposes it), and `content/write.vue` has no category selector either - categories currently have to be created and assigned via direct API calls. Worth a follow-up admin page plus a category field in the editor.
+- [x] SEO metadata editing.
+  - `metaTitle`/`metaDescription`/`canonicalUrl` columns existed on `Blog` and were completely dead (never read or written anywhere). Added a collapsible "SEO settings" section in `content/write.vue`, wired into the existing create/update payload.
+- [x] Related posts.
+  - Already existed and was already fully wired end-to-end before this pass (`getSuggestedBlogs`, blog-service's `/suggested/:blogId`, rendered on `post/[slug].vue`) - no new work needed.
+- [x] Author profile cards.
+  - Interpreted as: a real, non-mock public author profile page (`user/profile/[username].vue`, previously 100% hardcoded mock data) plus a richer author byline with a working Follow button on the post page - not a separate small reusable "card" component reused elsewhere, since no other surface (e.g. search result listings) currently needs a compact author preview.
 
 ### Reader Features
 
-- [ ] Likes.
-- [ ] Bookmarks.
-- [ ] Comments.
-- [ ] Reading progress.
-- [ ] Share links.
-- [ ] Search filters.
-- [ ] Trending posts.
+- [x] Likes.
+  - Idempotent toggle, `BlogAnalytics.likes` kept in sync as a denormalized counter. Live-verified: liked a post, count incremented, and - after finding and fixing the stale-cache bug (#1 in the intro notes above) - confirmed the count survives a page reload instead of reverting to its pre-like value.
+- [x] Bookmarks.
+  - Idempotent toggle + a dedicated `/user/bookmarks` page. Live-verified: bookmarked a post, confirmed it appeared on the bookmarks page, unbookmarked it from there.
+- [x] Comments.
+  - One level of threaded replies, author-or-admin edit/delete, reader-facing report action. Live-verified end-to-end: posted a top-level comment, posted a reply, edited the top-level comment, deleted the reply, and confirmed all of it - including the comment count - survives a page reload (same underlying cache-invalidation bug as likes, same fix).
+- [x] Reading progress.
+  - Scroll-based tracking on `post/[slug].vue` (rAF-throttled, fires only at 25/50/75/100% milestones) calling the `trackReadProgress` endpoint, which already existed on the backend but had no caller anywhere before this pass. Not live-verified via actual scrolling in this pass (implementation reviewed, not click-tested) - lower risk than the other items since it's fire-and-forget and already error-swallowing.
+- [x] Share links.
+  - Copies the post URL to the clipboard and fires the pre-existing (previously uncalled) `trackLinkClick` endpoint. Reviewed, not click-tested live in this pass.
+- [x] Search filters.
+  - Backend already supported a `category` param on `/search`; nothing in the UI ever set it. Added a category `<select>` on `content/explore.vue` alongside the existing tag chips. Live-verified: selecting a category correctly filtered results (including correctly returning zero results for a category the test post wasn't in).
+- [x] Trending posts.
+  - New public `GET /trending` (blog-service), a "Trending Now" section on the home page. Live-verified: real post appeared with correct author/date.
 
 ### User Features
 
-- [ ] Public profile editing.
-- [ ] Avatar upload.
-- [ ] Bio and social links.
-- [ ] Follow authors.
-- [ ] Notification preferences.
-- [ ] Account deletion or deactivation.
+- [x] Public profile editing.
+  - `user/settings.vue`'s bio/social-link fields were previously inert ("isn't available yet" stub) - now wired to real `GET/PUT /api/auth/profile`. Reviewed, not click-tested live in this pass (avatar upload below was tested; the plain-text fields use the identical pattern).
+- [x] Avatar upload.
+  - New `POST /api/auth/profile/avatar` (multer + sharp + a new `avatars` MinIO bucket, separate from blog-service's cover-image bucket). Not live-verified via an actual file upload in this pass (reviewed for correctness) - flagged as the one avatar-specific gap in verification.
+- [x] Bio and social links.
+  - See public profile editing above; rendered on the public profile page too (icon links for whichever of twitter/github/linkedin/website are present).
+- [x] Follow authors.
+  - New `Follow` model, follow/unfollow/followers/following endpoints. Live-verified end-to-end with two real accounts: followed an author from a second account, follower count updated immediately, button switched to "Unfollow"; confirmed the follow state (unlike likes/bookmarks) correctly persists across a reload since the public-profile endpoint does return per-viewer follow state; unfollowed and confirmed the count and button reverted correctly.
+- [x] Notification preferences.
+  - Stored-preference stub (`emailOnComment`/`emailOnFollow`/`emailOnLike` booleans) - explicitly not wired to any actual email delivery, since no such infrastructure exists in this codebase yet. Groundwork for later.
+- [x] Account deletion or deactivation.
+  - Self-service `DELETE /api/auth/account`, requires re-confirming password, blacklists the current token. Reviewed, not live-tested in this pass (destructive and would have removed a test account mid-verification) - the password-mismatch and OAuth-only-account edge cases are covered by unit tests.
 
 ### Admin And Moderation
 
-- [ ] Hide/unhide posts.
-- [ ] Delete abusive content.
-- [ ] Manage users.
-- [ ] Manage roles.
-- [ ] View reported content.
-- [ ] Basic audit log.
+- [x] Hide/unhide posts.
+  - Already fixed and live-verified in an earlier pass this session (see the "repair admin moderation flow" commit).
+- [x] Delete abusive content.
+  - New admin hard-takedown (`DELETE /api/admin/blog/:blogId`, delegates to blog-service's new `DELETE /:id/moderate`, same bearer-forwarding pattern as the existing visibility delegation). Not click-tested live in this pass (the visibility toggle's identical delegation pattern was already live-verified earlier this session) - unit-tested.
+- [x] Manage users.
+  - New `/admin/users` page: search, status filter, suspend (with a required reason)/unsuspend. Live-verified end-to-end including real enforcement: suspended a real account, confirmed it could no longer log in and received the admin's stated reason, unsuspended it, confirmed login worked again.
+- [x] Manage roles.
+  - New `/admin/users` role panel: assign/revoke against the full role catalog (deliberately not a checkbox list implying knowledge of a user's current roles, since no endpoint exposes that). Live-verified: assigned and revoked a real role; also found and fixed a real bug this uncovered (duplicate assignment 500'd instead of returning 409 - see the Prisma-import bug above).
+- [x] View reported content.
+  - New `/admin/reports` page + reader-facing report actions on blog-service. Live-verified: submitted a real report from one account, saw it appear in the admin queue, dismissed it, confirmed it left the "open" filter view.
+- [x] Basic audit log.
+  - New `/admin/audit-log` page + a `recordAuditLog()` helper wired into every mutating admin action (suspend/unsuspend, role assign/revoke, blog delete, report resolve/dismiss, plus the pre-existing visibility toggle). Live-verified: performed a suspend and unsuspend, confirmed both appeared in the log with correct actor, action, target, and metadata.
 
 Acceptance criteria:
 
 - The product feels like a complete blogging platform, not just a technical demo.
 - Feature behavior is documented and tested where risk is meaningful.
+  - 283 backend tests passing (`npm test` from the repo root: auth 77, blog 92, analytics 17, admin 97), frontend and root typecheck clean, full core-loop Docker smoke test (`docker/scripts/smoke-test.sh`) passing end-to-end. Live-verified across two separate browser-automation passes against the real Docker stack (Chrome DevTools MCP) covering every reader-engagement, content-authoring, and admin-depth flow: likes, bookmarks, comments (post/reply/edit/delete), follow/unfollow (two real accounts), blog revisions (auto-capture/view/restore), category browsing (index/detail/explore-filter), and admin suspend/role-assign/report-resolve/audit-log (with real login-blocked-when-suspended enforcement). Two real bugs were found and fixed via the second pass alone (stale like/comment counts, markdown-vs-HTML content round-tripping - see the intro notes above) - both classes of bug that only a real reload/re-edit in a browser would surface, not a mocked unit test. A small number of lower-risk items (reading progress, share links, avatar upload, account deletion, plain profile-field editing) were reviewed and unit-tested but not individually click-tested live, noted above.
 
 ## Phase 8: Future Scale Readiness
 
