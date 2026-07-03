@@ -16,6 +16,37 @@
           />
         </div>
 
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-primary-700 mb-2">Cover image</label>
+          <div class="flex items-center gap-4">
+            <img
+              v-if="coverImagePreviewUrl"
+              :src="coverImagePreviewUrl"
+              alt="Cover image preview"
+              class="w-32 h-20 object-cover rounded-lg border border-primary-200"
+            />
+            <div v-else class="w-32 h-20 rounded-lg border border-dashed border-primary-300 flex items-center justify-center text-xs text-primary-400">
+              No image
+            </div>
+            <div>
+              <input
+                ref="coverImageInputEl"
+                type="file"
+                accept="image/*"
+                class="hidden"
+                @change="onCoverImageSelected"
+              />
+              <button
+                type="button"
+                @click="coverImageInputEl?.click()"
+                class="px-4 py-2 border-2 border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 text-sm"
+              >
+                {{ coverImagePreviewUrl ? 'Change image' : 'Upload image' }}
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div class="mb-6 flex-1 flex space-x-2">
           <input
             v-model="newTag"
@@ -227,6 +258,35 @@ let existingBlog: Blog | null = null;
 const existingBlogId = ref<string | null>(null);
 const existingBlogPublished = ref(false);
 
+// --- Cover image ------------------------------------------------------
+// `useBlogApi().create/update` already build multipart FormData with an
+// `image` field (see toFormData in useBlogApi.ts) - this was previously
+// never wired to a file input (see docs/ACTION_PLAN.md's Phase 3 notes).
+const coverImageInputEl = ref<HTMLInputElement | null>(null);
+const coverImageFile = ref<File | null>(null);
+const existingCoverImageUrl = ref<string | null>(null);
+// Object URLs are created for a freshly-picked file and must be revoked
+// when replaced/unmounted, or they leak for the life of the tab.
+const coverImageObjectUrl = ref<string | null>(null);
+const coverImagePreviewUrl = computed(() => coverImageObjectUrl.value ?? existingCoverImageUrl.value);
+
+function onCoverImageSelected(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+  if (!file) return;
+
+  coverImageFile.value = file;
+  if (coverImageObjectUrl.value) {
+    URL.revokeObjectURL(coverImageObjectUrl.value);
+  }
+  coverImageObjectUrl.value = URL.createObjectURL(file);
+}
+
+onUnmounted(() => {
+  if (coverImageObjectUrl.value) {
+    URL.revokeObjectURL(coverImageObjectUrl.value);
+  }
+});
+
 // SEO metadata - optional, tucked behind the "SEO settings" disclosure below.
 const metaTitle = ref('');
 const metaDescription = ref('');
@@ -346,6 +406,7 @@ onMounted(async () => {
     existingBlog = found;
     existingBlogId.value = found.id;
     existingBlogPublished.value = found.published;
+    existingCoverImageUrl.value = found.coverImage;
     title.value = found.title;
     // Prefer the raw markdown source - posts saved before this field
     // existed fall back to the rendered HTML (best effort; re-saving will
@@ -419,6 +480,7 @@ async function save(publish: boolean) {
       metaTitle: metaTitle.value.trim() || undefined,
       metaDescription: metaDescription.value.trim() || undefined,
       canonicalUrl: canonicalUrl.value.trim() || undefined,
+      image: coverImageFile.value ?? undefined,
     };
 
     const saved = existingBlog
