@@ -8,7 +8,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "typecheck": "nuxi typecheck"
+    "typecheck": "nuxi typecheck",
+    "audit": "npm audit --audit-level=high"
   },
   "dependencies": {
     "@headlessui/vue": "^1.7.19",

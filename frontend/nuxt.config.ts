@@ -20,10 +20,9 @@ export default defineNuxtConfig({
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { 
-          hid: 'description', 
-          name: 'description', 
-          content: 'ManKahi - A modern publishing platform for writers and readers' 
+        {
+          name: 'description',
+          content: 'ManKahi - A modern publishing platform for writers and readers'
         }
       ]
     }

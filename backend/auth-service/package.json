@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest --runInBand",
     "test:coverage": "jest --coverage --runInBand",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "audit": "npm audit --audit-level=high"
   },
   "keywords": [],
   "author": "",
@@ -28,7 +29,6 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.0.1",
-    "express-rate-limit": "^7.5.0",
     "express-session": "^1.18.1",
     "helmet": "^8.0.0",
     "ioredis": "^5.4.2",
@@ -45,11 +45,11 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/express-session": "^1.18.1",
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/multer": "^1.4.12",
     "@types/passport": "^1.0.17",
-    "@types/express-session": "^1.18.1",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/supertest": "^6.0.2",
     "jest": "^29.7.0",

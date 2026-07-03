@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest --runInBand",
     "test:coverage": "jest --coverage --runInBand",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "audit": "npm audit --audit-level=high"
   },
   "keywords": [],
   "author": "",

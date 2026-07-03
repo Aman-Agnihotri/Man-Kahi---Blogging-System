@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest --runInBand",
     "test:coverage": "jest --coverage --runInBand",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "audit": "npm audit --audit-level=high"
   },
   "dependencies": {
     "@prisma/client": "^6.3.0",
@@ -23,7 +24,6 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.0.1",
-    "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "prom-client": "^15.1.3",

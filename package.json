@@ -14,6 +14,13 @@
     "typecheck:blog": "npm run typecheck --prefix backend/blog-service",
     "typecheck:analytics": "npm run typecheck --prefix backend/analytics-service",
     "typecheck:admin": "npm run typecheck --prefix backend/admin-service",
-    "typecheck:frontend": "npm run typecheck --prefix frontend"
+    "typecheck:frontend": "npm run typecheck --prefix frontend",
+    "audit": "npm run audit:shared && npm run audit:auth && npm run audit:blog && npm run audit:analytics && npm run audit:admin && npm run audit:frontend",
+    "audit:shared": "npm run audit --prefix backend/shared",
+    "audit:auth": "npm run audit --prefix backend/auth-service",
+    "audit:blog": "npm run audit --prefix backend/blog-service",
+    "audit:analytics": "npm run audit --prefix backend/analytics-service",
+    "audit:admin": "npm run audit --prefix backend/admin-service",
+    "audit:frontend": "npm run audit --prefix frontend"
   }
 }
