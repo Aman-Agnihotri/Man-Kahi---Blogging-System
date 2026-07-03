@@ -29,6 +29,12 @@
         >
           Audit Log
         </NuxtLink>
+        <NuxtLink
+          to="/admin/categories"
+          class="px-4 py-2 rounded-full text-sm font-medium bg-white text-primary-700 hover:bg-primary-100"
+        >
+          Categories
+        </NuxtLink>
       </div>
 
       <div v-if="listError" class="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-6">

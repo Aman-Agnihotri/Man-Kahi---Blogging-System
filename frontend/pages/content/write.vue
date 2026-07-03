@@ -114,6 +114,23 @@
           {{ content.length }}/100 characters minimum. Markdown supported.
         </p>
 
+        <div class="mb-6">
+          <label for="category" class="block text-sm font-medium text-primary-700 mb-1">Category</label>
+          <select
+            id="category"
+            v-model="categoryId"
+            class="w-full rounded-lg border-primary-200 focus:border-primary-500 focus:ring-primary-500"
+          >
+            <option value="">No category</option>
+            <template v-for="cat in categories" :key="cat.id">
+              <option :value="cat.id">{{ cat.name }}</option>
+              <option v-for="child in cat.children" :key="child.id" :value="child.id">
+                &nbsp;&nbsp;{{ child.name }}
+              </option>
+            </template>
+          </select>
+        </div>
+
         <div class="mb-6 border border-primary-200 rounded-lg">
           <button
             type="button"
@@ -230,7 +247,7 @@
 
 <script setup lang="ts">
 import { marked } from 'marked';
-import type { Blog, BlogRevisionSummary } from '~/types/blog';
+import type { Blog, BlogRevisionSummary, Category } from '~/types/blog';
 
 definePageMeta({ requiresAuth: true });
 
@@ -286,6 +303,11 @@ onUnmounted(() => {
     URL.revokeObjectURL(coverImageObjectUrl.value);
   }
 });
+
+// Category - flat list with one level of children, matching how
+// categories/index.vue already renders the taxonomy.
+const categories = ref<Category[]>([]);
+const categoryId = ref('');
 
 // SEO metadata - optional, tucked behind the "SEO settings" disclosure below.
 const metaTitle = ref('');
@@ -398,6 +420,10 @@ async function restoreRevisionAndReload(revisionId: string) {
 // (restored from localStorage), so there is nothing meaningful to render
 // during SSR here.
 onMounted(async () => {
+  blogApi.getCategories().then((result) => { categories.value = result; }).catch(() => {
+    // Non-fatal - the picker just falls back to showing only "No category".
+  });
+
   if (!editSlug.value) return;
 
   loadingExisting.value = true;
@@ -413,6 +439,7 @@ onMounted(async () => {
     // populate contentMarkdown going forward).
     content.value = found.contentMarkdown ?? found.content;
     tags.value = found.tags.map((t) => t.tag.name);
+    categoryId.value = found.category?.id ?? '';
     metaTitle.value = found.metaTitle ?? '';
     metaDescription.value = found.metaDescription ?? '';
     canonicalUrl.value = found.canonicalUrl ?? '';
@@ -477,6 +504,11 @@ async function save(publish: boolean) {
       content: contentWithTitleHeading(),
       tags: tags.value,
       published,
+      // Omitted (not sent as empty string) when "No category" is picked -
+      // the backend only touches categoryId when the field is present at
+      // all, so this can assign a category but can't clear an existing
+      // one back to none. Same limitation as the cover image (see above).
+      categoryId: categoryId.value || undefined,
       metaTitle: metaTitle.value.trim() || undefined,
       metaDescription: metaDescription.value.trim() || undefined,
       canonicalUrl: canonicalUrl.value.trim() || undefined,
