@@ -38,6 +38,7 @@ describe('BlogService.updateBlog revision auto-capture', () => {
       published: true,
       publishedAt: new Date(),
       content: '<p>old content</p>',
+      contentMarkdown: 'old content',
       version: 3,
       tags: [],
     });
@@ -58,12 +59,14 @@ describe('BlogService.updateBlog revision auto-capture', () => {
         blogId: 'blog-1',
         version: 3,
         content: '<p>old content</p>',
+        contentMarkdown: 'old content',
         createdBy: 'author-1',
       },
     });
     expect(prismaMock.blog.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         content: '<p>new content</p>',
+        contentMarkdown: 'new content here',
         version: 4,
       }),
     }));
@@ -179,19 +182,26 @@ describe('BlogService.getRevision', () => {
 });
 
 describe('BlogService.restoreRevision', () => {
-  it('restores a revision, capturing what was live first, and re-processes markdown', async () => {
+  // Regression test: a revision captured before contentMarkdown existed only
+  // has the rendered HTML - restoring it has no raw source to fall back to
+  // except re-processing that HTML through the markdown pipeline (the old,
+  // imperfect behavior). This is intentionally NOT lossless, but it's the
+  // best available option rather than failing the restore outright.
+  it('restores a legacy (no contentMarkdown) revision by re-processing its HTML snapshot', async () => {
     const service = new BlogService();
     processMarkdownMock.mockReturnValue('<p>restored content</p>');
     prismaMock.blog.findUnique.mockResolvedValue({
       authorId: 'author-1',
       slug: 'same-title',
       content: '<p>current content</p>',
+      contentMarkdown: 'current content',
       version: 5,
     });
     prismaMock.blogRevision.findUnique.mockResolvedValue({
       id: 'rev-2',
       blogId: 'blog-1',
       content: 'restored content',
+      contentMarkdown: null,
     });
     const restoredBlog = {
       id: 'blog-1',
@@ -209,12 +219,13 @@ describe('BlogService.restoreRevision', () => {
         blogId: 'blog-1',
         version: 5,
         content: '<p>current content</p>',
+        contentMarkdown: 'current content',
         createdBy: 'author-1',
       },
     });
     expect(prismaMock.blog.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'blog-1' },
-      data: { content: '<p>restored content</p>', version: 6 },
+      data: { content: '<p>restored content</p>', contentMarkdown: 'restored content', version: 6 },
     }));
     expect(updateBlogIndexMock).toHaveBeenCalledWith('blog-1', expect.objectContaining({
       content: '<p>restored content</p>',
@@ -222,6 +233,36 @@ describe('BlogService.restoreRevision', () => {
     expect(cacheMock.invalidate).toHaveBeenCalledWith('same-title');
     expect(searchCacheMock.invalidateAll).toHaveBeenCalled();
     expect(result).toBe(restoredBlog);
+  });
+
+  // Regression test for the actual bug: restoring a revision that DOES have
+  // a raw markdown snapshot must re-process that markdown, not the
+  // already-rendered HTML in revision.content (which would double-process
+  // it and corrupt the result).
+  it('restores using the raw markdown snapshot when one is present, not the rendered HTML', async () => {
+    const service = new BlogService();
+    processMarkdownMock.mockReturnValue('<h1>Restored<a href="#restored">#</a></h1>\n<p>restored body</p>\n');
+    prismaMock.blog.findUnique.mockResolvedValue({
+      authorId: 'author-1',
+      slug: 'same-title',
+      content: '<p>current content</p>',
+      contentMarkdown: 'current content',
+      version: 5,
+    });
+    prismaMock.blogRevision.findUnique.mockResolvedValue({
+      id: 'rev-2',
+      blogId: 'blog-1',
+      content: '<h1>Restored<a href="#restored">#</a></h1>\n<p>restored body</p>\n',
+      contentMarkdown: '# Restored\n\nrestored body',
+    });
+    prismaMock.blog.update.mockResolvedValue({ id: 'blog-1', slug: 'same-title', version: 6 });
+
+    await service.restoreRevision('blog-1', 'rev-2', 'author-1');
+
+    expect(processMarkdownMock).toHaveBeenCalledWith('# Restored\n\nrestored body');
+    expect(prismaMock.blog.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ contentMarkdown: '# Restored\n\nrestored body' }),
+    }));
   });
 
   it('rejects restore attempts from a non-author (admins included - author only)', async () => {

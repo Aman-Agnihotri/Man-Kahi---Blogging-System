@@ -51,6 +51,12 @@ model User {
     suspendedAt     DateTime? @db.Timestamp(6)
     suspendedReason String?   @db.Text
 
+    // Password reset - only a SHA-256 hash of the reset token is ever
+    // stored (never the raw token), so a database read alone can't be used
+    // to reset someone's password.
+    resetPasswordTokenHash String?   @db.VarChar(64)
+    resetPasswordExpiresAt DateTime? @db.Timestamp(6)
+
     @@index([email])
     @@index([username])
     @@index([lastLoginAt])
@@ -84,9 +90,10 @@ model OAuthProvider {
 
 // Core blog model with enhanced features
 model Blog {
-    id          String    @id @default(cuid())
-    title       String    @db.VarChar(200)
-    content     String    @db.Text
+    id              String    @id @default(cuid())
+    title           String    @db.VarChar(200)
+    content         String    @db.Text // Rendered, sanitized HTML - what readers see
+    contentMarkdown String?   @db.Text // Raw markdown source, preserved so editing doesn't re-process already-rendered HTML. Null on rows written before this field existed.
     readTime    Int       @default(0) // Estimated read time in minutes
     slug        String    @unique @db.VarChar(200) // SEO-friendly URL
     createdAt   DateTime  @default(now()) @db.Timestamp(6)
@@ -135,11 +142,12 @@ model Blog {
 
 // Blog content revision history
 model BlogRevision {
-    id        String   @id @default(cuid())
-    blogId    String
-    blog      Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
-    version   Int
-    content   String   @db.Text
+    id              String   @id @default(cuid())
+    blogId          String
+    blog            Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+    version         Int
+    content         String   @db.Text // Rendered HTML snapshot
+    contentMarkdown String?  @db.Text // Raw markdown snapshot, null for revisions captured before this field existed
     createdAt DateTime @default(now()) @db.Timestamp(6)
     createdBy String // User ID who made the revision
     comment   String?  @db.Text // Optional revision comment

@@ -296,7 +296,9 @@ async function viewRevision(revisionId: string) {
   expandedRevisionContent.value = null;
   try {
     const revision = await blogApi.getRevision(existingBlogId.value, revisionId);
-    expandedRevisionContent.value = revision.content;
+    // Prefer the raw markdown snapshot - revisions captured before it
+    // existed only have the rendered HTML, shown here as a fallback.
+    expandedRevisionContent.value = revision.contentMarkdown ?? revision.content;
   } catch (error) {
     expandedRevisionContent.value = `Failed to load this revision: ${normalizeApiError(error).message}`;
   } finally {
@@ -314,7 +316,7 @@ async function restoreRevisionAndReload(revisionId: string) {
     const restored = await blogApi.restoreRevision(existingBlogId.value, revisionId);
     existingBlog = restored;
     title.value = restored.title;
-    content.value = restored.content;
+    content.value = restored.contentMarkdown ?? restored.content;
     tags.value = restored.tags.map((t) => t.tag.name);
     metaTitle.value = restored.metaTitle ?? '';
     metaDescription.value = restored.metaDescription ?? '';
@@ -342,7 +344,10 @@ onMounted(async () => {
     existingBlog = found;
     existingBlogId.value = found.id;
     title.value = found.title;
-    content.value = found.content;
+    // Prefer the raw markdown source - posts saved before this field
+    // existed fall back to the rendered HTML (best effort; re-saving will
+    // populate contentMarkdown going forward).
+    content.value = found.contentMarkdown ?? found.content;
     tags.value = found.tags.map((t) => t.tag.name);
     metaTitle.value = found.metaTitle ?? '';
     metaDescription.value = found.metaDescription ?? '';

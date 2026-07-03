@@ -45,6 +45,9 @@ export interface Blog {
   id: string;
   title: string;
   content: string;
+  // Raw markdown source, preserved so re-editing doesn't operate on
+  // already-rendered HTML. Null on posts saved before this field existed.
+  contentMarkdown?: string | null;
   readTime: number;
   slug: string;
   createdAt: string;
@@ -206,6 +209,7 @@ export interface BlogRevisionSummary {
 export interface BlogRevision extends BlogRevisionSummary {
   blogId: string;
   content: string;
+  contentMarkdown?: string | null;
 }
 
 // --- Categories -----------------------------------------------------------
