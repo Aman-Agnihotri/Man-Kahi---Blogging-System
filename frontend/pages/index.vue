@@ -107,6 +107,91 @@
       </div>
     </section>
 
+    <section class="max-w-6xl mx-auto px-4 py-12">
+      <div class="mb-8">
+        <h2 class="text-3xl font-bold text-primary-900">Trending Now</h2>
+        <p class="text-primary-600 mt-2">What readers are loving right now</p>
+      </div>
+
+      <div v-if="trendingError" class="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-8">
+        {{ trendingError }}
+      </div>
+
+      <div v-if="trendingLoading" class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div v-for="i in 3" :key="i" class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="w-full h-48 bg-primary-100 animate-pulse"></div>
+          <div class="p-6 space-y-4">
+            <div class="h-6 w-3/4 bg-primary-100 animate-pulse rounded"></div>
+            <div class="h-4 w-full bg-primary-100 animate-pulse rounded"></div>
+            <div class="h-4 w-2/3 bg-primary-100 animate-pulse rounded"></div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="!trendingError && trendingPosts.length === 0" class="text-center py-16 bg-white rounded-xl shadow-sm">
+        <p class="text-lg text-primary-700">Nothing trending just yet — check back soon.</p>
+      </div>
+
+      <div v-else class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <article v-for="trendingPost in trendingPosts" :key="trendingPost.id"
+          class="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+          <NuxtLink :to="`/post/${trendingPost.slug}`">
+            <img v-if="trendingPost.coverImage" :src="trendingPost.coverImage" :alt="trendingPost.title"
+              class="w-full h-48 object-cover">
+            <div v-else class="w-full h-48 bg-primary-100"></div>
+          </NuxtLink>
+          <div class="p-6">
+            <div class="flex items-center space-x-2 mb-4">
+              <span v-for="tag in tagNames(trendingPost)" :key="tag"
+                class="px-2 py-1 bg-primary-100 text-primary-700 text-sm rounded-full">
+                {{ tag }}
+              </span>
+            </div>
+
+            <NuxtLink :to="`/post/${trendingPost.slug}`">
+              <h3 class="text-xl font-semibold text-primary-900 mb-2 hover:text-primary-600">
+                {{ trendingPost.title }}
+              </h3>
+            </NuxtLink>
+
+            <p class="text-primary-600 mb-4 line-clamp-2">
+              {{ trendingPost.excerpt ?? '' }}
+            </p>
+
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <img v-if="trendingPost.author?.profileImage" :src="trendingPost.author.profileImage"
+                  :alt="trendingPost.author.username" class="w-10 h-10 rounded-full object-cover">
+                <span v-else
+                  class="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold uppercase">
+                  {{ trendingPost.author?.username?.charAt(0) ?? '?' }}
+                </span>
+                <div>
+                  <span class="text-sm font-medium text-primary-900">
+                    {{ trendingPost.author?.username ?? 'Unknown' }}
+                  </span>
+                  <p class="text-sm text-primary-500">
+                    {{ formatDate(trendingPost.publishedAt) }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex items-center space-x-4 text-sm text-primary-500">
+                <span class="flex items-center">
+                  <i class="ri-eye-line mr-1"></i>
+                  {{ trendingPost.analytics?.views ?? 0 }}
+                </span>
+                <span class="flex items-center">
+                  <i class="ri-time-line mr-1"></i>
+                  {{ trendingPost.readTime }} min read
+                </span>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section class="bg-primary-50 py-16">
       <div class="max-w-6xl mx-auto px-4">
         <h2 class="text-3xl font-bold text-primary-900 text-center mb-12">Why Write on ManKahi?</h2>
@@ -139,7 +224,8 @@
 </template>
 
 <script setup lang="ts">
-  import type { SearchBlogsResult } from '~/types/blog'
+  import type { SearchBlogsResult, Blog } from '~/types/blog'
+  import { tagNames } from '~/types/blog'
   import type { ApiError } from '~/types/admin'
 
   const blogApi = useBlogApi()
@@ -150,6 +236,10 @@
   const initialLoading = ref(true)
   const loadingMore = ref(false)
   const error = ref('')
+
+  const trendingPosts = ref<Blog[]>([])
+  const trendingLoading = ref(true)
+  const trendingError = ref('')
 
   const loadInitial = async () => {
     initialLoading.value = true
@@ -182,6 +272,18 @@
     }
   }
 
+  const loadTrending = async () => {
+    trendingLoading.value = true
+    trendingError.value = ''
+    try {
+      trendingPosts.value = await blogApi.getTrending(5)
+    } catch (err) {
+      trendingError.value = (err as ApiError)?.message ?? 'Failed to load trending stories.'
+    } finally {
+      trendingLoading.value = false
+    }
+  }
+
   const formatDate = (date: string | null) => {
     if (!date) return 'Draft'
     return new Date(date).toLocaleDateString('en-US', {
@@ -191,5 +293,8 @@
     })
   }
 
-  onMounted(loadInitial)
+  onMounted(() => {
+    loadInitial()
+    loadTrending()
+  })
 </script>

@@ -17,6 +17,16 @@
     </header>
 
     <main class="max-w-7xl mx-auto px-4 py-12">
+      <div class="flex flex-wrap items-center gap-4 mb-8">
+        <select v-model="selectedCategory" @change="runSearch(true)"
+          class="rounded-lg border-primary-200 focus:border-primary-500 focus:ring-primary-500 text-primary-700">
+          <option value="">All categories</option>
+          <option v-for="category in categories" :key="category.id" :value="category.id">
+            {{ category.name }}
+          </option>
+        </select>
+      </div>
+
       <div v-if="popularTags.length" class="flex flex-wrap gap-4 mb-8">
         <button v-for="tag in popularTags" :key="tag.id" @click="toggleTag(tag.name)"
           class="px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-shadow"
@@ -93,15 +103,17 @@
 </template>
 
 <script setup lang="ts">
-import type { SearchBlogsParams, SearchBlogsResult, PopularTag } from '~/types/blog'
+import type { SearchBlogsParams, SearchBlogsResult, PopularTag, Category } from '~/types/blog'
 import type { ApiError } from '~/types/admin'
 
 const blogApi = useBlogApi()
 
 const query = ref('')
 const selectedTags = ref<string[]>([])
+const selectedCategory = ref('')
 const posts = ref<SearchBlogsResult['blogs']>([])
 const popularTags = ref<PopularTag[]>([])
+const categories = ref<Category[]>([])
 const page = ref(1)
 const totalPages = ref(1)
 const initialLoading = ref(true)
@@ -121,6 +133,7 @@ const runSearch = async (reset: boolean) => {
     }
     if (query.value.trim()) params.query = query.value.trim()
     if (selectedTags.value.length) params.tags = selectedTags.value
+    if (selectedCategory.value) params.category = selectedCategory.value
 
     const result = await blogApi.search(params)
     posts.value = reset ? result.blogs : [...posts.value, ...result.blogs]
@@ -162,6 +175,14 @@ const loadPopularTags = async () => {
   }
 }
 
+const loadCategories = async () => {
+  try {
+    categories.value = await blogApi.getCategories()
+  } catch {
+    // Non-critical: the category filter is a nice-to-have, don't block the page on this.
+  }
+}
+
 const formatDate = (date: string | null) => {
   if (!date) return 'Draft'
   return new Date(date).toLocaleDateString('en-US', {
@@ -174,5 +195,6 @@ const formatDate = (date: string | null) => {
 onMounted(() => {
   runSearch(true)
   loadPopularTags()
+  loadCategories()
 })
 </script>
