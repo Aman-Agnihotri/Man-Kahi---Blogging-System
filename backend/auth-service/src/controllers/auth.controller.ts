@@ -38,6 +38,22 @@ const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1),
 })
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+})
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z
+    .string()
+    .min(8)
+    .max(100)
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/,
+      'Password must contain at least one uppercase letter, one lowercase letter, and one number'
+    ),
+})
+
 export class AuthController {
   private readonly authService: AuthService
 
@@ -154,6 +170,54 @@ export class AuthController {
       redisTimer.end()
       logger.error('Logout controller error:', error)
       trackError('server', 'logout_failed', 'auth');
+      res.status(500).json({ message: 'Internal server error' })
+    }
+  }
+
+  // Always returns the same generic response regardless of whether the
+  // email matched an account - see AuthService.requestPasswordReset for
+  // why. A 400 only happens for a malformed request body, never for "no
+  // such account".
+  forgotPassword: RequestHandler<{}, any, z.infer<typeof forgotPasswordSchema>> = async (req, res) => {
+    try {
+      const { email } = forgotPasswordSchema.parse(req.body)
+      await this.authService.requestPasswordReset(email)
+      res.json({ message: 'If that email is registered, a password reset link has been sent.' })
+    } catch (error) {
+      logger.error('Forgot-password controller error:', error)
+
+      if (error instanceof z.ZodError) {
+        trackError('validation', 'forgot_password_validation_failed', 'auth')
+        res.status(400).json({ message: 'Invalid input', errors: error.errors })
+        return
+      }
+
+      trackError('server', 'forgot_password_failed', 'auth')
+      res.status(500).json({ message: 'Internal server error' })
+    }
+  }
+
+  resetPassword: RequestHandler<{}, any, z.infer<typeof resetPasswordSchema>> = async (req, res) => {
+    try {
+      const { token, newPassword } = resetPasswordSchema.parse(req.body)
+      await this.authService.resetPassword(token, newPassword)
+      res.json({ message: 'Password reset successfully. You can now log in with your new password.' })
+    } catch (error) {
+      logger.error('Reset-password controller error:', error)
+
+      if (error instanceof z.ZodError) {
+        trackError('validation', 'reset_password_validation_failed', 'auth')
+        res.status(400).json({ message: 'Invalid input', errors: error.errors })
+        return
+      }
+
+      if (error instanceof Error && error.message === 'Invalid or expired reset token') {
+        trackError('invalid_reset_token', 'reset_password_failed', 'auth')
+        res.status(400).json({ message: error.message })
+        return
+      }
+
+      trackError('server', 'reset_password_failed', 'auth')
       res.status(500).json({ message: 'Internal server error' })
     }
   }

@@ -193,6 +193,69 @@ router.post(
 
 /**
  * @swagger
+ * /auth/forgot-password:
+ *   post:
+ *     tags:
+ *       - Authentication
+ *     summary: Request a password reset link
+ *     description: Always returns the same generic response whether or not the email matches an account, to avoid leaking which emails are registered.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Generic acknowledgement
+ */
+router.post(
+    '/forgot-password',
+    createEndpointRateLimit('auth:forgot-password') as unknown as RequestHandler,
+    (req, res, next) => {
+        Promise.resolve(authController.forgotPassword(req, res, next));
+    }
+);
+
+/**
+ * @swagger
+ * /auth/reset-password:
+ *   post:
+ *     tags:
+ *       - Authentication
+ *     summary: Reset a password using a reset token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token, newPassword]
+ *             properties:
+ *               token:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       400:
+ *         description: Invalid input or invalid/expired token
+ */
+router.post(
+    '/reset-password',
+    createEndpointRateLimit('auth:reset-password') as unknown as RequestHandler,
+    (req, res, next) => {
+        Promise.resolve(authController.resetPassword(req, res, next));
+    }
+);
+
+/**
+ * @swagger
  * /auth/logout:
  *   post:
  *     tags:

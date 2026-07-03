@@ -194,6 +194,87 @@ describe('AuthService', () => {
     });
   });
 
+  describe('requestPasswordReset', () => {
+    it('stores a hashed reset token and sends the reset email for a real account', async () => {
+      const { sendPasswordResetEmail } = await import('@utils/mailer');
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({ ...baseUser });
+      (prismaMock.user.update as jest.Mock).mockResolvedValue({ ...baseUser });
+
+      await authService.requestPasswordReset('test@example.com');
+
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: baseUser.id },
+        data: {
+          resetPasswordTokenHash: expect.any(String),
+          resetPasswordExpiresAt: expect.any(Date),
+        },
+      });
+      // The raw token in the emailed link must not be the same string as
+      // whatever was stored in the DB - only its hash is persisted.
+      const updateCall = (prismaMock.user.update as jest.Mock).mock.calls[0][0];
+      const storedHash = updateCall.data.resetPasswordTokenHash;
+      expect(sendPasswordResetEmail).toHaveBeenCalledWith(
+        baseUser.email,
+        expect.stringContaining('/auth/reset-password?token=')
+      );
+      const emailedLink = (sendPasswordResetEmail as jest.Mock).mock.calls[0][1];
+      const rawToken = new URL(emailedLink).searchParams.get('token');
+      expect(rawToken).not.toBe(storedHash);
+    });
+
+    it('does nothing for an unknown email (does not reveal whether the account exists)', async () => {
+      const { sendPasswordResetEmail } = await import('@utils/mailer');
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await authService.requestPasswordReset('nobody@example.com');
+
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+      expect(sendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+
+    it('does nothing for an OAuth-only account (no password to reset)', async () => {
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({ ...baseUser, password: null });
+
+      await authService.requestPasswordReset('test@example.com');
+
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('updates the password and clears the reset token when the token matches and has not expired', async () => {
+      (prismaMock.user.findFirst as jest.Mock).mockResolvedValue({ ...baseUser });
+      (prismaMock.user.update as jest.Mock).mockResolvedValue({ ...baseUser });
+
+      await authService.resetPassword('a-raw-token', 'NewPassword123');
+
+      expect(prismaMock.user.findFirst).toHaveBeenCalledWith({
+        where: {
+          resetPasswordTokenHash: expect.any(String),
+          resetPasswordExpiresAt: { gt: expect.any(Date) },
+        },
+      });
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: baseUser.id },
+        data: {
+          password: 'hashed:NewPassword123',
+          resetPasswordTokenHash: null,
+          resetPasswordExpiresAt: null,
+          loginAttempts: 0,
+          lockedUntil: null,
+        },
+      });
+    });
+
+    it('rejects an invalid or expired token', async () => {
+      (prismaMock.user.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(authService.resetPassword('bad-token', 'NewPassword123'))
+        .rejects.toThrow('Invalid or expired reset token');
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('logout', () => {
     it('blacklists the token when it has remaining validity', async () => {
       const { generateToken } = await import('@shared/utils/jwt');

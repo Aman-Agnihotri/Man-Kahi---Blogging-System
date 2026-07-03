@@ -1,5 +1,7 @@
+import crypto from 'crypto'
 import { prisma } from '@shared/utils/prismaClient'
 import { hashPassword, verifyPassword } from '@utils/password'
+import { sendPasswordResetEmail } from '@utils/mailer'
 import { generateToken, getTokenExpiryInSeconds } from '@shared/utils/jwt'
 import { tokenBlacklist } from '@shared/config/redis'
 import logger from '@shared/utils/logger'
@@ -404,6 +406,68 @@ export class AuthService {
             logger.error('Logout error:', error)
             throw error
         }
+    }
+
+    // Deliberately does not reveal whether the email matched an account -
+    // the controller always returns the same generic response either way,
+    // to avoid letting this endpoint be used to enumerate registered
+    // emails. OAuth-only accounts (no password set) have nothing to reset,
+    // so they're silently skipped the same way a not-found email is.
+    async requestPasswordReset(email: string): Promise<void> {
+        const user = await prisma.user.findUnique({ where: { email } })
+        if (!user?.password) {
+            return
+        }
+
+        const rawToken = crypto.randomBytes(32).toString('hex')
+        const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+        const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000)
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                resetPasswordTokenHash: tokenHash,
+                resetPasswordExpiresAt: oneHourFromNow,
+            },
+        })
+
+        const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3000'
+        const resetLink = `${frontendUrl}/auth/reset-password?token=${rawToken}`
+        await sendPasswordResetEmail(user.email, resetLink)
+    }
+
+    // Only a SHA-256 hash of the token is ever stored (see requestPasswordReset),
+    // so this hashes the incoming raw token the same way before comparing.
+    async resetPassword(token: string, newPassword: string): Promise<void> {
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+
+        const user = await prisma.user.findFirst({
+            where: {
+                resetPasswordTokenHash: tokenHash,
+                resetPasswordExpiresAt: { gt: new Date() },
+            },
+        })
+
+        if (!user) {
+            trackError('auth', 'invalid_reset_token', 'reset_password')
+            throw new Error('Invalid or expired reset token')
+        }
+
+        const hashedPassword = await hashPassword(newPassword)
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                password: hashedPassword,
+                resetPasswordTokenHash: null,
+                resetPasswordExpiresAt: null,
+                // A successful reset is a legitimate reason to clear any
+                // standing lockout too - same fields login() manages.
+                loginAttempts: 0,
+                lockedUntil: null,
+            },
+        })
+
+        trackAuthMetrics('password_reset_success', 'local')
     }
 
     async addRole(userId: string, roleName: string): Promise<UserWithRoles> {

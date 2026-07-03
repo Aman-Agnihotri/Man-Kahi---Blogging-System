@@ -77,6 +77,47 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+    /** Always resolves with the same generic message - the backend never reveals whether the email matched an account. */
+    async forgotPassword(email: string): Promise<{ message: string }> {
+      this.loading = true;
+      this.error = null;
+
+      try {
+        return await authFetch<{ message: string }>('/api/auth/forgot-password', {
+          method: 'POST',
+          body: { email },
+        });
+      } catch (error: any) {
+        const normalized = normalizeApiError(error);
+        this.error = { message: normalized.message, code: 'FORGOT_PASSWORD_ERROR' };
+        throw this.error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+      this.loading = true;
+      this.error = null;
+
+      try {
+        if (!this.validatePassword(newPassword)) {
+          throw new Error('Password must be at least 8 characters and contain uppercase, lowercase, and numbers');
+        }
+
+        return await authFetch<{ message: string }>('/api/auth/reset-password', {
+          method: 'POST',
+          body: { token, newPassword },
+        });
+      } catch (error: any) {
+        const normalized = normalizeApiError(error);
+        this.error = { message: normalized.message, code: 'RESET_PASSWORD_ERROR' };
+        throw this.error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
     async loginWithGoogle() {
       if (import.meta.client) {
         const config = useRuntimeConfig();

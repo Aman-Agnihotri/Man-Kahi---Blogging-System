@@ -76,6 +76,11 @@ jest.mock('@utils/password', () => ({
   needsRehash: jest.fn(() => false),
 }));
 
+jest.mock('@utils/mailer', () => ({
+  __esModule: true,
+  sendPasswordResetEmail: jest.fn(async () => undefined),
+}));
+
 jest.mock('@shared/utils/logger', () => ({
   __esModule: true,
   default: {
