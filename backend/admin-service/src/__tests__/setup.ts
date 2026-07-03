@@ -13,9 +13,17 @@
 
 import { jest } from '@jest/globals';
 
-// Mock Prisma client to avoid actual database operations
+// Mock Prisma client to avoid actual database operations. Re-exports the
+// REAL `Prisma` namespace (not mocked) so `instanceof
+// Prisma.PrismaClientKnownRequestError` checks in admin.controller.ts work
+// against the same error classes tests construct fake errors from - the
+// controller imports `Prisma` from this same module specifically to avoid
+// a real (non-test) bug where a bare `@prisma/client` import resolves to a
+// different module instance than the one the actual client throws
+// errors from.
 jest.mock('@shared/utils/prismaClient', () => ({
   __esModule: true,
+  Prisma: (jest.requireActual('@prisma/client') as { Prisma: unknown }).Prisma,
   default: {
     blog: {
       count: jest.fn(),

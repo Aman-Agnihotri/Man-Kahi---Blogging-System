@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
 import { AdminController } from '@controllers/admin.controller';
-import prisma from '@shared/utils/prismaClient';
+import prisma, { Prisma } from '@shared/utils/prismaClient';
 import { jest } from '@jest/globals';
 import { trackAdminError } from '@middlewares/metrics.middleware';
 

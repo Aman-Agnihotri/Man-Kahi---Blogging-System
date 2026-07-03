@@ -1,8 +1,19 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
+// Prisma (for instanceof checks against PrismaClientKnownRequestError, etc.)
+// must come from @shared/utils/prismaClient, NOT a bare '@prisma/client'
+// import - Node resolves a bare '@prisma/client' specifier relative to THIS
+// file's own directory, landing on this service's own node_modules copy,
+// which is a different module instance (and therefore a different
+// constructor reference) than the one backend/shared/utils/prismaClient.ts
+// actually uses to create the client and throw its errors. `instanceof`
+// against the wrong copy's error class silently fails even though both
+// are logically "the same" package version - confirmed live: a duplicate
+// role assignment threw a real P2002 error that this exact instanceof
+// check failed to catch, falling through to a generic 500 instead of the
+// intended 409.
 import type { ExtendedBlog, Blog, Tag } from '@shared/utils/prismaClient';
-import prisma from '@shared/utils/prismaClient';
+import prisma, { Prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
 import axios from 'axios';
 import {
