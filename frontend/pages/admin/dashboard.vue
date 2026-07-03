@@ -3,6 +3,34 @@
     <div class="max-w-7xl mx-auto px-4 py-8">
       <h1 class="text-3xl font-bold text-primary-900 mb-8">Admin Dashboard</h1>
 
+      <!-- Nav -->
+      <div class="flex flex-wrap gap-2 mb-8">
+        <NuxtLink
+          to="/admin/dashboard"
+          class="px-4 py-2 rounded-full text-sm font-medium bg-primary-600 text-white"
+        >
+          Dashboard
+        </NuxtLink>
+        <NuxtLink
+          to="/admin/users"
+          class="px-4 py-2 rounded-full text-sm font-medium bg-white text-primary-700 hover:bg-primary-100"
+        >
+          Users
+        </NuxtLink>
+        <NuxtLink
+          to="/admin/reports"
+          class="px-4 py-2 rounded-full text-sm font-medium bg-white text-primary-700 hover:bg-primary-100"
+        >
+          Reports
+        </NuxtLink>
+        <NuxtLink
+          to="/admin/audit-log"
+          class="px-4 py-2 rounded-full text-sm font-medium bg-white text-primary-700 hover:bg-primary-100"
+        >
+          Audit Log
+        </NuxtLink>
+      </div>
+
       <div v-if="statsError" class="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-6">
         {{ statsError }}
       </div>
