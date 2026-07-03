@@ -17,6 +17,11 @@ type Environment = {
   MINIO_ACCESS_KEY: string
   MINIO_SECRET_KEY: string
   MINIO_REGION: string
+  // Base URL for image links returned to the browser - distinct from
+  // MINIO_ENDPOINT, which is the internal Docker hostname this service
+  // uses to talk to the MinIO server directly and is not reachable from
+  // outside the Docker network.
+  MINIO_PUBLIC_URL: string
 }
 
 const defaults = {
@@ -37,7 +42,8 @@ const defaults = {
   MINIO_USE_SSL: 'false',
   MINIO_ACCESS_KEY: 'minioadmin',
   MINIO_SECRET_KEY: 'minioadmin',
-  MINIO_REGION: 'ap-south-1'
+  MINIO_REGION: 'ap-south-1',
+  MINIO_PUBLIC_URL: 'http://localhost:9000'
 }
 
 export const env: Environment = {
@@ -60,5 +66,6 @@ export const env: Environment = {
   MINIO_USE_SSL: process.env['MINIO_USE_SSL'] ?? defaults.MINIO_USE_SSL,
   MINIO_ACCESS_KEY: process.env['MINIO_ACCESS_KEY'] ?? defaults.MINIO_ACCESS_KEY,
   MINIO_SECRET_KEY: process.env['MINIO_SECRET_KEY'] ?? defaults.MINIO_SECRET_KEY,
-  MINIO_REGION: process.env['MINIO_REGION'] ?? defaults.MINIO_REGION
+  MINIO_REGION: process.env['MINIO_REGION'] ?? defaults.MINIO_REGION,
+  MINIO_PUBLIC_URL: process.env['MINIO_PUBLIC_URL'] ?? defaults.MINIO_PUBLIC_URL
 }

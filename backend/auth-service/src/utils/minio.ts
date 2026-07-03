@@ -19,7 +19,11 @@ const minioClient = new Client({
 // Distinct bucket from blog-service's "blog-images" to avoid collisions -
 // each service owns its own MinIO bucket.
 const BUCKET_NAME = 'avatars'
-const IMAGE_BASE_URL = `${env.MINIO_ENDPOINT}:${env.MINIO_PORT}/${BUCKET_NAME}`
+// MINIO_PUBLIC_URL (not MINIO_ENDPOINT, which is the internal Docker
+// hostname the client above connects through) - this is what ends up in
+// User.profileImage and gets rendered directly in <img> tags across the
+// frontend, so it must be reachable from the browser.
+const IMAGE_BASE_URL = `${env.MINIO_PUBLIC_URL}/${BUCKET_NAME}`
 
 export const setupMinio = async (): Promise<void> => {
     try {

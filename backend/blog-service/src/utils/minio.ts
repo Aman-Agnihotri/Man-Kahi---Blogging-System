@@ -11,7 +11,11 @@ const minioClient = new Client({
 })
 
 const BUCKET_NAME = 'blog-images'
-const IMAGE_BASE_URL = `${env.MINIO_ENDPOINT}:${env.MINIO_PORT}/${BUCKET_NAME}`
+// MINIO_PUBLIC_URL (not MINIO_ENDPOINT, which is the internal Docker
+// hostname the client above connects through) - this is what ends up in
+// Blog.coverImage and gets rendered directly in <img> tags across the
+// frontend, so it must be reachable from the browser.
+const IMAGE_BASE_URL = `${env.MINIO_PUBLIC_URL}/${BUCKET_NAME}`
 
 export const setupMinio = async (): Promise<void> => {
   try {
@@ -47,6 +51,15 @@ export const uploadImage = async (
   filename: string
 ): Promise<string> => {
   try {
+    // Lazily ensure the bucket exists on first use rather than requiring a
+    // separate startup step - setupMinio() was previously defined but never
+    // called anywhere, so the "blog-images" bucket was never actually
+    // created and every cover-image upload failed with "The specified
+    // bucket does not exist" (only ever surfaced now that a real UI
+    // exercises this path - see auth-service's uploadAvatar for the same
+    // lazy-setup pattern this mirrors).
+    await setupMinio()
+
     await minioClient.putObject(
       BUCKET_NAME,
       filename,
