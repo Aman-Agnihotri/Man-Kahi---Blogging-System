@@ -1,5 +1,6 @@
 import { CommentService } from '@services/comment.service';
 import { prisma } from '@shared/utils/prismaClient';
+import { blogCache } from '@shared/config/redis';
 
 const prismaMock = prisma as unknown as {
   blog: {
@@ -19,6 +20,10 @@ const prismaMock = prisma as unknown as {
     create: jest.Mock;
     findFirst: jest.Mock;
   };
+};
+
+const cacheMock = blogCache as unknown as {
+  invalidate: jest.Mock;
 };
 
 describe('CommentService.listComments', () => {
@@ -76,7 +81,7 @@ describe('CommentService.listComments', () => {
 describe('CommentService.createComment', () => {
   it('creates a top-level comment and increments the analytics counter', async () => {
     const service = new CommentService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', published: true, authorId: 'author-1' });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', slug: 'blog-1-slug', published: true, authorId: 'author-1' });
     const comment = { id: 'comment-1', blogId: 'blog-1', userId: 'user-1', content: 'Nice post' };
     prismaMock.comment.create.mockResolvedValue(comment);
 
@@ -91,6 +96,20 @@ describe('CommentService.createComment', () => {
       data: { comments: { increment: 1 } },
     });
     expect(result).toBe(comment);
+  });
+
+  // Regression test: the blog-by-slug response is Redis-cached and embeds
+  // analytics.comments, which previously went stale forever after the
+  // first comment posted post-cache-fill, since createComment never
+  // invalidated it.
+  it('invalidates the blog-by-slug cache after posting a comment', async () => {
+    const service = new CommentService();
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', slug: 'blog-1-slug', published: true, authorId: 'author-1' });
+    prismaMock.comment.create.mockResolvedValue({ id: 'comment-1', blogId: 'blog-1', userId: 'user-1', content: 'Nice post' });
+
+    await service.createComment('blog-1', 'user-1', 'Nice post');
+
+    expect(cacheMock.invalidate).toHaveBeenCalledWith('blog-1-slug');
   });
 
   it('creates a reply when parentId points to a valid top-level comment on the same blog', async () => {
@@ -173,6 +192,7 @@ describe('CommentService.deleteComment', () => {
   it('allows the comment author to soft-delete it and decrements the counter', async () => {
     const service = new CommentService();
     prismaMock.comment.findUnique.mockResolvedValue({ id: 'comment-1', userId: 'author-1', blogId: 'blog-1', deletedAt: null });
+    prismaMock.blog.findUnique.mockResolvedValue({ slug: 'blog-1-slug' });
 
     const result = await service.deleteComment('comment-1', 'author-1', ['user']);
 
@@ -185,6 +205,10 @@ describe('CommentService.deleteComment', () => {
       data: { comments: { decrement: 1 } },
     });
     expect(result).toEqual({ id: 'comment-1' });
+    // Regression: comment deletion previously never invalidated the
+    // Redis-cached blog-by-slug response, so its embedded comment count
+    // stayed stale after a delete just like it did after a create.
+    expect(cacheMock.invalidate).toHaveBeenCalledWith('blog-1-slug');
   });
 
   it('allows an admin to delete someone else\'s comment', async () => {

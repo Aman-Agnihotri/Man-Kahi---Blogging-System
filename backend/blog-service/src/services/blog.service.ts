@@ -52,6 +52,7 @@ export class BlogService {
     blogId: string,
     authorId: string,
     currentContent: string,
+    currentContentMarkdown: string | null,
     currentVersion: number
   ): Promise<void> {
     await prisma.blogRevision.create({
@@ -59,6 +60,7 @@ export class BlogService {
         blogId,
         version: currentVersion,
         content: currentContent,
+        contentMarkdown: currentContentMarkdown,
         createdBy: authorId,
       },
     });
@@ -118,6 +120,7 @@ export class BlogService {
         title: data.title,
         slug,
         content: processedContent,
+        contentMarkdown: data.content,
         description: data.description,
         published: data.published ?? false,
         publishedAt: data.published ? new Date() : null,
@@ -284,6 +287,7 @@ export class BlogService {
         published: true,
         publishedAt: true,
         content: true,
+        contentMarkdown: true,
         version: true,
         tags: {
           include: {
@@ -319,7 +323,7 @@ export class BlogService {
     // same content shouldn't create a no-op revision entry.
     const isContentChanging = processedContent !== undefined && processedContent !== blog.content;
     if (isContentChanging) {
-      await this.captureRevision(id, authorId, blog.content, blog.version);
+      await this.captureRevision(id, authorId, blog.content, blog.contentMarkdown, blog.version);
     }
 
     let coverImage: string | undefined;
@@ -344,7 +348,7 @@ export class BlogService {
           title: data.title,
           slug: updatedSlug,
         }),
-        ...(processedContent && { content: processedContent }),
+        ...(processedContent && { content: processedContent, contentMarkdown: data.content }),
         ...(isContentChanging && { version: blog.version + 1 }),
         ...(coverImage && { coverImage }),
         ...(data.description !== undefined && { description: data.description }),
@@ -554,7 +558,7 @@ export class BlogService {
   async likeBlog(blogId: string, userId: string) {
     const blog = await prisma.blog.findUnique({
       where: { id: blogId },
-      select: { id: true, deletedAt: true, published: true, authorId: true },
+      select: { id: true, slug: true, deletedAt: true, published: true, authorId: true },
     });
     // Same visibility rule as reading a blog by slug: a draft is only
     // interactable by its own author. Without this, any authenticated
@@ -582,6 +586,11 @@ export class BlogService {
       data: { likes: { increment: 1 } },
       select: { likes: true },
     });
+    // The blog-by-slug response (and its embedded analytics.likes) is
+    // Redis-cached on read - without invalidating it here, a post viewed
+    // even once before being liked would keep showing its pre-like count
+    // until the cache naturally expired.
+    await blogCache.invalidate(blog.slug);
 
     return { liked: true, likesCount: analytics.likes };
   }
@@ -594,7 +603,7 @@ export class BlogService {
     // while public would become permanently un-removable via the API.
     const blog = await prisma.blog.findUnique({
       where: { id: blogId },
-      select: { id: true, deletedAt: true },
+      select: { id: true, slug: true, deletedAt: true },
     });
     if (!blog || blog.deletedAt) {
       throw new Error('Blog not found');
@@ -618,6 +627,7 @@ export class BlogService {
       data: { likes: { decrement: 1 } },
       select: { likes: true },
     });
+    await blogCache.invalidate(blog.slug);
 
     return { liked: false, likesCount: analytics.likes };
   }
@@ -792,7 +802,7 @@ export class BlogService {
 
     const blog = await prisma.blog.findUnique({
       where: { id: blogId },
-      select: { authorId: true, slug: true, content: true, version: true },
+      select: { authorId: true, slug: true, content: true, contentMarkdown: true, version: true },
     });
     if (!blog) {
       throw new Error('Blog not found');
@@ -806,20 +816,25 @@ export class BlogService {
       throw new Error('Revision not found');
     }
 
-    const validation = validateMarkdown(revision.content);
+    // Revisions captured before contentMarkdown existed only have the
+    // rendered HTML snapshot - fall back to re-processing that (the old,
+    // imperfect behavior) rather than losing the ability to restore them.
+    const restoredSource = revision.contentMarkdown ?? revision.content;
+    const validation = validateMarkdown(restoredSource);
     if (!validation.isValid) {
       logger.error('Invalid markdown content in revision restore');
       throw new Error('Invalid markdown content');
     }
-    const processedContent = processMarkdown(revision.content);
+    const processedContent = processMarkdown(restoredSource);
 
     // Capture what's currently live as a new revision before overwriting it.
-    await this.captureRevision(blogId, authorId, blog.content, blog.version);
+    await this.captureRevision(blogId, authorId, blog.content, blog.contentMarkdown, blog.version);
 
     const updatedBlog = await prisma.blog.update({
       where: { id: blogId },
       data: {
         content: processedContent,
+        contentMarkdown: revision.contentMarkdown ?? restoredSource,
         version: blog.version + 1,
       },
       include: {

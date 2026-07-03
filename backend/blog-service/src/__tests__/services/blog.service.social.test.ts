@@ -46,7 +46,7 @@ const updateBlogIndexMock = updateBlogIndex as jest.Mock;
 describe('BlogService likes', () => {
   it('creates a Like row and increments the analytics counter only on first like', async () => {
     const service = new BlogService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null, published: true, authorId: 'author-1' });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', slug: 'blog-1-slug', deletedAt: null, published: true, authorId: 'author-1' });
     prismaMock.like.findUnique.mockResolvedValue(null);
     prismaMock.blogAnalytics.update.mockResolvedValue({ likes: 1 });
 
@@ -59,6 +59,31 @@ describe('BlogService likes', () => {
       select: { likes: true },
     });
     expect(result).toEqual({ liked: true, likesCount: 1 });
+  });
+
+  // Regression test: the blog-by-slug response is Redis-cached, and its
+  // embedded analytics.likes previously went stale forever after a post
+  // was liked/unliked post-cache-fill, since neither path invalidated it.
+  it('invalidates the blog-by-slug cache after a successful like', async () => {
+    const service = new BlogService();
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', slug: 'blog-1-slug', deletedAt: null, published: true, authorId: 'author-1' });
+    prismaMock.like.findUnique.mockResolvedValue(null);
+    prismaMock.blogAnalytics.update.mockResolvedValue({ likes: 1 });
+
+    await service.likeBlog('blog-1', 'user-1');
+
+    expect(cacheMock.invalidate).toHaveBeenCalledWith('blog-1-slug');
+  });
+
+  it('does not invalidate the cache on a repeat (already-liked) call', async () => {
+    const service = new BlogService();
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', slug: 'blog-1-slug', deletedAt: null, published: true, authorId: 'author-1' });
+    prismaMock.like.findUnique.mockResolvedValue({ id: 'like-1', blogId: 'blog-1', userId: 'user-1' });
+    prismaMock.blogAnalytics.findUnique.mockResolvedValue({ likes: 5 });
+
+    await service.likeBlog('blog-1', 'user-1');
+
+    expect(cacheMock.invalidate).not.toHaveBeenCalled();
   });
 
   it('is idempotent - repeat likes do not re-create the row or increment again', async () => {
@@ -108,7 +133,7 @@ describe('BlogService likes', () => {
 
   it('deletes a Like row and decrements the counter only if a like existed', async () => {
     const service = new BlogService();
-    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', deletedAt: null });
+    prismaMock.blog.findUnique.mockResolvedValue({ id: 'blog-1', slug: 'blog-1-slug', deletedAt: null });
     prismaMock.like.findUnique.mockResolvedValue({ id: 'like-1' });
     prismaMock.blogAnalytics.update.mockResolvedValue({ likes: 0 });
 
@@ -121,6 +146,7 @@ describe('BlogService likes', () => {
       select: { likes: true },
     });
     expect(result).toEqual({ liked: false, likesCount: 0 });
+    expect(cacheMock.invalidate).toHaveBeenCalledWith('blog-1-slug');
   });
 
   it('is idempotent - unliking twice does not decrement twice', async () => {

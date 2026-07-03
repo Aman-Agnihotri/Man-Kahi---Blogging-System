@@ -1,4 +1,5 @@
 import { prisma } from '@shared/utils/prismaClient'
+import { blogCache } from '@shared/config/redis'
 import logger from '@shared/utils/logger'
 
 const AUTHOR_SELECT = {
@@ -63,7 +64,7 @@ export class CommentService {
 
     const blog = await prisma.blog.findUnique({
       where: { id: blogId, deletedAt: null },
-      select: { id: true, published: true, authorId: true },
+      select: { id: true, slug: true, published: true, authorId: true },
     })
     if (!blog || !this.canReadBlog(blog, userId)) {
       logger.warn(`Blog not found when creating comment: ${blogId}`)
@@ -91,6 +92,10 @@ export class CommentService {
       where: { blogId },
       data: { comments: { increment: 1 } },
     })
+    // Same reasoning as the like-count fix in blog.service.ts: the
+    // blog-by-slug response caches analytics.comments, so it must be
+    // invalidated whenever the comment count changes underneath it.
+    await blogCache.invalidate(blog.slug)
 
     logger.info(`Comment ${comment.id} created on blog ${blogId}`)
     return comment
@@ -140,6 +145,10 @@ export class CommentService {
       where: { blogId: comment.blogId },
       data: { comments: { decrement: 1 } },
     })
+    const blog = await prisma.blog.findUnique({ where: { id: comment.blogId }, select: { slug: true } })
+    if (blog) {
+      await blogCache.invalidate(blog.slug)
+    }
 
     logger.info(`Comment ${commentId} deleted by ${requesterId}`)
     return { id: commentId }
