@@ -50,6 +50,8 @@ export function useApi() {
     put: <T>(path: string, body?: any) => request<T>(path, { method: 'PUT', body }),
     patch: <T>(path: string, body?: any) => request<T>(path, { method: 'PATCH', body }),
     del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+    /** DELETE with a JSON body (e.g. re-confirming a password before account deletion). */
+    delWithBody: <T>(path: string, body?: any) => request<T>(path, { method: 'DELETE', body }),
     /** For multipart/form-data requests (blog cover image upload). */
     postForm: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form }),
     putForm: <T>(path: string, form: FormData) => request<T>(path, { method: 'PUT', body: form }),

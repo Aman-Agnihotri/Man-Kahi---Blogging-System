@@ -63,6 +63,11 @@ export interface Blog {
   category?: BlogCategory | null;
   tags: BlogTagJoin[];
   analytics?: BlogAnalyticsSummary | null;
+  /** SEO fields - always present on the Blog row, optional here since not every response includes them. */
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  canonicalUrl?: string | null;
+  version?: number;
 }
 
 export interface PaginatedBlogs {
@@ -130,6 +135,9 @@ export interface CreateBlogInput {
   tags?: string[];
   published?: boolean;
   image?: File | null;
+  metaTitle?: string;
+  metaDescription?: string;
+  canonicalUrl?: string;
 }
 
 export type UpdateBlogInput = Partial<CreateBlogInput>;
@@ -145,4 +153,89 @@ export interface PopularTag {
 /** Flattens a blog's tag join rows into plain tag names for display/forms. */
 export function tagNames(blog: Pick<Blog, 'tags'>): string[] {
   return blog.tags.map((t) => t.tag.name);
+}
+
+// --- Likes / bookmarks --------------------------------------------------
+
+export interface LikeResult {
+  liked: boolean;
+  likesCount: number;
+}
+
+export interface BookmarkResult {
+  bookmarked: boolean;
+}
+
+// --- Comments -------------------------------------------------------------
+
+export interface CommentAuthor {
+  id: string;
+  username: string;
+  profileImage: string | null;
+}
+
+export interface Comment {
+  id: string;
+  blogId: string;
+  userId: string;
+  content: string;
+  parentId: string | null;
+  user: CommentAuthor;
+  replies?: Comment[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedComments {
+  comments: Comment[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+// --- Revisions --------------------------------------------------------
+
+export interface BlogRevisionSummary {
+  id: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  comment: string | null;
+}
+
+export interface BlogRevision extends BlogRevisionSummary {
+  blogId: string;
+  content: string;
+}
+
+// --- Categories -----------------------------------------------------------
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  parentId: string | null;
+  icon: string | null;
+  color: string | null;
+  sortOrder: number;
+  isHidden: boolean;
+  children?: Category[];
+}
+
+export interface CreateCategoryInput {
+  name: string;
+  description?: string;
+  parentId?: string;
+  icon?: string;
+  color?: string;
+  sortOrder?: number;
+}
+
+export type UpdateCategoryInput = Partial<CreateCategoryInput>;
+
+// --- Reporting --------------------------------------------------------
+
+export interface ReportInput {
+  reason: string;
 }

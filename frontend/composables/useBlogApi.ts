@@ -6,6 +6,16 @@ import type {
   CreateBlogInput,
   UpdateBlogInput,
   PopularTag,
+  LikeResult,
+  BookmarkResult,
+  Comment,
+  PaginatedComments,
+  BlogRevisionSummary,
+  BlogRevision,
+  Category,
+  CreateCategoryInput,
+  UpdateCategoryInput,
+  ReportInput,
 } from '~/types/blog';
 
 function toFormData(input: CreateBlogInput | UpdateBlogInput): FormData {
@@ -19,6 +29,9 @@ function toFormData(input: CreateBlogInput | UpdateBlogInput): FormData {
     input.tags.forEach((tag) => form.append('tags[]', tag));
   }
   if (input.image) form.set('image', input.image);
+  if (input.metaTitle !== undefined) form.set('metaTitle', input.metaTitle);
+  if (input.metaDescription !== undefined) form.set('metaDescription', input.metaDescription);
+  if (input.canonicalUrl !== undefined) form.set('canonicalUrl', input.canonicalUrl);
   return form;
 }
 
@@ -56,5 +69,60 @@ export function useBlogApi() {
     update: (id: string, input: UpdateBlogInput) => api.putForm<Blog>(`/api/blogs/${id}`, toFormData(input)),
 
     remove: (id: string) => api.del<{ message: string }>(`/api/blogs/${id}`),
+
+    getTrending: (limit?: number) => api.get<Blog[]>('/api/blogs/trending', { limit }),
+
+    // --- Likes / bookmarks -----------------------------------------------
+
+    like: (blogId: string) => api.post<LikeResult>(`/api/blogs/${blogId}/like`),
+    unlike: (blogId: string) => api.del<LikeResult>(`/api/blogs/${blogId}/like`),
+    bookmark: (blogId: string) => api.post<BookmarkResult>(`/api/blogs/${blogId}/bookmark`),
+    unbookmark: (blogId: string) => api.del<BookmarkResult>(`/api/blogs/${blogId}/bookmark`),
+    getBookmarks: (page?: number, limit?: number) =>
+      api.get<PaginatedBlogs>('/api/blogs/bookmarks', { page, limit }),
+
+    // --- Comments --------------------------------------------------------
+
+    getComments: (blogId: string, page?: number, limit?: number) =>
+      api.get<PaginatedComments>(`/api/blogs/${blogId}/comments`, { page, limit }),
+    createComment: (blogId: string, content: string, parentId?: string) =>
+      api.post<Comment>(`/api/blogs/${blogId}/comments`, { content, parentId }),
+    updateComment: (commentId: string, content: string) =>
+      api.put<Comment>(`/api/blogs/comments/${commentId}`, { content }),
+    deleteComment: (commentId: string) =>
+      api.del<{ id: string }>(`/api/blogs/comments/${commentId}`),
+    reportComment: (commentId: string, input: ReportInput) =>
+      api.post<{ id: string }>(`/api/blogs/comments/${commentId}/report`, input),
+
+    // --- Reporting ------------------------------------------------------
+
+    reportBlog: (blogId: string, input: ReportInput) =>
+      api.post<{ id: string }>(`/api/blogs/${blogId}/report`, input),
+
+    // --- Revisions -------------------------------------------------------
+
+    getRevisions: (blogId: string) =>
+      api.get<BlogRevisionSummary[]>(`/api/blogs/${blogId}/revisions`),
+    getRevision: (blogId: string, revisionId: string) =>
+      api.get<BlogRevision>(`/api/blogs/${blogId}/revisions/${revisionId}`),
+    restoreRevision: (blogId: string, revisionId: string) =>
+      api.post<Blog>(`/api/blogs/${blogId}/revisions/${revisionId}/restore`),
+
+    // --- Categories ------------------------------------------------------
+
+    getCategories: () => api.get<Category[]>('/api/blogs/categories'),
+    createCategory: (input: CreateCategoryInput) =>
+      api.post<Category>('/api/blogs/categories', input),
+    updateCategory: (id: string, input: UpdateCategoryInput) =>
+      api.put<Category>(`/api/blogs/categories/${id}`, input),
+    deleteCategory: (id: string) =>
+      api.del<{ message: string }>(`/api/blogs/categories/${id}`),
+
+    // --- Reading progress / share tracking (fire-and-forget, best effort) --
+
+    trackReadProgress: (blogId: string, progress: number) =>
+      api.post('/api/blogs/analytics/progress', { blogId, progress }).catch(() => undefined),
+    trackLinkClick: (blogId: string, url: string) =>
+      api.post('/api/blogs/analytics/link', { blogId, url }).catch(() => undefined),
   };
 }
