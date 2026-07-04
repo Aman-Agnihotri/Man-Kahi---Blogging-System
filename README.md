@@ -36,29 +36,30 @@ Admins should be able to:
 
 ## Current Status
 
-The local Docker stack is running and is the current development/demo environment. All 12 containers (frontend, nginx, 4 backend services, Postgres, Redis, Elasticsearch, MinIO, Prometheus, Grafana) report healthy, and the full core-loop smoke test passes end-to-end.
+The local Docker stack is running and is the current development/demo environment. All 12 containers (frontend, nginx, 4 backend services, Postgres, Redis, Elasticsearch, MinIO, Prometheus, Grafana) report healthy, and the full core-loop smoke test passes end-to-end through the real nginx gateway.
 
 Working foundation:
 
-- Nuxt frontend, fully wired to real backend data (no mock/placeholder data remaining in the primary product surfaces)
-- Nginx gateway (only public entrypoint)
-- Auth service (accounts, profiles, follows, notification preferences)
-- Blog service (posts, likes, bookmarks, comments, categories, revisions, trending)
-- Analytics service
-- Admin service (users, roles, reports, audit log)
-- PostgreSQL, Redis, Elasticsearch, MinIO (object storage, S3-compatible)
-- Prometheus/Grafana monitoring
+- Nuxt frontend, fully wired to real backend data (no mock/placeholder data remaining anywhere in the product, including categories and public author profiles)
+- Nginx gateway (only public entrypoint), with a real CORS allowlist and a tightened CSP
+- Auth service (accounts, profiles, avatars, follows, notification preferences, password reset)
+- Blog service (posts, cover images, categories, likes, bookmarks, comments, revisions, trending)
+- Analytics service (views, reads, progress, link clicks)
+- Admin service (users, roles, reports, audit log, category management)
+- PostgreSQL, Redis, Elasticsearch, MinIO (object storage, S3-compatible), all with pinned image versions
+- Prometheus/Grafana monitoring, auto-provisioned dashboards and datasource, with documented alert recommendations (`docs/ALERTING.md`)
+- Structured, service-tagged, secret-redacted logging with request IDs (`docs/RUNBOOK.md`)
 - Cloudflare Tunnel demo path
 - Postgres backup/restore scripts
-- 283 backend tests passing; frontend and root typecheck clean
+- 300 backend tests passing; frontend and root typecheck clean
 
 Still in progress / known gaps:
 
-- no admin UI to create/edit categories, and no category picker in the post editor (backend CRUD exists and is admin-gated; currently created and assigned via direct API calls)
-- notification preferences are stored but not yet wired to actual email delivery
+- notification preferences are stored but not yet wired to actual email delivery (no email provider is configured anywhere in this codebase; password reset uses a dev-only stub that logs the reset link)
 - Kubernetes manifests are partially repaired (`kubernetes/base` builds cleanly; the per-environment overlays still have one outstanding kustomize issue) and are not the current deployment target
-- a pre-existing UX quirk: editing an already-published post and clicking "Save Draft" (instead of "Publish") will unpublish it
-- posts saved before the markdown/HTML content-round-trip fix (below) will show rendered HTML instead of markdown the first time they're reopened for editing; re-saving fixes it going forward
+- production TLS/domain configuration for nginx (or a Cloudflare named tunnel) still needs to be set up per-deployment - see `docs/DEPLOYMENT.md`
+- posts saved before the markdown/HTML content-round-trip fix will show rendered HTML instead of markdown the first time they're reopened for editing; re-saving fixes it going forward
+- no automated frontend tests (no test framework installed); frontend correctness is covered by typecheck plus manual and live-browser verification
 
 ## Product Areas
 
@@ -84,7 +85,7 @@ The analytics service tracks views, reading progress, reads, and link clicks.
 
 ### Moderation
 
-Admins can hide/unhide or hard-delete posts, suspend/unsuspend users (enforced at login), assign/revoke roles, and review reported content. Every moderation action is recorded in a searchable audit log.
+Admins can hide/unhide or hard-delete posts, suspend/unsuspend users (enforced at login), assign/revoke roles, review reported content, and manage the category catalog. Every moderation action is recorded in a searchable audit log.
 
 ## Architecture Summary
 
@@ -106,6 +107,9 @@ Read the full architecture notes in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment](docs/DEPLOYMENT.md)
+- [Scaling Guidance](docs/SCALING.md)
+- [Alerting Recommendations](docs/ALERTING.md)
+- [Operational Runbook](docs/RUNBOOK.md)
 - [Action Plan](docs/ACTION_PLAN.md)
 
 ## Local Access
@@ -120,7 +124,7 @@ Detailed setup and deployment commands live in [docs/DEPLOYMENT.md](docs/DEPLOYM
 
 ## Project Direction
 
-The professional single-server MVP and the core product feature set (reader engagement, content authoring, user/social, admin and moderation) are both complete and live-verified. The next milestone is:
+The professional single-server MVP, security hardening, observability, and the core product feature set (reader engagement, content authoring, user/social, admin and moderation) are all complete and live-verified. The next milestone is:
 
 ```text
 Finish Kubernetes readiness and close the remaining documented gaps
@@ -129,7 +133,7 @@ Finish Kubernetes readiness and close the remaining documented gaps
 That means:
 
 - resolving the last kustomize overlay issue so `environments/*` builds cleanly, not just `base`
-- an admin UI for category management
-- real email delivery behind the existing notification-preferences groundwork
+- real email delivery behind the existing notification-preferences and password-reset groundwork
+- production TLS/domain configuration for a real deployment (see `docs/DEPLOYMENT.md`)
 
 Progress is tracked in [docs/ACTION_PLAN.md](docs/ACTION_PLAN.md).
