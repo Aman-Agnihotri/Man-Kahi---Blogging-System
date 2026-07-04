@@ -675,3 +675,58 @@ anywhere. All of the above are fixed and re-verified live.
 - [x] Core workflows have automated tests.
   - 127 backend tests passing via `npm test` from the repo root: auth (21), blog (32, including new regression coverage for the visibility/publishedAt fixes), analytics (17), admin (57, including new coverage for the auth-forwarding and visibility-delegation fixes). Frontend: typecheck only, no automated component/e2e tests (documented gap - out of scope per the original phase ordering, which stops at Phase 6's backend-focused test command).
 - [x] README links to this action plan.
+
+## Final Pre-Deployment Sweep (2026-07-04)
+
+With every phase above either complete or its remaining gaps explicitly
+documented, a final deep sweep was run across the codebase, infra, and
+docs specifically looking for anything missed, out of date, or
+inconsistent - not new feature work. Four real, verified issues were
+found and fixed:
+
+1. **`README.md` was stale.** Last updated before Phase 4 (security
+   hardening) and Phase 5 (observability, the Pino logging fix) landed,
+   and before the category-picker/admin-UI and cover-image work. It
+   still listed both as known gaps (both were done), undercounted the
+   test suite (283 vs. the current 300), and didn't link
+   `docs/SCALING.md`/`docs/ALERTING.md`/`docs/RUNBOOK.md`. Rewritten to
+   match current reality.
+2. **A real, live, silently-broken feature**: the newsletter signup
+   form in the site footer (rendered on every page via
+   `TheFooter.vue`) called `console.log()` and cleared the input -  no
+   backend call, no user feedback, nothing. No newsletter/email
+   infrastructure exists anywhere in this codebase. Fixed to match the
+   honesty pattern `contact.vue` already used: acknowledge the
+   submission with an inline message instead of pretending to send it.
+3. **Unpinned `:latest`/untagged Docker images.** `nginx`, `prom/prometheus`,
+   and `grafana/grafana-enterprise` used `:latest`, and `minio/minio`/
+   `redis:alpine` had no specific version pinned, in both compose
+   files - a `docker compose pull` before a production redeploy could
+   silently pull a breaking major-version bump. Pinned all five to the
+   exact versions already running, after confirming each tag actually
+   exists on its registry (`docker manifest inspect`) rather than
+   guessing a version string. Live-verified: all 12 containers stay
+   healthy and the full smoke test still passes after recreating with
+   the pinned tags.
+4. **A leftover `console.error`** in `analytics-service`'s startup
+   handler, the only `console.*` call left in the entire backend
+   outside tests - redundant now that the `logger.error()` call right
+   above it actually works (see the Phase 5 Pino fix).
+
+Also checked and found already solid, worth recording so it isn't
+re-litigated later: no real env files or secrets tracked in git; no
+hardcoded credentials in source; backend `npm audit` is 0 vulnerabilities
+across all 4 services and `shared` (frontend's 49 findings are
+pre-existing dev-tooling-only, already documented in Phase 4); log
+rotation is healthy after a multi-hour session (files in the low
+hundreds of KB, old ones gzipped); `kubectl kustomize kubernetes/base`
+still builds cleanly; Prisma schema indexes are comprehensive and
+actually match real query patterns (composite indexes on
+`authorId+createdAt`, `published+createdAt`, etc.); MinIO's bucket
+policy is correctly scoped to public `GetObject` only, not write/delete.
+
+Two cosmetic, low-priority items were noted but deliberately left
+as-is: no custom Nuxt `error.vue` page (default framework 404/500 page
+shown), and the footer's social icons (Twitter/GitHub/LinkedIn/
+Instagram) all link to `#` placeholders - honest dead links, not fake
+functionality, so lower priority than the newsletter fix above.
