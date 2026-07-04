@@ -32,7 +32,7 @@ Turn ManKahi into a professional-grade blogging platform that runs well on a hom
 - [x] Backend API contracts are cleaned up.
   - Auth, blog, analytics, and admin services all typecheck and pass their full test suites independently. Note: none of the four services nor `backend/shared` had ever had `npm install`/`prisma generate` run outside Docker — see the new `backend/shared/scripts/generate-client.js` and each service's `prisma:generate`/`pretest` scripts, now required for local (non-Docker) dev and CI.
 - [x] Tests cover core user and admin workflows.
-  - 293 backend tests passing (`npm test` from repo root), including regression coverage for every live-verification bug fixed across every pass (Phases 1-4, 7). See the Definition of Done section and Phase 7/8 notes for what was found and fixed by actually running the stack.
+  - 300 backend tests passing (`npm test` from repo root), including regression coverage for every live-verification bug fixed across every pass (Phases 1-5, 7). See the Definition of Done section and Phase 5/7/8 notes for what was found and fixed by actually running the stack.
 - [x] README links to product, architecture, deployment, and action-plan docs.
 
 ## Architecture Direction
@@ -335,35 +335,64 @@ Acceptance criteria:
 
 Purpose: make the app understandable when it is running.
 
-Out of scope for this pass beyond what the Definition of Done requires
-(per the original phase ordering, Phase 5 is only pursued once 1-4 are
-fully done, and only "to the extent DoD requires"). One bug was found and
-fixed anyway because it blocked the DoD's "metrics work" item entirely:
-`ENABLE_METRICS` was never set in any env file, so every service's
-`/metrics` route 404'd unconditionally and Prometheus's scrape targets
-were permanently down. Fixed by setting it in `.env.development` and
-documenting it in both example env files - see the Definition of Done
-section for the live-verification details. The rest of this phase
-(structured logs with request IDs, alerting, an operational runbook,
-Grafana dashboard provisioning) remains genuinely not done.
+Two bugs were found and fixed during this phase that aren't separate
+checklist items but are worth calling out:
+
+1. **Secrets in logs.** All 4 backend services logged the entire
+   `req.body` and `req.headers` object on every request (login/register/
+   password-reset bodies contain plaintext passwords; every authenticated
+   request's headers contain the raw `Authorization: Bearer <jwt>`), and
+   this was being written to rotated log files kept for 14 days plus
+   `docker compose logs`. Fixed with a new `backend/shared/utils/redact.ts`
+   (deep-redacts known-sensitive keys case-insensitively) wired into every
+   request-logging call site across all 4 services. 7 new unit tests.
+   Live-verified: sent a real login request through the gateway and
+   confirmed the persisted log file shows `"password": "[REDACTED]"`
+   while `email` and other non-sensitive fields remain visible.
+2. **The redaction fix (and most other structured-log call sites in this
+   codebase) initially didn't actually work**, because of a real Pino API
+   misuse bug: `logger.info(messageString, fieldsObject)` silently drops
+   the object entirely - Pino only merges an object into structured
+   output when it is the *first* argument (`logger.info(fieldsObject,
+   messageString)`). This was caught by live-testing inside a running
+   container (`docker exec ... node -e "..."`), not by static review -
+   the original code looked reasonable and typechecked fine. Fixed the
+   ~11 call sites touched by the redaction/service-name work (all 4
+   services' `server.ts` request-logging middleware, analytics-service's
+   `logRequest()` helper, and 2 sites in `analytics.controller.ts`) to use
+   object-first form. **Known remaining gap:** the same anti-pattern
+   exists in roughly 237 other logger calls across the rest of the
+   backend (most commonly `logger.error('X failed:', error)`, which means
+   the error's message/stack has never actually reached the logs at any
+   of those sites). Scoped deliberately to this session's touched files
+   only - a full codebase sweep is real, mechanical, low-risk-but-large
+   follow-up work, not done here.
 
 - [x] Ensure every service exposes `/health`.
   - Live-verified: `docker compose ps` reports every service (auth, blog, analytics, admin, nginx, Postgres, Redis, Elasticsearch, MinIO, Prometheus, Grafana) as `healthy`, both on normal startup and after the fresh-volume rebuild during the backup/restore test.
 - [x] Ensure every service exposes `/metrics`.
-  - The routes always existed; they were gated behind `ENABLE_METRICS`, which nothing ever set - see the note above.
-- [ ] Fix Prometheus scrape config for the actual runtime.
-  - Not needed - live-verified Prometheus's existing `static_configs` (`mankahi-auth:3001` etc.) already resolve and scrape correctly via Docker's embedded DNS once `/metrics` itself stopped 404ing.
-- [ ] Fix Grafana provisioning for current metrics.
-- [ ] Add structured logs with service name and request IDs.
-- [ ] Add nginx access/error log volume.
-- [ ] Add service log volume strategy or container logging guidance.
-- [ ] Add basic alert recommendations for disk, memory, CPU, database health, and service failures.
-- [ ] Add operational runbook: restart service, view logs, backup, restore, rotate env values.
+  - The routes always existed; they were gated behind `ENABLE_METRICS`, which nothing ever set - see the Definition of Done section for that fix's live-verification details.
+- [x] Fix Prometheus scrape config for the actual runtime.
+  - Not needed - live-verified Prometheus's existing `static_configs` (`mankahi-auth:3001` etc.) already resolve and scrape correctly via Docker's embedded DNS once `/metrics` itself stopped 404ing. Re-confirmed this pass: `curl http://127.0.0.1:9090/api/v1/targets` shows all 4 backend targets `"health":"up"`.
+- [x] Fix Grafana provisioning for current metrics.
+  - The 5 dashboard JSON files under `kubernetes/base/dashboards/` were already correctly authored and mounted into Grafana's container, but nothing told Grafana to load a datasource or scan that path - a fresh Grafana instance showed zero dashboards and needed the Prometheus datasource added by hand every time. Fixed with `docker/grafana/provisioning/datasources/prometheus.yaml` and `docker/grafana/provisioning/dashboards/default.yaml`, mounted into `/etc/grafana/provisioning` in both `docker-compose.yml` and `docker-compose.prod.yml`. Live-verified: `curl -u admin:admin http://127.0.0.1:3005/api/datasources` shows the Prometheus datasource auto-configured, and `/api/search?type=dash-db` shows all 5 dashboards auto-loaded, on a fresh container recreate.
+- [x] Add structured logs with service name and request IDs.
+  - Added `SERVICE_NAME=<service>` to every backend service's environment block in both compose files, and a `base: { service: process.env['SERVICE_NAME'] }` field to the shared Pino logger constructor - every log line now carries which service emitted it, closing the gap where `docker compose logs`'s container-name prefix was the only way to tell services apart. Request IDs were already being generated per-request but only string-interpolated into the message text; promoted to a proper structured `reqId` field alongside the message. Live-verified via `docker compose logs auth-service` showing `service: "auth-service"` and `reqId: "..."` as real fields after a container recreate (recreate, not just restart, is required for env var changes to take effect - see the RUNBOOK gotcha).
+- [x] Add nginx access/error log volume.
+  - Already implemented before this pass: the named volume `nginx-logs` is mounted at `/var/log/nginx` in the nginx service, so logs persist across restarts and recreates. Confirmed via `docker compose config` / the compose file directly; documented in `docs/RUNBOOK.md`.
+- [x] Add service log volume strategy or container logging guidance.
+  - Already implemented before this pass: every one of the 12 containers has a `logging: { driver: "json-file", options: { max-size, max-file } }` block (100m/3 files in dev, 200m/5 files in prod for the backend services), so `docker compose logs` output is capped and rotated automatically. This existed but was undocumented; now written up in `docs/RUNBOOK.md`.
+- [x] Add basic alert recommendations for disk, memory, CPU, database health, and service failures.
+  - Written as `docs/ALERTING.md`: concrete PromQL conditions for service-down (`up == 0`), 5xx/error rate, p95 latency, process memory vs. each service's Compose memory limit, event-loop lag, and DB-operation latency - all grounded in metric names verified live against a running `/metrics` endpoint, not assumed from code. Explicitly documents what is *not* instrumented yet (host/container CPU, memory, disk, and DB-internal metrics all require exporters - node-exporter/cAdvisor/postgres_exporter/redis_exporter - that don't exist in the stack today) rather than presenting partial coverage as complete.
+- [x] Add operational runbook: restart service, view logs, backup, restore, rotate env values.
+  - Written as `docs/RUNBOOK.md`: health checks, viewing container logs vs. in-container rotated file logs vs. nginx's log volume, the difference between `restart` and `--force-recreate` (and why env var changes need the latter), backup/restore commands (wired to the existing `docker/scripts/*.sh`), env value rotation steps, and a troubleshooting table built from real issues hit and fixed during this engagement (nginx's stale upstream DNS after a backend recreate, the frontend's `/tmp` socket collision, the bash/git-bash IPv6-localhost curl quirk).
 
 Acceptance criteria:
 
-- A running deployment can answer: what is up, what is failing, and where to look next.
-- Health, logs, and metrics are documented.
+- [x] A running deployment can answer: what is up, what is failing, and where to look next.
+  - `docker compose ps` (up/down), `docker compose logs` with real `service`/`reqId` fields (what's failing and why), Grafana dashboards + Prometheus (`up` metric, error rates, latency) for where to look next.
+- [x] Health, logs, and metrics are documented.
+  - `docs/RUNBOOK.md` (health, logs, day-to-day ops) and `docs/ALERTING.md` (metrics, alert conditions) cover this; both grounded in live verification against the running stack, not static review.
 
 ## Phase 6: Test And Quality Baseline
 
