@@ -172,6 +172,8 @@ services:
                 condition: service_healthy
         env_file:
             - .env.development
+        environment:
+            - SERVICE_NAME=auth-service
         volumes:
             - ../../backend/auth-service:/app/auth-service
             - ../../backend/shared:/app/shared
@@ -215,6 +217,7 @@ services:
             - .env.development
         environment:
             - PORT=3002
+            - SERVICE_NAME=blog-service
         volumes:
             - ../../backend/blog-service:/app/blog-service
             - ../../backend/shared:/app/shared
@@ -257,6 +260,7 @@ services:
             - .env.development
         environment:
             - PORT=3003
+            - SERVICE_NAME=analytics-service
         volumes:
             - ../../backend/analytics-service:/app/analytics-service
             - ../../backend/shared:/app/shared
@@ -301,6 +305,7 @@ services:
             - .env.development
         environment:
             - PORT=3004
+            - SERVICE_NAME=admin-service
         volumes:
             - ../../backend/admin-service:/app/admin-service
             - ../../backend/shared:/app/shared
@@ -435,6 +440,7 @@ services:
         volumes:
             - grafana-data:/var/lib/grafana
             - ../../kubernetes/base/dashboards:/var/lib/grafana/dashboards
+            - ../grafana/provisioning:/etc/grafana/provisioning
         environment:
             - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
             - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
