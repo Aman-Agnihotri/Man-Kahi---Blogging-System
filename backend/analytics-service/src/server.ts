@@ -18,11 +18,11 @@ import {
 
 // Enhanced startup logging
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error({ promise, reason }, 'Unhandled Rejection');
 });
 
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
+  logger.error({ err: error }, 'Uncaught Exception');
 });
 
 logger.info('Initializing Analytics Service...');
@@ -108,7 +108,7 @@ const analyticsHealthCheck = createHealthCheck({
         }
       };
     } catch (err) {
-      logger.error('Error fetching queue sizes:', err);
+      logger.error({ err }, 'Error fetching queue sizes');
       trackError('health', 'queue_check_failed', 'analytics-service');
       return metrics;
     }
@@ -131,7 +131,7 @@ app.use('/api/analytics', analyticsRoutes);
 
 // Error handling
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  logger.error('Unhandled error:', err);
+  logger.error({ err }, 'Unhandled error');
   trackError('server', 'unhandled_error', 'analytics-service');
   
   const correlationId = (req.headers['x-correlation-id'] || 'unknown').toString();
@@ -151,12 +151,12 @@ const startServer = async () => {
     logger.info('Establishing database connection...');
     await prisma.$connect();
     const dbResult = await prisma.$queryRaw`SELECT 1`;
-    logger.info('Database connection test successful:', dbResult);
+    logger.info({ dbResult }, 'Database connection test successful');
 
     // Test Redis connection
     logger.info('Testing Redis connection...');
     const redisResult = await redis.ping();
-    logger.info('Redis connection test successful:', redisResult);
+    logger.info(`Redis connection test successful: ${redisResult}`);
 
     // Initialize metrics
     logger.info('Initializing metrics collection...');
@@ -171,12 +171,12 @@ const startServer = async () => {
     });
 
   } catch (error) {
-    logger.error('Failed to start server:', {
+    logger.error({
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
       timestamp: new Date().toISOString(),
       details: error
-    });
+    }, 'Failed to start server');
     console.error('Full error details:', error);
     trackError('server', 'startup_error', 'analytics-service');
     process.exit(1);
@@ -193,7 +193,7 @@ const shutdown = async () => {
     ]);
     process.exit(0);
   } catch (error) {
-    logger.error('Error during shutdown:', error);
+    logger.error({ err: error }, 'Error during shutdown');
     trackError('server', 'shutdown_error', 'analytics-service');
     process.exit(1);
   }
@@ -204,7 +204,7 @@ process.on('SIGINT', shutdown);
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason: any) => {
-  logger.error('Unhandled Promise rejection:', reason);
+  logger.error({ err: reason }, 'Unhandled Promise rejection');
   trackError('server', 'unhandled_rejection', 'analytics-service');
 });
 

@@ -126,7 +126,7 @@ export class AnalyticsController {
 
       // Generate device ID if not provided
       const device = deviceId ?? this.generateDeviceId(req);
-      logger.debug(`[${requestId}] Generated device ID`, { deviceId: device });
+      logger.debug({ deviceId: device }, `[${requestId}] Generated device ID`);
 
       // Track queue metrics
       const queueTracker = metrics.trackQueue('events');
@@ -147,10 +147,10 @@ export class AnalyticsController {
       });
       
       const [dbSecs, dbNanos] = process.hrtime(dbStartTime);
-      logger.debug(`[${requestId}] Database operation completed`, { 
+      logger.debug({
         eventId: event.id,
-        duration: `${dbSecs + dbNanos / 1e9}s` 
-      });
+        duration: `${dbSecs + dbNanos / 1e9}s`
+      }, `[${requestId}] Database operation completed`);
 
       analyticsMetrics.dataStorageOperations.inc({ operation: 'create', status: 'success' });
       analyticsMetrics.eventProcessingTime.observe({ event_type: type }, dbSecs + dbNanos / 1e9);
@@ -177,11 +177,11 @@ export class AnalyticsController {
       const totalDuration = totalSecs + totalNanos / 1e9;
       analyticsMetrics.eventProcessingTime.observe({ event_type: 'total' }, totalDuration);
 
-      logger.info(`[${requestId}] Event tracking completed successfully`, {
+      logger.info({
         type,
         blogId,
         duration: `${totalDuration}s`
-      });
+      }, `[${requestId}] Event tracking completed successfully`);
 
       return res.status(200).json({ success: true });
     } catch (error) {
@@ -193,7 +193,7 @@ export class AnalyticsController {
         errorMessage,
         error: error instanceof Error ? error.stack : String(error),
         body: redactSensitiveFields(req.body)
-      }, `[${requestId}] Error tracking event:`);
+      }, `[${requestId}] Error tracking event`);
 
       metrics.trackError(
         errorType,
@@ -231,7 +231,7 @@ export class AnalyticsController {
         }
       }
       
-      logger.error('Unexpected error in event tracking:', error);
+      logger.error({ err: error }, 'Unexpected error in event tracking');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to process analytics event'
@@ -287,7 +287,7 @@ export class AnalyticsController {
         'analytics_progress_tracking'
       );
       analyticsMetrics.eventProcessed.inc({ event_type: 'progress', status: 'error' });
-      logger.error('Error tracking progress:', error);
+      logger.error({ err: error }, 'Error tracking progress');
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           message: 'Invalid input data',
@@ -318,7 +318,7 @@ export class AnalyticsController {
         }
       }
       
-      logger.error('Unexpected error in progress tracking:', error);
+      logger.error({ err: error }, 'Unexpected error in progress tracking');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to track reading progress'
@@ -375,7 +375,7 @@ export class AnalyticsController {
         'analytics_link_tracking'
       );
       analyticsMetrics.eventProcessed.inc({ event_type: 'click', status: 'error' });
-      logger.error('Error tracking link click:', error);
+      logger.error({ err: error }, 'Error tracking link click');
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           message: 'Invalid input data',
@@ -406,7 +406,7 @@ export class AnalyticsController {
         }
       }
       
-      logger.error('Unexpected error in link tracking:', error);
+      logger.error({ err: error }, 'Unexpected error in link tracking');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to track link click'
@@ -460,7 +460,7 @@ export class AnalyticsController {
         'analytics_aggregation'
       );
       analyticsMetrics.aggregationOperations.inc({ operation_type: 'total', status: 'error' });
-      logger.error('Error fetching analyticsRedis:', error);
+      logger.error({ err: error }, 'Error fetching analyticsRedis');
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           message: 'Invalid input data',
@@ -491,7 +491,7 @@ export class AnalyticsController {
         }
       }
 
-      logger.error('Unexpected error fetching analytics:', error);
+      logger.error({ err: error }, 'Unexpected error fetching analytics');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch analytics data'
@@ -522,7 +522,7 @@ export class AnalyticsController {
       });
     } catch (error) {
       analyticsMetrics.aggregationOperations.inc({ operation_type: 'overall_stats', status: 'error' });
-      logger.error('Error fetching overall stats:', error);
+      logger.error({ err: error }, 'Error fetching overall stats');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch overall analytics stats'
@@ -543,7 +543,7 @@ export class AnalyticsController {
       return res.status(200).json(rows);
     } catch (error) {
       analyticsMetrics.aggregationOperations.inc({ operation_type: 'trending', status: 'error' });
-      logger.error('Error fetching trending blogs:', error);
+      logger.error({ err: error }, 'Error fetching trending blogs');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch trending blogs'
@@ -579,7 +579,7 @@ export class AnalyticsController {
       return res.status(200).json(rows);
     } catch (error) {
       analyticsMetrics.aggregationOperations.inc({ operation_type: 'multi', status: 'error' });
-      logger.error('Error fetching multi blog analytics:', error);
+      logger.error({ err: error }, 'Error fetching multi blog analytics');
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           message: 'Invalid input data',
