@@ -103,36 +103,6 @@ const logRequest = (routeName: string) => {
  *         path:
  *           type: string
  *           description: Current page path
- *     AnalyticsResponse:
- *       type: object
- *       properties:
- *         realtime:
- *           type: object
- *           properties:
- *             activeVisitors:
- *               type: integer
- *             currentProgress:
- *               type: number
- *             recentClicks:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   url:
- *                     type: string
- *                   count:
- *                     type: integer
- *         historical:
- *           type: object
- *           properties:
- *             views:
- *               type: integer
- *             reads:
- *               type: integer
- *             clicks:
- *               type: integer
- *             avgReadTime:
- *               type: number
  *     ErrorResponse:
  *       type: object
  *       properties:
