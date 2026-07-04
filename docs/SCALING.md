@@ -1,6 +1,6 @@
 # ManKahi Scaling Guidance
 
-Last updated: 2026-07-03
+Last updated: 2026-07-04
 
 ## Purpose
 
@@ -147,6 +147,60 @@ vs. self-hosted Postgres/Elasticsearch, since running stateful clusters
 well inside Kubernetes is a significant operational commitment in its
 own right that a managed cloud database service often sidesteps
 entirely.
+
+## When To Move Search Indexing Behind A Queue
+
+**Current state:** `blog-service`'s create/update/delete/visibility paths
+call `indexBlog()`/`updateBlogIndex()` (`backend/blog-service/src/utils/elasticsearch.ts`)
+synchronously and inline, awaited as part of the same request that
+mutates Postgres. This is already isolated behind its own module (not
+scattered ad hoc through the controller), which is what makes it cheap
+to move behind a queue later without touching call sites' business logic:
+only `blog.service.ts`'s awaited calls become "enqueue a job" calls.
+
+**When this becomes a problem:** Elasticsearch indexing latency starts
+being visible in the write-path's own response time (check
+`blog_database_operation_seconds`-adjacent request duration for
+create/update/delete routes specifically), or a temporary Elasticsearch
+outage/slowdown should not be able to fail or stall a blog save. Neither
+is true at current traffic - a single-node Elasticsearch instance indexes
+a single document fast enough that it doesn't materially affect request
+latency.
+
+**What it would look like:** since Redis is already a running dependency
+for every service, the lowest-new-infrastructure path is a Redis-backed
+job queue (e.g. BullMQ, which is a thin layer over Redis) rather than
+introducing Kafka/RabbitMQ purely for this. `blog.service.ts` would push
+a `{action, blogId}` job instead of awaiting `indexBlog()` directly; a
+worker process (can start as an in-process consumer inside blog-service
+itself, doesn't need a new deployable) drains the queue. The existing
+`syncBlogsToElasticsearch()` re-sync path (already relied on for full
+Elasticsearch rebuilds, see the Backups And Restore section of
+`docs/ACTION_PLAN.md`) doubles as the recovery path if a job is ever lost.
+
+## When To Move Analytics Ingestion Behind A Queue
+
+**Current state:** `analytics-service`'s `trackEvent`/`trackProgress`/
+`trackLinkClick` controllers write directly to Postgres (`prisma.analyticsEvent.create`)
+and Redis on every call, in the same request/response cycle as the
+client's fire-and-forget tracking beacon.
+
+**When this becomes a problem:** write volume high enough that Postgres
+write throughput or connection pool pressure from analytics events
+starts competing with the auth/blog services' own database load (they
+share one Postgres instance today), or analytics traffic spikes (e.g. a
+post going viral) need to be absorbed without backpressure affecting
+reader-facing latency elsewhere.
+
+**What it would look like:** same Redis-backed queue approach as search
+indexing above - the tracking endpoints already return immediately
+without depending on the write completing (the frontend never awaits a
+meaningful response body from these calls), so switching them to enqueue
+instead of write-directly is a behavior-preserving change from the
+client's perspective. A separate worker (or a batched consumer that
+writes in bulk every few seconds) then drains the queue into Postgres,
+which also opens the door to batching many events into fewer INSERTs -
+a throughput win independent of the queue itself.
 
 ## Load Testing
 

@@ -186,7 +186,8 @@ Purpose: make existing services internally consistent before expanding features.
   - Added `GET /api/analytics/stats/overall`, `GET /api/analytics/trending`, and `GET /api/analytics/multi` to `analytics.routes.ts`/`analytics.controller.ts`, matching what `admin-service`'s `admin.controller.ts` already calls via axios. All three require `roles: ['admin', 'analyst']`.
 - [x] Confirm read progress behavior for authenticated and anonymous readers.
   - Verified `trackProgress()` works identically for both once JWT is no longer required on the route; progress >= 90% still counts as a read for either.
-- [ ] Add clear event schema for views, reads, progress, and link clicks.
+- [x] Add clear event schema for views, reads, progress, and link clicks.
+  - Already existed via runtime Zod validation (`trackEventSchema`/`trackProgressSchema`/`trackLinkSchema` in `analytics.controller.ts`) and matching Swagger/OpenAPI schemas (`TrackEventInput`/`TrackProgressInput`/`TrackLinkInput` in `analytics.routes.ts`, served at `/api-docs`) - just never checked off. While verifying this, found and removed a real piece of stale documentation: an `AnalyticsResponse` Swagger schema describing the old `{realtime, historical}` response shape from before Phase 2 flattened the contract to `BlogAnalyticsRow` - dead, unreferenced by any route, and actively misleading to anyone reading the generated API docs.
 - [x] Add tests for event tracking, progress, link tracking, and blog analytics retrieval.
   - Added `backend/analytics-service/jest.config.js`, `src/__tests__/setup.ts`, and `src/__tests__/controllers/analytics.controller.test.ts` (17 tests) covering trackEvent, trackProgress (including the progress >= 90 read branch), trackLink, getBlogAnalytics (params fix + zeroed-row case), getOverallStats, getTrending, and getMultiBlogAnalytics.
 - [x] Fixed a live bug: `getBlogAnalytics()` was parsing `blogId` out of `req.query` via a schema that required it, but the route only ever supplies it via `req.params.blogId` - every real call 400'd. Now reads `blogId` from `req.params`.
@@ -239,8 +240,8 @@ Purpose: turn the UI from mostly static screens into a real blogging product.
   - Also fixed a backend gap: `blog-service`'s `/search` required a non-empty `query` (`min(1)`), so there was no way to list/browse blogs at all without first typing a search term. Made `query` optional; an absent query now runs `match_all` against published blogs instead of 400ing.
 - [x] Replace dummy post page data with `GET /api/blogs/:slug`.
   - Also fixed a backend gap: no blog-retrieval endpoint (`getBySlug`, `updateBlog`, `getSuggestedBlogs`, `getUserBlogs`) included author data - only the raw `authorId` string. Added an `author: {id, username, profileImage}` select to every relevant Prisma include.
-- [ ] Connect categories to real category/tag data.
-  - Deliberately deferred: there is no category-list endpoint (categories only ever arrive nested inside a blog response), and the old dummy pages used two different fabricated taxonomies that don't match any real `Category` rows. Fixing this properly needs a small new backend endpoint - out of scope for this pass since it's not part of the explicit core loop (register/login/write/publish/edit/delete/view/search/dashboard/admin-moderation). `frontend/pages/categories/*.vue` and `frontend/pages/user/profile/[username].vue` were left untouched (still dummy) for the same reason - flagging here rather than leaving it undocumented.
+- [x] Connect categories to real category/tag data.
+  - Originally deferred in this pass (no category-list endpoint existed); closed out in Phase 7 (public `GET /categories` + admin-gated CRUD) plus a later session pass that added the still-missing pieces Phase 7 itself flagged as gaps: a category `<select>` in `content/write.vue` and a full `/admin/categories` management page. `frontend/pages/categories/*.vue` now renders real data end-to-end.
 - [x] Add pagination or load-more backed by API params.
 - [x] Add graceful behavior when no posts exist.
 
@@ -250,8 +251,8 @@ Purpose: turn the UI from mostly static screens into a real blogging product.
 - [x] Add edit mode for existing blog posts.
   - Edit mode is keyed by slug (`/content/write?edit=<slug>`) via `getBySlug()`, which already lets an author fetch their own unpublished draft - simpler and more robust than paging through every one of a user's blogs looking for an id (there is no get-blog-by-id endpoint).
 - [x] Add draft/publish controls.
-- [ ] Add cover image upload.
-  - Deferred: `useBlogApi().create/update` already build multipart `FormData` with an `image` field ready for a file input, but no `<input type="file">` UI was wired up in this pass. Small remaining gap, not part of the core loop's acceptance bar (create/publish/edit work fully without a cover image).
+- [x] Add cover image upload.
+  - Originally deferred in this pass (the multipart `FormData` plumbing existed but no file-input UI); closed out in a later session pass - `content/write.vue` now has a real file picker with an image preview, wired to the existing `image` field on create/update.
 - [x] Add validation errors from backend to the form UI.
 - [x] Add post-submit redirect to the created post or user stories.
   - Also found and worked around a UX trap: the backend's markdown validator requires a top-level `# Heading` in the content body *separate* from the `title` field, or it 400s with a confusing "Invalid markdown content" error. The write page now auto-prepends `# {title}` to the body before submit if one isn't already present, so this requirement is invisible to the user.
@@ -261,8 +262,8 @@ Purpose: turn the UI from mostly static screens into a real blogging product.
 - [x] Connect dashboard stats to real user data.
   - Simplified to honestly-derivable stats (total/published/draft counts) rather than keeping a differently-fake "total views" number - there's no per-user aggregate-views endpoint, and summing only the most-recently-fetched page's views would look precise while being wrong.
 - [x] Connect user stories table to real user blogs.
-- [ ] Connect profile page to real user profile data.
-  - Deferred alongside the categories gap above - `user/profile/[username].vue` still renders dummy data. No username→id lookup endpoint exists (blog-service's public-blogs-by-user route takes a Prisma user id, not a username), so wiring this needs a small backend addition. Not part of the explicit core loop.
+- [x] Connect profile page to real user profile data.
+  - Originally deferred in this pass (no username-based lookup existed); closed out in Phase 7's "Author profile cards" work - `user/profile/[username].vue` is now a real page backed by a real endpoint, with working Follow/Unfollow.
 - [x] Connect settings page to real profile update APIs.
   - No profile-update endpoint exists anywhere in auth-service (only register/login/logout/refresh/roles/health). Rather than build a new backend endpoint (out of scope) or fake a successful save, the settings page shows real read-only username/email from the auth store and an honest "Profile editing isn't available yet" message on submit instead of a fake success. "Delete Account" was replaced with a real Sign Out plus a note that deletion isn't available - it never claims data was deleted when it wasn't.
 - [x] Add delete/unpublish actions with confirmation.
@@ -282,7 +283,7 @@ Acceptance criteria:
 
 - [x] A user can register, log in, create a post, publish it, view it publicly, edit it, and see it in their dashboard.
 - [x] Dummy data is removed from core product pages.
-  - Remaining known dummy pages (deliberately deferred, documented above): `categories/*.vue`, `user/profile/[username].vue`. Everything on the explicit core loop (home, explore/search, post view, write/edit, dashboard, stories, admin moderation) is real.
+  - `categories/*.vue` and `user/profile/[username].vue` were deliberately deferred at the time this was first written; both were closed out in Phase 7 and a later session pass (see notes above). No known dummy-data pages remain.
 - [x] The frontend handles empty, loading, and error states professionally.
 
 ## Phase 4: Security And Production Hardening
@@ -413,8 +414,8 @@ Purpose: stop regressions while refactoring and adding features.
 - [ ] Add API contract tests for nginx-routed endpoints.
   - Deferred alongside the Docker Compose smoke test below - both need a running stack, which this environment can't provide (see note).
 - [x] Add Docker Compose smoke test commands.
-  - `docker/compose/scripts/smoke-test.sh`: curls the full core loop (register → login → create → publish → view-by-slug → edit → appears in "my stories" → delete) through the nginx gateway. **Written and code-reviewed but not executed against a live stack**: this sandbox has no network access to pull Docker images (`docker compose up` fails resolving `docker.io`), so full end-to-end verification wasn't possible here - run it yourself after `docker compose up -d --build` before relying on it.
-  - While investigating why I couldn't verify this, found and fixed two real bugs it would otherwise have caught: (1) `docker/compose/.env.example`'s `DATABASE_URL` used `${POSTGRES_USER}:${POSTGRES_PASSWORD}` shell-style interpolation, which Docker Compose's `env_file:` does not expand - every service would have received a literal, broken connection string on a fresh clean-volume start. (2) blog-service's create/update endpoints are always submitted as multipart/form-data (for the optional cover image), so `published` always arrives as the string `"true"`/`"false"`, but the Zod schema required a real `boolean` and rejected it outright - every publish/draft toggle from the frontend's own multipart form submission would have 400'd. Both are fixed; see their respective commits/notes.
+  - `docker/scripts/smoke-test.sh`: curls the full core loop (register → login → create → publish → view-by-slug → edit → appears in "my stories" → delete) through the nginx gateway. Originally written and code-reviewed but not executable in the sandbox that wrote it (no network access to pull Docker images there). **Actually executed this pass** against the real running stack via `SMOKE_TEST_BASE_URL="http://127.0.0.1:8080" bash docker/scripts/smoke-test.sh` (a live Docker daemon has been available all session): all 9 steps passed, including health checks, register, login, create, publish, public view-by-slug, edit, "my stories" listing, and delete.
+  - While investigating why I couldn't verify this in an earlier pass, found and fixed two real bugs it would otherwise have caught: (1) `docker/compose/.env.example`'s `DATABASE_URL` used `${POSTGRES_USER}:${POSTGRES_PASSWORD}` shell-style interpolation, which Docker Compose's `env_file:` does not expand - every service would have received a literal, broken connection string on a fresh clean-volume start. (2) blog-service's create/update endpoints are always submitted as multipart/form-data (for the optional cover image), so `published` always arrives as the string `"true"`/`"false"`, but the Zod schema required a real `boolean` and rejected it outright - every publish/draft toggle from the frontend's own multipart form submission would have 400'd. Both are fixed; see their respective commits/notes.
 - [ ] Add lint/typecheck workflow for each service and frontend.
   - Typecheck: done (see above). Lint: deferred - `eslint` is listed as a devDependency in several `package.json`s but no `.eslintrc`/`eslint.config.*` exists anywhere in the repo for any service or the frontend; standing up rule sets and fixing the resulting violations from scratch across 5 projects is meaningfully more work than this pass's scope, and typecheck already provides the higher-value safety net (catches real type errors, not just style).
 
@@ -423,9 +424,9 @@ Acceptance criteria:
 - [x] Core workflows are covered by automated tests.
   - Backend: yes, thoroughly (auth, blog, analytics, admin all pass `npm test`). Frontend: covered by typecheck + manual review only, not automated component/e2e tests (documented gap above).
 - [x] Local test commands are documented.
-  - `npm test` / `npm run typecheck` from the repo root; `docker/compose/scripts/smoke-test.sh` for a running stack.
-- [ ] A deployment change can be verified without manual clicking only.
-  - True for backend logic (jest + tsc). Not yet true for full-stack integration: the smoke-test script above exists for exactly this purpose but hasn't been run against a live stack (no Docker image pull access in this environment) - leaving this unchecked until someone runs it somewhere with normal network access and confirms it passes.
+  - `npm test` / `npm run typecheck` from the repo root; `docker/scripts/smoke-test.sh` for a running stack.
+- [x] A deployment change can be verified without manual clicking only.
+  - True for backend logic (jest + tsc) and now for full-stack integration too: `docker/scripts/smoke-test.sh` was actually run against the live stack this pass (see the smoke test note above) and passed end-to-end through the real nginx gateway with no manual clicking.
 
 ## Phase 7: Core Product Features
 
@@ -499,10 +500,10 @@ both requiring an actual browser reload to notice:
 - [x] Markdown preview.
   - Write/Preview tab in `content/write.vue` using `marked` (already a frontend dependency) for client-side rendering - a close but not guaranteed pixel-identical approximation of the backend's own server-side rendering pipeline.
 - [x] Cover images.
-  - Pre-existing (Phase 3), unaffected.
+  - Pre-existing plumbing in Phase 3 (multipart `FormData` support); the actual file-input UI was closed out in a later session pass - see Phase 3 notes above.
 - [x] Tags and categories.
-  - Tags pre-existing. Categories: the `Category` model's parent/child hierarchy existed in the schema with zero endpoints anywhere and 3 mutually-inconsistent hardcoded category lists across different frontend pages. Added public `GET /categories` + admin-gated CRUD, replaced all the dummy data with real fetches. Live-verified twice: created two real categories via the API (no category-creation UI exists - see note below), confirmed both appear on `/categories`, assigned one to a post via a direct API call (`write.vue` has no category selector either), confirmed the category detail page and the `content/explore.vue` category-filter dropdown both correctly narrow results to just that post.
-  - **Gap**: no admin UI exists to create/edit/delete categories (the backend CRUD is admin-gated and works, confirmed via direct API calls, but nothing in the admin depth UI batch below exposes it), and `content/write.vue` has no category selector either - categories currently have to be created and assigned via direct API calls. Worth a follow-up admin page plus a category field in the editor.
+  - Tags pre-existing. Categories: the `Category` model's parent/child hierarchy existed in the schema with zero endpoints anywhere and 3 mutually-inconsistent hardcoded category lists across different frontend pages. Added public `GET /categories` + admin-gated CRUD, replaced all the dummy data with real fetches. Live-verified twice: created two real categories via the API, confirmed both appear on `/categories`, assigned one to a post, confirmed the category detail page and the `content/explore.vue` category-filter dropdown both correctly narrow results to just that post.
+  - The admin-UI and editor-selector gap noted at the time this was written was closed out in a later session pass: `content/write.vue` now has a real category `<select>`, and `/admin/categories.vue` provides full create/edit/delete for the category catalog.
 - [x] SEO metadata editing.
   - `metaTitle`/`metaDescription`/`canonicalUrl` columns existed on `Blog` and were completely dead (never read or written anywhere). Added a collapsible "SEO settings" section in `content/write.vue`, wired into the existing create/update payload.
 - [x] Related posts.
@@ -567,10 +568,14 @@ Acceptance criteria:
 
 Purpose: keep the system easy to evolve when traffic grows.
 
-- [ ] Keep services stateless except for backing stores.
-- [ ] Separate write path side effects behind service modules.
-- [ ] Make search indexing replaceable with async workers later.
-- [ ] Make analytics ingestion replaceable with a queue later.
+- [x] Keep services stateless except for backing stores.
+  - Verified true, not just assumed: all 4 backend services hold no in-memory session state and no local-disk file storage that must survive a restart (uploads go to MinIO). Documented in `docs/SCALING.md`'s "Current Statelessness" section, including why this is what makes `deploy.replicas` (Compose) and the Kubernetes manifests' `HorizontalPodAutoscaler` (not a `StatefulSet`) viable with zero code changes.
+- [x] Separate write path side effects behind service modules.
+  - Verified true: Elasticsearch indexing lives in `blog-service/src/utils/elasticsearch.ts`, analytics tracking in `blog-service/src/utils/analytics.ts` and `middlewares/analytics.middleware.ts` - both called from the service layer (`blog.service.ts`), not scattered inline through controllers. This existing separation is exactly what makes both migrations below possible without touching business logic.
+- [x] Make search indexing replaceable with async workers later.
+  - Documented in `docs/SCALING.md`'s new "When To Move Search Indexing Behind A Queue" section: current state (synchronous, but already isolated in its own module), concrete trigger conditions (indexing latency visible in write-path response time, or an Elasticsearch outage should not be able to stall a blog save), and the concrete migration shape (a Redis-backed queue, since Redis is already a running dependency - no new infrastructure required). Not implemented, since neither trigger condition holds at current traffic - matches this phase's documented pattern (SCALING.md) of "trigger, not speculative work."
+- [x] Make analytics ingestion replaceable with a queue later.
+  - Documented in `docs/SCALING.md`'s new "When To Move Analytics Ingestion Behind A Queue" section: current state, trigger conditions (Postgres write pressure shared with auth/blog, or absorbing a traffic spike without affecting reader-facing latency), and the migration shape (same Redis-backed queue, plus batched-insert throughput as a side benefit). Not implemented for the same reason as above.
 - [x] Add database connection pooling guidance.
   - `docs/SCALING.md` - current per-replica pool sizing, the concrete connection-count trigger for when it becomes a problem, and what to watch (`pg_stat_activity`).
 - [x] Document when to introduce PgBouncer.
