@@ -44,7 +44,7 @@ export class CommentController {
       const result = await this.commentService.listComments(id, page, limit, req.user?.id);
       return res.json(result)
     } catch (error) {
-      logger.error('Error listing comments:', error)
+      logger.error({ err: error }, 'Error listing comments')
 
       if (error instanceof z.ZodError) {
         return res.status(400).json({
@@ -102,7 +102,7 @@ export class CommentController {
       return res.status(201).json(comment)
     } catch (error) {
       if (dbTimer) dbTimer.end('failure');
-      logger.error('Error creating comment:', error)
+      logger.error({ err: error }, 'Error creating comment')
 
       if (error instanceof z.ZodError) {
         trackError('validation', 'create_comment', 'blog-service');
@@ -158,7 +158,7 @@ export class CommentController {
       const comment = await this.commentService.updateComment(commentId, req.user!.id, content);
       return res.json(comment)
     } catch (error) {
-      logger.error('Error updating comment:', error)
+      logger.error({ err: error }, 'Error updating comment')
 
       if (error instanceof z.ZodError) {
         return res.status(400).json({
@@ -206,7 +206,7 @@ export class CommentController {
       await this.commentService.deleteComment(commentId, req.user!.id, req.user!.roles);
       return res.json({ message: 'Comment deleted successfully' })
     } catch (error) {
-      logger.error('Error deleting comment:', error)
+      logger.error({ err: error }, 'Error deleting comment')
 
       if (error instanceof Error) {
         switch (error.message) {
@@ -245,7 +245,7 @@ export class CommentController {
       const report = await this.commentService.reportComment(commentId, req.user!.id, reason);
       return res.status(201).json(report)
     } catch (error) {
-      logger.error('Error reporting comment:', error)
+      logger.error({ err: error }, 'Error reporting comment')
 
       if (error instanceof z.ZodError) {
         return res.status(400).json({

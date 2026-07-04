@@ -30,13 +30,13 @@ export const trackBlogView = async (
     // Track view asynchronously - don't wait for it
     analyticsClient.trackView(blogId, visitorId)
       .catch(error => {
-        logger.error('Error tracking blog view:', error);
+        logger.error({ err: error }, 'Error tracking blog view');
       });
 
     next();
   } catch (error) {
     // Don't block the request if analytics fails
-    logger.error('Error in view tracking middleware:', error);
+    logger.error({ err: error }, 'Error in view tracking middleware');
     next();
   }
 };
@@ -58,20 +58,20 @@ export const trackReadProgress = async (
     // Track progress asynchronously
     analyticsClient.trackProgress(blogId, visitorId, progress)
       .catch(error => {
-        logger.error('Error tracking read progress:', error);
+        logger.error({ err: error }, 'Error tracking read progress');
       });
 
     // If progress is >= 90%, consider it as "read"
     if (progress >= 90) {
       analyticsClient.trackRead(blogId, visitorId)
         .catch(error => {
-          logger.error('Error tracking blog read:', error);
+          logger.error({ err: error }, 'Error tracking blog read');
         });
     }
 
     next();
   } catch (error) {
-    logger.error('Error in progress tracking middleware:', error);
+    logger.error({ err: error }, 'Error in progress tracking middleware');
     next();
   }
 };
@@ -91,12 +91,12 @@ export const trackLinkClick = async (
     // Track link click asynchronously
     analyticsClient.trackLinkClick(blogId, url)
       .catch(error => {
-        logger.error('Error tracking link click:', error);
+        logger.error({ err: error }, 'Error tracking link click');
       });
 
     next();
   } catch (error) {
-    logger.error('Error in link click tracking middleware:', error);
+    logger.error({ err: error }, 'Error in link click tracking middleware');
     next();
   }
 };

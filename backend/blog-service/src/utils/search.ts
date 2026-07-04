@@ -186,7 +186,7 @@ export const searchBlogs = async (options: SearchOptions): Promise<SearchResult>
 
     return result
   } catch (error) {
-    logger.error('Error searching blogs:', error)
+    logger.error({ err: error }, 'Error searching blogs')
     throw error
   }
 }
@@ -226,7 +226,7 @@ export const getPopularTags = async (limit: number = 10): Promise<Array<{ name: 
 
     return result
   } catch (error) {
-    logger.error('Error getting popular tags:', error)
+    logger.error({ err: error }, 'Error getting popular tags')
     throw error
   }
 }
@@ -308,7 +308,7 @@ export const getSuggestedBlogs = async (
 
     return suggestedBlogs
   } catch (error) {
-    logger.error('Error getting suggested blogs:', error)
+    logger.error({ err: error }, 'Error getting suggested blogs')
     throw error
   }
 }

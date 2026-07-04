@@ -41,7 +41,7 @@ export const setupMinio = async (): Promise<void> => {
       logger.info(`Created MinIO bucket: ${BUCKET_NAME}`)
     }
   } catch (error) {
-    logger.error('Error setting up MinIO:', error)
+    logger.error({ err: error }, 'Error setting up MinIO')
     throw error
   }
 }
@@ -75,7 +75,7 @@ export const uploadImage = async (
     logger.info(`Uploaded image: ${imageUrl}`)
     return imageUrl
   } catch (error) {
-    logger.error('Error uploading image to MinIO:', error)
+    logger.error({ err: error }, 'Error uploading image to MinIO')
     throw error
   }
 }
@@ -85,7 +85,7 @@ export const deleteImage = async (filename: string): Promise<void> => {
     await minioClient.removeObject(BUCKET_NAME, filename)
     logger.info(`Deleted image: ${filename}`)
   } catch (error) {
-    logger.error('Error deleting image from MinIO:', error)
+    logger.error({ err: error }, 'Error deleting image from MinIO')
     throw error
   }
 }

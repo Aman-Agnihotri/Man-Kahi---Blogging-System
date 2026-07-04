@@ -38,7 +38,7 @@ export class CategoryService {
     color?: string
     sortOrder?: number
   }) {
-    logger.debug('Creating category', { name: input.name })
+    logger.debug({ name: input.name }, 'Creating category')
 
     const slug = slugify(input.name, { lower: true, strict: true })
     const existing = await prisma.category.findUnique({ where: { slug } })

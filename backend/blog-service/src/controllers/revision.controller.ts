@@ -29,7 +29,7 @@ export class RevisionController {
       dbTimer.end();
       return res.json(revisions)
     } catch (error) {
-      logger.error('Error listing blog revisions:', error)
+      logger.error({ err: error }, 'Error listing blog revisions')
 
       if (error instanceof Error) {
         trackError('business_logic', error.message, 'blog-service');
@@ -70,7 +70,7 @@ export class RevisionController {
       dbTimer.end();
       return res.json(revision)
     } catch (error) {
-      logger.error('Error fetching blog revision:', error)
+      logger.error({ err: error }, 'Error fetching blog revision')
 
       if (error instanceof Error) {
         trackError('business_logic', error.message, 'blog-service');
@@ -119,7 +119,7 @@ export class RevisionController {
       return res.json(blog)
     } catch (error) {
       if (dbTimer) dbTimer.end('failure');
-      logger.error('Error restoring blog revision:', error)
+      logger.error({ err: error }, 'Error restoring blog revision')
 
       if (error instanceof Error) {
         trackError('business_logic', error.message, 'blog-service');

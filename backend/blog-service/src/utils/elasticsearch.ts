@@ -16,9 +16,9 @@ export const elasticClient = new Client({
 (async () => {
   try {
     const info = await elasticClient.info();
-    logger.info('Successfully connected to Elasticsearch:', info);
+    logger.info(info, 'Successfully connected to Elasticsearch');
   } catch (error) {
-    logger.error('Failed to connect to Elasticsearch:', error);
+    logger.error({ err: error }, 'Failed to connect to Elasticsearch');
     throw error;
   }
 })();
@@ -127,7 +127,7 @@ export const setupElasticsearch = async (): Promise<void> => {
       logger.info('Elasticsearch index created successfully')
     }
   } catch (error) {
-    logger.error('Error setting up Elasticsearch:', error)
+    logger.error({ err: error }, 'Error setting up Elasticsearch')
     throw error
   }
 }
@@ -141,7 +141,7 @@ export const indexBlog = async (blog: BlogDocument): Promise<void> => {
       refresh: true, // Make the document immediately searchable
     })
   } catch (error) {
-    logger.error('Error indexing blog:', error)
+    logger.error({ err: error }, 'Error indexing blog')
     throw error
   }
 }
@@ -155,7 +155,7 @@ export const updateBlogIndex = async (id: string, blog: Partial<BlogDocument>): 
       refresh: true,
     })
   } catch (error) {
-    logger.error('Error updating blog index:', error)
+    logger.error({ err: error }, 'Error updating blog index')
     throw error
   }
 }
@@ -167,7 +167,7 @@ export const removeBlogFromIndex = async (id: string): Promise<void> => {
       id,
     })
   } catch (error) {
-    logger.error('Error removing blog from index:', error)
+    logger.error({ err: error }, 'Error removing blog from index')
     throw error
   }
 }
@@ -286,7 +286,7 @@ export const searchBlogsElastic = async (options: SearchOptions): Promise<Search
       totalPages: Math.ceil(total / limit)
     }
   } catch (error) {
-    logger.error('Error searching blogs in Elasticsearch:', error)
+    logger.error({ err: error }, 'Error searching blogs in Elasticsearch')
     throw error
   }
 }
@@ -350,7 +350,7 @@ export const syncBlogsToElasticsearch = async (): Promise<void> => {
 
     logger.info('Completed syncing all blogs to Elasticsearch')
   } catch (error) {
-    logger.error('Error syncing blogs to Elasticsearch:', error)
+    logger.error({ err: error }, 'Error syncing blogs to Elasticsearch')
     throw error
   }
 }

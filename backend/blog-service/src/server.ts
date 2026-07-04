@@ -25,12 +25,12 @@ import { createHealthCheck } from '@shared/middlewares/health';
 
 // Enhanced startup logging
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error({ promise, reason }, 'Unhandled Rejection');
   trackError('process', 'unhandled_rejection', 'blog-service');
 });
 
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
+  logger.error({ err: error }, 'Uncaught Exception');
   trackError('process', 'uncaught_exception', 'blog-service');
 });
 
@@ -140,7 +140,7 @@ app.use('/api/blogs', blogRoutes)
 
 // Global error handler
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error('Unhandled error:', err);
+  logger.error({ err }, 'Unhandled error');
   trackError('server', 'unhandled_error', 'blog-service');
   
   const correlationId = (req.headers['x-correlation-id'] || 'unknown').toString();
@@ -172,7 +172,7 @@ const shutdown = async () => {
 
     process.exit(0)
   } catch (error) {
-    logger.error('Error during shutdown:', error)
+    logger.error({ err: error }, 'Error during shutdown')
     trackError('server', 'shutdown_error', 'blog-service');
     process.exit(1)
   }
@@ -213,7 +213,7 @@ const startServer = async () => {
       logger.info(`Blog service running on port ${PORT}`)
     })
   } catch (error) {
-    logger.error('Failed to start server:', error)
+    logger.error({ err: error }, 'Failed to start server')
     trackError('server', 'startup_error', 'blog-service');
     process.exit(1)
   }

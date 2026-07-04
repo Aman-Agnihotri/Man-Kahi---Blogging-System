@@ -58,7 +58,7 @@ export const processMarkdown = (content: string): string => {
 
     return sanitizedContent
   } catch (error) {
-    logger.error('Error processing markdown:', error)
+    logger.error({ err: error }, 'Error processing markdown')
     throw error
   }
 }
@@ -99,7 +99,7 @@ export const extractMetadata = (content: string) => {
       codeLanguages: Array.from(codeLanguages),
     }
   } catch (error) {
-    logger.error('Error extracting metadata:', error)
+    logger.error({ err: error }, 'Error extracting metadata')
     throw error
   }
 }
@@ -124,7 +124,7 @@ export const generateTOC = (content: string) => {
 
     return toc
   } catch (error) {
-    logger.error('Error generating TOC:', error)
+    logger.error({ err: error }, 'Error generating TOC')
     throw error
   }
 }
@@ -175,7 +175,7 @@ export const validateMarkdown = (content: string): ValidationResult => {
       errors
     }
   } catch (error) {
-    logger.error('Error validating markdown:', error)
+    logger.error({ err: error }, 'Error validating markdown')
     return {
       isValid: false,
       errors: ['Invalid markdown syntax']

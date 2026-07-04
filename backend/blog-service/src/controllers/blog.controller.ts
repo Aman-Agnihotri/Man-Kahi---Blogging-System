@@ -113,7 +113,7 @@ export class BlogController {
         fileUploadTimer.end('failure');
       }
 
-      logger.error('Error creating blog:', error)
+      logger.error({ err: error }, 'Error creating blog')
       
       // Input validation errors
       if (error instanceof z.ZodError) {
@@ -155,7 +155,7 @@ export class BlogController {
       }
 
       // Unexpected errors
-      logger.error('Unexpected error in blog creation:', error)
+      logger.error({ err: error }, 'Unexpected error in blog creation')
       trackError('unexpected', 'create_blog', 'blog-service');
       return res.status(500).json({ 
         message: 'Internal server error',
@@ -190,7 +190,7 @@ export class BlogController {
       if (typeof dbTimer !== 'undefined') {
         dbTimer.end('failure');
       }
-      logger.error('Error fetching blog:', error)
+      logger.error({ err: error }, 'Error fetching blog')
       
       if (error instanceof Error) {
         switch (error.message) {
@@ -207,7 +207,7 @@ export class BlogController {
         }
       }
       
-      logger.error('Unexpected error fetching blog:', error)
+      logger.error({ err: error }, 'Unexpected error fetching blog')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch blog post due to an unexpected error'
@@ -253,7 +253,7 @@ export class BlogController {
       if (fileUploadTimer) {
         fileUploadTimer.end('failure');
       }
-      logger.error('Error updating blog:', error)
+      logger.error({ err: error }, 'Error updating blog')
       
       // Input validation errors
       if (error instanceof z.ZodError) {
@@ -310,7 +310,7 @@ export class BlogController {
       }
 
       // Unexpected errors
-      logger.error('Unexpected error in blog update:', error)
+      logger.error({ err: error }, 'Unexpected error in blog update')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to update blog post due to an unexpected error'
@@ -338,7 +338,7 @@ export class BlogController {
 
       return res.json(blog)
     } catch (error) {
-      logger.error('Error updating blog visibility:', error)
+      logger.error({ err: error }, 'Error updating blog visibility')
 
       if (error instanceof z.ZodError) {
         trackError('validation', 'update_blog_visibility', 'blog-service');
@@ -358,7 +358,7 @@ export class BlogController {
         })
       }
 
-      logger.error('Unexpected error updating blog visibility:', error)
+      logger.error({ err: error }, 'Unexpected error updating blog visibility')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to update blog visibility due to an unexpected error'
@@ -392,7 +392,7 @@ export class BlogController {
       if (dbTimer) {
         dbTimer.end('failure');
       }
-      logger.error('Error deleting blog:', error)
+      logger.error({ err: error }, 'Error deleting blog')
       if (error instanceof Error) {
         trackError('business_logic', error.message, 'blog-service');
       } else {
@@ -419,7 +419,7 @@ export class BlogController {
         }
       }
       
-      logger.error('Unexpected error deleting blog:', error)
+      logger.error({ err: error }, 'Unexpected error deleting blog')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to delete blog post due to an unexpected error'
@@ -444,7 +444,7 @@ export class BlogController {
       if (typeof searchTimer !== 'undefined') {
         searchTimer.end('failure');
       }
-      logger.error('Error searching blogs:', error)
+      logger.error({ err: error }, 'Error searching blogs')
       
       if (error instanceof z.ZodError) {
         return res.status(400).json({
@@ -471,7 +471,7 @@ export class BlogController {
         }
       }
       
-      logger.error('Unexpected error in search:', error)
+      logger.error({ err: error }, 'Unexpected error in search')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to perform search due to an unexpected error'
@@ -492,7 +492,7 @@ export class BlogController {
       if (searchTimer) {
         searchTimer.end('failure');
       }
-      logger.error('Error fetching popular tags:', error)
+      logger.error({ err: error }, 'Error fetching popular tags')
       trackError('search', 'popular_tags', 'blog-service');
       
       if (error instanceof Error) {
@@ -504,7 +504,7 @@ export class BlogController {
         }
       }
       
-      logger.error('Unexpected error fetching tags:', error)
+      logger.error({ err: error }, 'Unexpected error fetching tags')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch popular tags due to an unexpected error'
@@ -531,7 +531,7 @@ export class BlogController {
       if (searchTimer) {
         searchTimer.end('failure');
       }
-      logger.error('Error fetching suggested blogs:', error)
+      logger.error({ err: error }, 'Error fetching suggested blogs')
       trackError('search', 'suggested_blogs', 'blog-service');
       
       if (error instanceof Error) {
@@ -549,7 +549,7 @@ export class BlogController {
         }
       }
       
-      logger.error('Unexpected error fetching suggestions:', error)
+      logger.error({ err: error }, 'Unexpected error fetching suggestions')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch suggested blogs due to an unexpected error'
@@ -583,7 +583,7 @@ export class BlogController {
       if (searchTimer) {
         searchTimer.end('failure');
       }
-      logger.error('Error fetching user blogs:', error)
+      logger.error({ err: error }, 'Error fetching user blogs')
       trackError('search', 'user_blogs', 'blog-service');
       
       if (error instanceof Error) {
@@ -606,7 +606,7 @@ export class BlogController {
         }
       }
       
-      logger.error('Unexpected error fetching user blogs:', error)
+      logger.error({ err: error }, 'Unexpected error fetching user blogs')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch user blogs due to an unexpected error'
@@ -632,7 +632,7 @@ export class BlogController {
 
       return res.json({ message: 'Blog deleted', id })
     } catch (error) {
-      logger.error('Error moderating (admin-deleting) blog:', error)
+      logger.error({ err: error }, 'Error moderating (admin-deleting) blog')
 
       if (error instanceof Error) {
         trackError('business_logic', error.message, 'blog-service');
@@ -644,7 +644,7 @@ export class BlogController {
         }
       }
 
-      logger.error('Unexpected error moderating blog:', error)
+      logger.error({ err: error }, 'Unexpected error moderating blog')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to delete blog post due to an unexpected error'
@@ -670,7 +670,7 @@ export class BlogController {
       return res.json(result)
     } catch (error) {
       if (dbTimer) dbTimer.end('failure');
-      logger.error('Error liking blog:', error)
+      logger.error({ err: error }, 'Error liking blog')
 
       if (error instanceof Error) {
         trackError('business_logic', error.message, 'blog-service');
@@ -707,7 +707,7 @@ export class BlogController {
       return res.json(result)
     } catch (error) {
       if (dbTimer) dbTimer.end('failure');
-      logger.error('Error unliking blog:', error)
+      logger.error({ err: error }, 'Error unliking blog')
 
       if (error instanceof Error) {
         trackError('business_logic', error.message, 'blog-service');
@@ -740,7 +740,7 @@ export class BlogController {
       const result = await this.blogService.bookmarkBlog(id, req.user!.id);
       return res.json(result)
     } catch (error) {
-      logger.error('Error bookmarking blog:', error)
+      logger.error({ err: error }, 'Error bookmarking blog')
 
       if (error instanceof Error && error.message === 'Blog not found') {
         return res.status(404).json({
@@ -770,7 +770,7 @@ export class BlogController {
       const result = await this.blogService.unbookmarkBlog(id, req.user!.id);
       return res.json(result)
     } catch (error) {
-      logger.error('Error removing bookmark:', error)
+      logger.error({ err: error }, 'Error removing bookmark')
 
       if (error instanceof Error && error.message === 'Blog not found') {
         return res.status(404).json({
@@ -793,7 +793,7 @@ export class BlogController {
       const result = await this.blogService.getUserBookmarks(req.user!.id, page, limit);
       return res.json(result)
     } catch (error) {
-      logger.error('Error fetching bookmarks:', error)
+      logger.error({ err: error }, 'Error fetching bookmarks')
 
       if (error instanceof z.ZodError) {
         return res.status(400).json({
@@ -827,7 +827,7 @@ export class BlogController {
       const blogs = await this.blogService.getTrendingBlogs(limit ?? 10);
       return res.json(blogs)
     } catch (error) {
-      logger.error('Error fetching trending blogs:', error)
+      logger.error({ err: error }, 'Error fetching trending blogs')
 
       if (error instanceof z.ZodError) {
         return res.status(400).json({
@@ -861,7 +861,7 @@ export class BlogController {
       const report = await this.blogService.reportBlog(id, req.user!.id, reason);
       return res.status(201).json(report)
     } catch (error) {
-      logger.error('Error reporting blog:', error)
+      logger.error({ err: error }, 'Error reporting blog')
 
       if (error instanceof z.ZodError) {
         return res.status(400).json({

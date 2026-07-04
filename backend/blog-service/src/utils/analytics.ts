@@ -8,7 +8,7 @@ class AnalyticsClient {
     try {
       await axios.post(`${ANALYTICS_SERVICE_URL}/api/analytics/${endpoint}`, data);
     } catch (error) {
-      logger.error('Error sending analytics event:', error);
+      logger.error({ err: error }, 'Error sending analytics event');
       // Don't throw - analytics failures shouldn't break the main flow
     }
   }
@@ -58,7 +58,7 @@ class AnalyticsClient {
       );
       return response.data;
     } catch (error) {
-      logger.error('Error fetching blog analytics:', error);
+      logger.error({ err: error }, 'Error fetching blog analytics');
       throw error;
     }
   }

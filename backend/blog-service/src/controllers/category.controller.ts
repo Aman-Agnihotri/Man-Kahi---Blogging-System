@@ -27,7 +27,7 @@ export class CategoryController {
       const categories = await this.categoryService.listCategories();
       return res.json(categories)
     } catch (error) {
-      logger.error('Error listing categories:', error)
+      logger.error({ err: error }, 'Error listing categories')
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch categories due to an unexpected error'
@@ -42,7 +42,7 @@ export class CategoryController {
       const category = await this.categoryService.createCategory(input);
       return res.status(201).json(category)
     } catch (error) {
-      logger.error('Error creating category:', error)
+      logger.error({ err: error }, 'Error creating category')
 
       if (error instanceof z.ZodError) {
         return res.status(400).json({
@@ -83,7 +83,7 @@ export class CategoryController {
       const category = await this.categoryService.updateCategory(id, input);
       return res.json(category)
     } catch (error) {
-      logger.error('Error updating category:', error)
+      logger.error({ err: error }, 'Error updating category')
 
       if (error instanceof z.ZodError) {
         return res.status(400).json({
@@ -131,7 +131,7 @@ export class CategoryController {
       await this.categoryService.deleteCategory(id);
       return res.json({ message: 'Category deleted successfully' })
     } catch (error) {
-      logger.error('Error deleting category:', error)
+      logger.error({ err: error }, 'Error deleting category')
 
       if (error instanceof Error) {
         switch (error.message) {

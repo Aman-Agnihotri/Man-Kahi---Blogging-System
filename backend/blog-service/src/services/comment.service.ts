@@ -18,7 +18,7 @@ export class CommentService {
   }
 
   async listComments(blogId: string, page = 1, limit = 20, userId?: string) {
-    logger.debug(`Listing comments for blog ${blogId}`, { page, limit })
+    logger.debug({ page, limit }, `Listing comments for blog ${blogId}`)
 
     if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new Error('Invalid pagination')
@@ -60,7 +60,7 @@ export class CommentService {
   }
 
   async createComment(blogId: string, userId: string, content: string, parentId?: string) {
-    logger.debug(`Creating comment on blog ${blogId}`, { userId, parentId })
+    logger.debug({ userId, parentId }, `Creating comment on blog ${blogId}`)
 
     const blog = await prisma.blog.findUnique({
       where: { id: blogId, deletedAt: null },
@@ -102,7 +102,7 @@ export class CommentService {
   }
 
   async updateComment(commentId: string, userId: string, content: string) {
-    logger.debug(`Updating comment ${commentId}`, { userId })
+    logger.debug({ userId }, `Updating comment ${commentId}`)
 
     const comment = await prisma.comment.findUnique({ where: { id: commentId } })
     if (!comment || comment.deletedAt) {
@@ -121,7 +121,7 @@ export class CommentService {
   }
 
   async deleteComment(commentId: string, requesterId: string, requesterRoles: string[]) {
-    logger.debug(`Deleting comment ${commentId}`, { requesterId })
+    logger.debug({ requesterId }, `Deleting comment ${commentId}`)
 
     const comment = await prisma.comment.findUnique({ where: { id: commentId } })
     if (!comment || comment.deletedAt) {
@@ -155,7 +155,7 @@ export class CommentService {
   }
 
   async reportComment(commentId: string, reporterId: string, reason: string) {
-    logger.debug(`Reporting comment ${commentId}`, { reporterId })
+    logger.debug({ reporterId }, `Reporting comment ${commentId}`)
 
     const comment = await prisma.comment.findUnique({ where: { id: commentId } })
     if (!comment || comment.deletedAt) {

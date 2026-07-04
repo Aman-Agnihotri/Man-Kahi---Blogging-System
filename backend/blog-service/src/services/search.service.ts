@@ -14,7 +14,7 @@ export class SearchService {
     authorId?: string
   }) {
     const startTime = Date.now();
-    logger.debug('Starting blog search with params:', params);
+    logger.debug(params, 'Starting blog search with params');
 
     // Try to get from cache first
     const cacheKey = JSON.stringify(params)
@@ -58,7 +58,7 @@ export class SearchService {
       logger.debug(`Found ${tags.length} popular tags`);
       return tags
     } catch (error) {
-      logger.error('Error fetching popular tags:', error);
+      logger.error({ err: error }, 'Error fetching popular tags');
       throw error;
     }
   }
@@ -128,7 +128,7 @@ export class SearchService {
       logger.debug(`Found ${suggestedBlogs.length} suggested blogs for ${blogId}`);
       return suggestedBlogs
     } catch (error) {
-      logger.error('Error getting suggested blogs:', error);
+      logger.error({ err: error }, 'Error getting suggested blogs');
       throw error;
     }
   }
@@ -139,7 +139,7 @@ export class SearchService {
     page?: number
     limit?: number
   }) {
-    logger.debug('Fetching user blogs with params:', params);
+    logger.debug(params, 'Fetching user blogs with params');
     try {
       const page = params.page ?? 1
       const limit = params.limit ?? 10
@@ -193,7 +193,7 @@ export class SearchService {
         totalPages: Math.ceil(total / limit),
       }
     } catch (error) {
-      logger.error('Error fetching user blogs:', error);
+      logger.error({ err: error }, 'Error fetching user blogs');
       throw error;
     }
   }

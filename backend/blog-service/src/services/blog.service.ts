@@ -91,7 +91,7 @@ export class BlogService {
 
   async createBlog(data: CreateBlogInput) {
     const startTime = Date.now();
-    logger.debug('Creating new blog post:', { title: data.title, authorId: data.authorId });
+    logger.debug({ title: data.title, authorId: data.authorId }, 'Creating new blog post');
 
     // Validate markdown content
     const validation = validateMarkdown(data.content);
@@ -219,7 +219,7 @@ export class BlogService {
       // Increment views in background
       if (blog.published) {
         blogCache.incrementViews(blog.id).catch((error: Error) =>
-          logger.error('Error incrementing views:', error)
+          logger.error({ err: error }, 'Error incrementing views')
         );
       }
       return blog;
@@ -268,7 +268,7 @@ export class BlogService {
       Promise.all([
         blogCache.incrementViews(blog.id),
         updateBlogIndex(blog.id, { views: (blog.analytics?.views ?? 0) + 1 })
-      ]).catch((error: Error) => logger.error('Error updating views:', error));
+      ]).catch((error: Error) => logger.error({ err: error }, 'Error updating views'));
     }
 
     return blog;
@@ -276,7 +276,7 @@ export class BlogService {
 
   async updateBlog(id: string, authorId: string, data: UpdateBlogInput) {
     const startTime = Date.now();
-    logger.debug(`Updating blog: ${id}`, { authorId });
+    logger.debug({ authorId }, `Updating blog: ${id}`);
 
     // Check blog exists and user is author
     const blog = await prisma.blog.findUnique({
@@ -431,7 +431,7 @@ export class BlogService {
   // flipping a column no reader-facing query paths re-check.
   async setVisibility(id: string, published: boolean) {
     const startTime = Date.now();
-    logger.debug(`Admin updating blog visibility: ${id}`, { published });
+    logger.debug({ published }, `Admin updating blog visibility: ${id}`);
 
     const blog = await prisma.blog.findUnique({
       where: { id },
@@ -485,7 +485,7 @@ export class BlogService {
   }
 
   async deleteBlog(id: string, authorId: string) {
-    logger.debug(`Attempting to delete blog: ${id}`, { authorId });
+    logger.debug({ authorId }, `Attempting to delete blog: ${id}`);
 
     // Check blog exists and user is author
     const blog = await prisma.blog.findUnique({
@@ -798,7 +798,7 @@ export class BlogService {
 
   async restoreRevision(blogId: string, revisionId: string, authorId: string) {
     const startTime = Date.now();
-    logger.debug(`Restoring blog ${blogId} to revision ${revisionId}`, { authorId });
+    logger.debug({ authorId }, `Restoring blog ${blogId} to revision ${revisionId}`);
 
     const blog = await prisma.blog.findUnique({
       where: { id: blogId },
