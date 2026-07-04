@@ -177,7 +177,6 @@ const startServer = async () => {
       timestamp: new Date().toISOString(),
       details: error
     }, 'Failed to start server');
-    console.error('Full error details:', error);
     trackError('server', 'startup_error', 'analytics-service');
     process.exit(1);
   }
