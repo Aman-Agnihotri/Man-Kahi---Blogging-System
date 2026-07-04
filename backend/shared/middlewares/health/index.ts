@@ -102,7 +102,7 @@ export const createHealthCheck = (options: HealthCheckOptions) => {
       });
       return;
     } catch (error) {
-      logger.error(`Health check failed for ${options.serviceName}:`, error);
+      logger.error({ err: error }, `Health check failed for ${options.serviceName}`);
       
       res.status(503).json({
         status: 'unhealthy',
@@ -120,7 +120,7 @@ async function checkDatabase(): Promise<boolean> {
     await prismaClient.$queryRaw`SELECT 1`;
     return true;
   } catch (error) {
-    logger.error('Database health check failed:', error);
+    logger.error({ err: error }, 'Database health check failed');
     return false;
   }
 }
@@ -130,7 +130,7 @@ async function checkRedis(): Promise<boolean> {
     await redis.ping();
     return true;
   } catch (error) {
-    logger.error('Redis health check failed:', error);
+    logger.error({ err: error }, 'Redis health check failed');
     return false;
   }
 }
@@ -140,7 +140,7 @@ async function checkElasticsearch(client: ElasticsearchClient): Promise<boolean>
     await client.ping();
     return true;
   } catch (error) {
-    logger.error('Elasticsearch health check failed:', error);
+    logger.error({ err: error }, 'Elasticsearch health check failed');
     return false;
   }
 }

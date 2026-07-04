@@ -90,38 +90,38 @@ function createPrismaClient(config: PrismaClientConfig = {}): ExtendedPrismaClie
     // Query monitoring and logging
     if (log) {
         client.$on('query', (e: QueryEvent) => {
-            logger.debug('Query:', {
+            logger.debug({
                 query: e.query,
                 params: e.params,
                 duration: `${e.duration}ms`,
                 timestamp: new Date().toISOString()
-            });
+            }, 'Query');
         });
     }
 
     // Error monitoring
     client.$on('error', (e: LogEvent) => {
-        logger.error('Prisma Client Error:', {
+        logger.error({
             message: e.message,
             target: e.target,
             timestamp: new Date().toISOString()
-        });
+        }, 'Prisma Client Error');
     });
 
     // Info logging
     client.$on('info', (e: LogEvent) => {
-        logger.info('Prisma Client Info:', {
+        logger.info({
             message: e.message,
             timestamp: new Date().toISOString()
-        });
+        }, 'Prisma Client Info');
     });
 
     // Warning logging
     client.$on('warn', (e: LogEvent) => {
-        logger.warn('Prisma Client Warning:', {
+        logger.warn({
             message: e.message,
             timestamp: new Date().toISOString()
-        });
+        }, 'Prisma Client Warning');
     });
 
     // Enhanced connection management
@@ -138,7 +138,7 @@ function createPrismaClient(config: PrismaClientConfig = {}): ExtendedPrismaClie
             logger.info('Successfully connected to database');
         } catch (error) {
             connectionAttempts++;
-            logger.error(`Database connection attempt ${connectionAttempts} failed:`, error);
+            logger.error({ err: error }, `Database connection attempt ${connectionAttempts} failed`);
 
             if (connectionAttempts < connectionRetries) {
                 const delay = Math.min(1000 * Math.pow(2, connectionAttempts), 10000);
@@ -156,7 +156,7 @@ function createPrismaClient(config: PrismaClientConfig = {}): ExtendedPrismaClie
 
     // Initialize connection
     ensureConnection().catch((error) => {
-        logger.error('Fatal: Could not establish database connection:', error);
+        logger.error({ err: error }, 'Fatal: Could not establish database connection');
         process.exit(1);
     });
 
@@ -264,7 +264,7 @@ export const prismaHelpers = {
             await prisma.$disconnect();
             logger.info('Disconnected from database');
         } catch (error) {
-            logger.error('Error disconnecting from database:', error);
+            logger.error({ err: error }, 'Error disconnecting from database');
             throw error;
         }
     },
@@ -277,7 +277,7 @@ export const prismaHelpers = {
             await prisma.$queryRaw`SELECT 1`;
             return true;
         } catch (error) {
-            logger.error('Database health check failed:', error);
+            logger.error({ err: error }, 'Database health check failed');
             return false;
         }
     },
@@ -332,7 +332,7 @@ export const prismaHelpers = {
                 )
             ]) as T;
         } catch (error) {
-            logger.error('Transaction failed:', error);
+            logger.error({ err: error }, 'Transaction failed');
             throw new PrismaError(
                 'Transaction failed',
                 'TRANSACTION_FAILED',
@@ -349,7 +349,7 @@ export const prismaHelpers = {
             await prisma.cacheControl.deleteMany({});
             logger.info('Cache cleared successfully');
         } catch (error) {
-            logger.error('Failed to clear cache:', error);
+            logger.error({ err: error }, 'Failed to clear cache');
             throw error;
         }
     }
@@ -361,7 +361,7 @@ const handleShutdown = async () => {
         await prismaHelpers.disconnect();
         process.exit(0);
     } catch (error) {
-        logger.error('Error during shutdown:', error);
+        logger.error({ err: error }, 'Error during shutdown');
         process.exit(1);
     }
 };

@@ -132,7 +132,7 @@ export class RedisClient {
       }
 
       RedisClient.instance.on('error', (error: Error) => {
-        logger.error(`Redis ${RedisClient.isCluster ? 'Cluster' : ''} Error:`, error);
+        logger.error({ err: error }, `Redis ${RedisClient.isCluster ? 'Cluster' : ''} Error`);
       });
 
       RedisClient.instance.on('connect', () => {
@@ -160,7 +160,7 @@ export const tokenBlacklist = {
         expiryInSeconds
       );
     } catch (error) {
-      logger.error('Error adding token to blacklist:', error);
+      logger.error({ err: error }, 'Error adding token to blacklist');
       throw error;
     }
   },
@@ -170,7 +170,7 @@ export const tokenBlacklist = {
       const result = await redis.get(`${REDIS_KEYS.TOKEN_BLACKLIST}${token}`);
       return result !== null;
     } catch (error) {
-      logger.error('Error checking token blacklist:', error);
+      logger.error({ err: error }, 'Error checking token blacklist');
       throw error;
     }
   }
@@ -184,7 +184,7 @@ export const blogCache = {
     try {
       return await redis.get(`${REDIS_KEYS.BLOG}${slug}`);
     } catch (error) {
-      logger.error('Error getting blog from cache:', error);
+      logger.error({ err: error }, 'Error getting blog from cache');
       return null;
     }
   },
@@ -198,7 +198,7 @@ export const blogCache = {
         .zadd(REDIS_KEYS.HOT_BLOGS, 0, slug)
         .exec();
     } catch (error) {
-      logger.error('Error caching blog:', error);
+      logger.error({ err: error }, 'Error caching blog');
     }
   },
 
@@ -216,7 +216,7 @@ export const blogCache = {
       
       await multi.exec();
     } catch (error) {
-      logger.error('Error invalidating blog cache:', error);
+      logger.error({ err: error }, 'Error invalidating blog cache');
     }
   },
 
@@ -233,7 +233,7 @@ export const blogCache = {
       const results = await multi.exec();
       return results?.[0]?.[1] as number || 0;
     } catch (error) {
-      logger.error('Error incrementing blog views:', error);
+      logger.error({ err: error }, 'Error incrementing blog views');
       return 0;
     }
   }
@@ -259,7 +259,7 @@ export const analytics = {
 
       await multi.exec();
     } catch (error) {
-      logger.error('Error tracking view:', error);
+      logger.error({ err: error }, 'Error tracking view');
     }
   },
 
@@ -275,7 +275,7 @@ export const analytics = {
         .expire(key, CACHE_TTL.ANALYTICS_CACHE)
         .exec();
     } catch (error) {
-      logger.error('Error tracking read progress:', error);
+      logger.error({ err: error }, 'Error tracking read progress');
     }
   },
 
@@ -288,7 +288,7 @@ export const analytics = {
         .expire(key, CACHE_TTL.ANALYTICS_CACHE)
         .exec();
     } catch (error) {
-      logger.error('Error tracking link click:', error);
+      logger.error({ err: error }, 'Error tracking link click');
     }
   },
 
@@ -333,7 +333,7 @@ export const analytics = {
 
       return stats;
     } catch (error) {
-      logger.error('Error getting real-time stats:', error);
+      logger.error({ err: error }, 'Error getting real-time stats');
       return {
         views: 0,
         uniqueViews: 0,
@@ -347,7 +347,7 @@ export const analytics = {
     try {
       return await redis.zrevrange(REDIS_KEYS.ANALYTICS_HOT_BLOGS, 0, limit - 1);
     } catch (error) {
-      logger.error('Error getting hot blogs:', error);
+      logger.error({ err: error }, 'Error getting hot blogs');
       return [];
     }
   },
@@ -368,7 +368,7 @@ export const analytics = {
         JSON.stringify(eventData)
       );
     } catch (error) {
-      logger.error('Error streaming event:', error);
+      logger.error({ err: error }, 'Error streaming event');
     }
   }
 };
@@ -385,7 +385,7 @@ export const searchCache = {
         .expire(`${REDIS_KEYS.SEARCH}${query}`, CACHE_TTL.SEARCH)
         .exec();
     } catch (error) {
-      logger.error('Error caching search results:', error);
+      logger.error({ err: error }, 'Error caching search results');
     }
   },
 
@@ -393,7 +393,7 @@ export const searchCache = {
     try {
       return await redis.get(`${REDIS_KEYS.SEARCH}${query}`);
     } catch (error) {
-      logger.error('Error getting search results from cache:', error);
+      logger.error({ err: error }, 'Error getting search results from cache');
       return null;
     }
   },
@@ -420,7 +420,7 @@ export const searchCache = {
         }
       } while (cursor !== '0');
     } catch (error) {
-      logger.error('Error invalidating search cache:', error);
+      logger.error({ err: error }, 'Error invalidating search cache');
     }
   }
 };

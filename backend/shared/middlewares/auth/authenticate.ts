@@ -94,11 +94,11 @@ async function validateAuthentication(req: Request, options: AuthOptions): Promi
         : results.some(result => result);
 
     if (!isAuthenticated) {
-        logger.warn('Authentication failed:', {
+        logger.warn({
             strategies,
             requireAll,
             results: results.map((r, i) => ({ strategy: strategies[i], success: r }))
-        });
+        }, 'Authentication failed');
     }
 
     return isAuthenticated;
@@ -110,9 +110,9 @@ async function validateToken(req: Request): Promise<boolean> {
 
     const isBlacklisted = await tokenBlacklist.check(token);
     if (isBlacklisted) {
-        logger.warn('Attempt to use blacklisted token:', {
+        logger.warn({
             tokenPrefix: token.substring(0, 10) + '...'
-        });
+        }, 'Attempt to use blacklisted token');
         return false;
     }
 
@@ -131,22 +131,22 @@ async function validateRoles(req: Request, options: AuthOptions): Promise<boolea
     );
 
     if (!hasRequiredRole) {
-        logger.warn('Insufficient permissions:', {
+        logger.warn({
             userId: req.user.id,
             requiredRoles: options.roles,
             userRoles: req.user.roles
-        });
+        }, 'Insufficient permissions');
     }
 
     return hasRequiredRole;
 }
 
 function handleAuthError(error: any, options: AuthOptions, res: Response, next: NextFunction) {
-    logger.error('Authentication error:', {
-        error,
+    logger.error({
+        err: error,
         strategies: options.strategy,
         requireAll: options.requireAllStrategies
-    });
+    }, 'Authentication error');
     
     if (error instanceof TokenExpiredError) {
         return res.status(401).json({
@@ -222,17 +222,17 @@ async function handleJwtStrategy(req: Request): Promise<boolean> {
         return true;
     } catch (error) {
         if (error instanceof TokenExpiredError) {
-            logger.info('Token expired', { tokenPrefix: token.substring(0, 10) + '...' });
+            logger.info({ tokenPrefix: token.substring(0, 10) + '...' }, 'Token expired');
         } else if (error instanceof JsonWebTokenError) {
-            logger.info('Invalid token', { 
+            logger.info({
                 error: error.message,
                 tokenPrefix: token.substring(0, 10) + '...'
-            });
+            }, 'Invalid token');
         } else {
-            logger.error('JWT verification error:', {
-                error,
+            logger.error({
+                err: error,
                 tokenPrefix: token.substring(0, 10) + '...'
-            });
+            }, 'JWT verification error');
         }
         return false;
     }

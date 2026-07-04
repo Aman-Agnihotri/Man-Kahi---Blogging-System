@@ -43,7 +43,7 @@ export class MemoryRateLimiter implements IRateLimiter {
             const res = await this.limiter.get(key);
             return res ? this.formatResponse(res) : null;
         } catch (error) {
-            logger.error('Error getting rate limit info:', error);
+            logger.error({ err: error }, 'Error getting rate limit info');
             return null;
         }
     }
@@ -56,7 +56,7 @@ export class MemoryRateLimiter implements IRateLimiter {
             const blockDuration = duration ?? this.config.blockDuration ?? this.config.duration;
             await this.limiter.block(key, blockDuration);
         } catch (error) {
-            logger.error('Error blocking key:', error);
+            logger.error({ err: error }, 'Error blocking key');
             throw error;
         }
     }
@@ -68,7 +68,7 @@ export class MemoryRateLimiter implements IRateLimiter {
         try {
             await this.limiter.delete(key);
         } catch (error) {
-            logger.error('Error resetting rate limit:', error);
+            logger.error({ err: error }, 'Error resetting rate limit');
             throw error;
         }
     }
@@ -81,7 +81,7 @@ export class MemoryRateLimiter implements IRateLimiter {
             const res = await this.limiter.get(key);
             return res ? res.remainingPoints <= 0 : false;
         } catch (error) {
-            logger.error('Error checking blocked status:', error);
+            logger.error({ err: error }, 'Error checking blocked status');
             return false;
         }
     }
@@ -95,7 +95,7 @@ export class MemoryRateLimiter implements IRateLimiter {
             await this.limiter.set(key, points, duration);
             logger.debug(`Set points for key ${key} to ${points}`);
         } catch (error) {
-            logger.error('Error setting points:', error);
+            logger.error({ err: error }, 'Error setting points');
             throw error;
         }
     }

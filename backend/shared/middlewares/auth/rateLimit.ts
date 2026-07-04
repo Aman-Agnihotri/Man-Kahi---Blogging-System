@@ -35,7 +35,7 @@ export const rateLimit = (windowMs: number, maxRequests: number) => {
 
             return next();
         } catch (error) {
-            logger.error('Rate limiting error:', error);
+            logger.error({ err: error }, 'Rate limiting error');
             // Continue despite rate limiting errors
             return next();
         }

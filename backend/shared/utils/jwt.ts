@@ -58,10 +58,10 @@ export const generateToken = (payload: TokenPayload, expiresIn?: string): string
             notBefore: 0 // Token is valid immediately
         });
     } catch (error) {
-        logger.error('Error generating JWT token:', {
-            error,
+        logger.error({
+            err: error,
             payload: { ...payload, id: '[REDACTED]' }
-        });
+        }, 'Error generating JWT token');
         if (error instanceof TokenGenerationError) {
             throw error;
         }
@@ -99,7 +99,7 @@ export const verifyToken = (token: string): TokenPayload => {
         if (error instanceof TokenExpiredError) {
             throw new TokenValidationError('Token has expired');
         }
-        logger.error('Error verifying JWT token:', error);
+        logger.error({ err: error }, 'Error verifying JWT token');
         throw error;
     }
 }
@@ -134,10 +134,10 @@ export const decodeToken = (token: string): TokenPayload | null => {
             exp: decoded.exp
         };
     } catch (error) {
-        logger.error('Error decoding JWT token:', {
-            error,
+        logger.error({
+            err: error,
             token: token.substring(0, 10) + '...' // Log only token prefix
-        });
+        }, 'Error decoding JWT token');
         return null;
     }
 }
@@ -163,7 +163,7 @@ export const getTokenExpiryInSeconds = (token: string): number => {
 
         return decoded.exp - now;
     } catch (error) {
-        logger.error('Error getting token expiry:', error);
+        logger.error({ err: error }, 'Error getting token expiry');
         return 0;
     }
 }

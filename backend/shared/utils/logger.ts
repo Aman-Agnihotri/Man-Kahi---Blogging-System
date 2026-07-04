@@ -96,7 +96,7 @@ export const logError = (message: string, error: unknown): void => {
       logger.debug(error.stack)
     }
   } else {
-    logger.error(`${message}: Unknown error type`, { error })
+    logger.error({ error }, `${message}: Unknown error type`)
   }
 }
 
