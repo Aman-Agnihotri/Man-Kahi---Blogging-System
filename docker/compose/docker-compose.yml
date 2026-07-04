@@ -73,7 +73,7 @@ services:
 
     # Redis
     redis:
-        image: redis:alpine
+        image: redis:8.8-alpine
         container_name: mankahi-redis
         ports:
             - "127.0.0.1:6379:6379"
@@ -96,7 +96,7 @@ services:
 
     # MinIO
     minio:
-        image: minio/minio
+        image: minio/minio:RELEASE.2025-09-07T16-13-09Z
         container_name: mankahi-minio
         ports:
             - "127.0.0.1:9000:9000"
@@ -367,7 +367,7 @@ services:
 
     # API Gateway
     nginx:
-        image: nginx:latest
+        image: nginx:1.31.2
         container_name: mankahi-nginx
         ports:
             - "127.0.0.1:8080:80"
@@ -404,7 +404,7 @@ services:
 
     # Prometheus
     prometheus:
-        image: prom/prometheus:latest
+        image: prom/prometheus:v3.13.0
         container_name: mankahi-prometheus
         ports:
             - "127.0.0.1:9090:9090"
@@ -433,7 +433,7 @@ services:
 
     # Grafana
     grafana:
-        image: grafana/grafana-enterprise:latest
+        image: grafana/grafana-enterprise:13.1.0
         container_name: mankahi-grafana
         ports:
             - "127.0.0.1:3005:3000"

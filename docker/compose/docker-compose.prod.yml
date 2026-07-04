@@ -77,7 +77,7 @@ services:
 
     # Redis with persistence and optimized settings
     redis:
-        image: redis:alpine
+        image: redis:8.8-alpine
         container_name: mankahi-redis-prod
         restart: unless-stopped
         command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
@@ -104,7 +104,7 @@ services:
 
     # MinIO with optimized settings
     minio:
-        image: minio/minio
+        image: minio/minio:RELEASE.2025-09-07T16-13-09Z
         container_name: mankahi-minio-prod
         restart: unless-stopped
         env_file:
@@ -429,7 +429,7 @@ services:
 
     # Prometheus
     prometheus:
-        image: prom/prometheus:latest
+        image: prom/prometheus:v3.13.0
         container_name: mankahi-prometheus-prod
         restart: unless-stopped
         volumes:
@@ -472,7 +472,7 @@ services:
 
     # Grafana
     grafana:
-        image: grafana/grafana-enterprise:latest
+        image: grafana/grafana-enterprise:13.1.0
         container_name: mankahi-grafana-prod
         restart: unless-stopped
         volumes:
@@ -508,7 +508,7 @@ services:
 
     # API Gateway
     nginx:
-        image: nginx:latest
+        image: nginx:1.31.2
         container_name: mankahi-nginx-prod
         restart: unless-stopped
         ports:
