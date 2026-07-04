@@ -13,6 +13,50 @@ Turn ManKahi into a professional-grade blogging platform that runs well on a hom
 - Current non-goal: proving support for 5 million users, 100k concurrent users, or 10k concurrent writes.
 - Current non-goal: Kubernetes production readiness before the Docker Compose deployment is solid.
 
+## Product Vision
+
+ManKahi should feel like a complete writing product, not just a technical demo.
+
+Writers should be able to:
+
+- create an account and manage their profile, avatar, bio, and social links
+- write, save, edit, publish, and unpublish stories, with markdown preview
+- add cover images, tags, categories, excerpts, and SEO metadata
+- view and restore prior versions of a post from its edit history
+- view their own stories and performance from a dashboard
+- build a public author profile and follow/be followed by other writers
+
+Readers should be able to:
+
+- browse recent, featured, and trending stories
+- search full-text content and filter by category
+- read posts by slug, with reading-progress tracking
+- like, bookmark, comment on, and share posts
+- explore categories and tags, and discover related posts
+- report abusive posts or comments
+
+Admins should be able to:
+
+- review platform activity and analytics
+- moderate blog visibility and hard-delete abusive content
+- manage users (suspend/unsuspend) and roles (assign/revoke)
+- review and resolve/dismiss reported content
+- audit every moderation action via a searchable audit log
+
+All of the above is implemented and live-verified as of this writing - see the Phase notes below for what was built and how it was checked, and "Known Gaps And Direction" for what's still open.
+
+## Known Gaps And Direction
+
+The professional single-server MVP, security hardening, observability, and the core product feature set (reader engagement, content authoring, user/social, admin and moderation) are all complete and live-verified. What's still open:
+
+- Notification preferences are stored but not yet wired to actual email delivery. No email provider is configured anywhere in this codebase; password reset uses a dev-only stub that logs the reset link instead of sending it.
+- Kubernetes manifests are partially repaired (`kubernetes/base` builds cleanly; the per-environment overlays still have one outstanding kustomize issue) and are not the current deployment target.
+- Production TLS/domain configuration for nginx (or a Cloudflare named tunnel) still needs to be set up per-deployment - see `docs/DEPLOYMENT.md`.
+- Posts saved before the markdown/HTML content-round-trip fix will show rendered HTML instead of markdown the first time they're reopened for editing; re-saving fixes it going forward.
+- No automated frontend tests (no test framework installed); frontend correctness is covered by typecheck plus manual and live-browser verification.
+
+The next milestone is finishing Kubernetes readiness and closing the gaps above: resolving the last kustomize overlay issue so `environments/*` builds cleanly (not just `base`), real email delivery behind the existing notification-preferences and password-reset groundwork, and production TLS/domain configuration for a real deployment.
+
 ## Tracking Rules
 
 - `[ ]` Not started.
