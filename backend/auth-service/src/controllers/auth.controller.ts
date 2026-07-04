@@ -73,7 +73,7 @@ export class AuthController {
 
       res.status(201).json(result)
     } catch (error) {
-      logger.error('Register controller error:', error)
+      logger.error({ err: error }, 'Register controller error')
       
       if (error instanceof z.ZodError) {
         trackError('validation', 'register_validation_failed', 'auth');
@@ -115,7 +115,7 @@ export class AuthController {
       res.json(result)
     } catch (error) {
       redisTimer.end();
-      logger.error('Login controller error:', error)
+      logger.error({ err: error }, 'Login controller error')
 
       if (error instanceof z.ZodError) {
         trackError('validation', 'login_validation_failed', 'auth');
@@ -168,7 +168,7 @@ export class AuthController {
       res.json({ message: 'Logged out successfully' })
     } catch (error) {
       redisTimer.end()
-      logger.error('Logout controller error:', error)
+      logger.error({ err: error }, 'Logout controller error')
       trackError('server', 'logout_failed', 'auth');
       res.status(500).json({ message: 'Internal server error' })
     }
@@ -184,7 +184,7 @@ export class AuthController {
       await this.authService.requestPasswordReset(email)
       res.json({ message: 'If that email is registered, a password reset link has been sent.' })
     } catch (error) {
-      logger.error('Forgot-password controller error:', error)
+      logger.error({ err: error }, 'Forgot-password controller error')
 
       if (error instanceof z.ZodError) {
         trackError('validation', 'forgot_password_validation_failed', 'auth')
@@ -203,7 +203,7 @@ export class AuthController {
       await this.authService.resetPassword(token, newPassword)
       res.json({ message: 'Password reset successfully. You can now log in with your new password.' })
     } catch (error) {
-      logger.error('Reset-password controller error:', error)
+      logger.error({ err: error }, 'Reset-password controller error')
 
       if (error instanceof z.ZodError) {
         trackError('validation', 'reset_password_validation_failed', 'auth')
@@ -240,7 +240,7 @@ export class AuthController {
       res.json(result);
     } catch (error) {
       redisTimer.end();
-      logger.error('Refresh token controller error:', error);
+      logger.error({ err: error }, 'Refresh token controller error');
 
       if (error instanceof z.ZodError) {
         trackError('validation', 'refresh_token_validation_failed', 'auth');
@@ -297,7 +297,7 @@ export class AuthController {
         }
       })
     } catch (error) {
-      logger.error('Add role controller error:', error)
+      logger.error({ err: error }, 'Add role controller error')
 
       if (error instanceof z.ZodError) {
         trackError('validation', 'add_role_validation_failed', 'auth');

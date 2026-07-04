@@ -178,7 +178,7 @@ router.get(
 
             res.redirect(`${frontendURL}/auth/callback?${params.toString()}`);
         } catch (error) {
-            logger.error('OAuth callback error:', error);
+            logger.error({ err: error }, 'OAuth callback error');
             trackError('oauth', 'callback_failed', 'google');
             const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
             res.redirect(
@@ -251,7 +251,7 @@ router.post(
             res.json({ url: authURL });
         } catch (error) {
             const { provider } = req.params;
-            logger.error('Link provider error:', error);
+            logger.error({ err: error }, 'Link provider error');
             trackError('oauth', 'link_failed', provider ?? 'unknown');
             res.status(500).json({ message: 'Failed to initiate provider linking' });
         }
@@ -313,7 +313,7 @@ router.delete(
             res.json({ message: 'Provider unlinked successfully' });
         } catch (error) {
             const { provider } = req.params;
-            logger.error('Unlink provider error:', error);
+            logger.error({ err: error }, 'Unlink provider error');
             trackError('oauth', 'unlink_failed', provider ?? 'unknown');
             res.status(500).json({ message: 'Failed to unlink provider' });
         }

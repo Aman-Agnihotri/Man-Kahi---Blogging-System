@@ -50,7 +50,7 @@ export const setupMinio = async (): Promise<void> => {
             logger.info(`Created MinIO bucket: ${BUCKET_NAME}`)
         }
     } catch (error) {
-        logger.error('Error setting up MinIO:', error)
+        logger.error({ err: error }, 'Error setting up MinIO')
         throw error
     }
 }
@@ -80,7 +80,7 @@ export const uploadAvatar = async (
         logger.info(`Uploaded avatar: ${imageUrl}`)
         return imageUrl
     } catch (error) {
-        logger.error('Error uploading avatar to MinIO:', error)
+        logger.error({ err: error }, 'Error uploading avatar to MinIO')
         throw error
     }
 }
@@ -90,7 +90,7 @@ export const deleteAvatar = async (filename: string): Promise<void> => {
         await minioClient.removeObject(BUCKET_NAME, filename)
         logger.info(`Deleted avatar: ${filename}`)
     } catch (error) {
-        logger.error('Error deleting avatar from MinIO:', error)
+        logger.error({ err: error }, 'Error deleting avatar from MinIO')
         throw error
     }
 }

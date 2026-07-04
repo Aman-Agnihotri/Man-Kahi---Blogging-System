@@ -19,7 +19,7 @@ export async function hashPassword(password: string): Promise<string> {
   try {
     return await argon2.hash(password, hashingConfig)
   } catch (error) {
-    logger.error('Error hashing password:', error)
+    logger.error({ err: error }, 'Error hashing password')
     throw new Error('Failed to hash password')
   }
 }
@@ -31,7 +31,7 @@ export async function verifyPassword(
   try {
     return await argon2.verify(hashedPassword, plainPassword)
   } catch (error) {
-    logger.error('Error verifying password:', error)
+    logger.error({ err: error }, 'Error verifying password')
     throw new Error('Failed to verify password')
   }
 }
@@ -41,7 +41,7 @@ export async function needsRehash(hash: string): Promise<boolean> {
   try {
     return argon2.needsRehash(hash, hashingConfig)
   } catch (error) {
-    logger.error('Error checking if password needs rehash:', error)
+    logger.error({ err: error }, 'Error checking if password needs rehash')
     return false
   }
 }

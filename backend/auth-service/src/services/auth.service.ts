@@ -112,7 +112,7 @@ export class AuthService {
                 refreshToken
             }
         } catch (error) {
-            logger.error('Registration error:', error)
+            logger.error({ err: error }, 'Registration error')
             throw error
         }
     }
@@ -212,7 +212,7 @@ export class AuthService {
                 refreshToken
             }
         } catch (error) {
-            logger.error('Login error:', error)
+            logger.error({ err: error }, 'Login error')
             throw error
         }
     }
@@ -317,7 +317,7 @@ export class AuthService {
             };
         } catch (error) {
             dbTimer.end();
-            logger.error('OAuth user creation error:', error);
+            logger.error({ err: error }, 'OAuth user creation error');
             throw error;
         }
     }
@@ -364,7 +364,7 @@ export class AuthService {
             trackAuthMetrics('oauth_success', profile.provider);
         } catch (error) {
             dbTimer.end();
-            logger.error('OAuth callback error:', error);
+            logger.error({ err: error }, 'OAuth callback error');
             trackError('oauth', 'callback_failed', profile.provider);
             throw error;
         }
@@ -403,7 +403,7 @@ export class AuthService {
             updateActiveTokens(-1);
             trackAuthMetrics('logout_success', 'local');
         } catch (error) {
-            logger.error('Logout error:', error)
+            logger.error({ err: error }, 'Logout error')
             throw error
         }
     }
@@ -527,7 +527,7 @@ export class AuthService {
                 roles: updatedUser.roles.map(ur => ur.role)
             }
         } catch (error) {
-            logger.error('Add role error:', error)
+            logger.error({ err: error }, 'Add role error')
             throw error
         }
     }
@@ -586,7 +586,7 @@ export class AuthService {
             };
         } catch (error) {
             dbTimer.end();
-            logger.error('Refresh token error:', error);
+            logger.error({ err: error }, 'Refresh token error');
             throw error;
         }
     }
@@ -627,7 +627,7 @@ export class AuthService {
             trackAuthMetrics('provider_unlinked', provider);
             logger.info(`Unlinked provider ${provider} from user ${userId}`)
         } catch (error) {
-            logger.error('Error unlinking provider:', error)
+            logger.error({ err: error }, 'Error unlinking provider')
             throw error
         }
     }

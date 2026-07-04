@@ -94,7 +94,7 @@ async function linkProvider(token: string, profile: any): Promise<any> {
     }
   } catch (error) {
     dbTimer.end();
-    logger.error('Error linking provider:', error)
+    logger.error({ err: error }, 'Error linking provider')
     throw error
   }
 }
@@ -165,7 +165,7 @@ async function handleOAuthAuthentication(profile: any) {
     return newUser
   } catch (error) {
     dbTimer.end();
-    logger.error('Error in OAuth authentication:', error)
+    logger.error({ err: error }, 'Error in OAuth authentication')
     throw error
   }
 }

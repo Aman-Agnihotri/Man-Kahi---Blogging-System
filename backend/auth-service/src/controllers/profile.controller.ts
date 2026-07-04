@@ -48,7 +48,7 @@ export class ProfileController {
             const profile = await this.profileService.getProfile(authReq.user.id)
             res.json(profile)
         } catch (error) {
-            logger.error('Get profile controller error:', error)
+            logger.error({ err: error }, 'Get profile controller error')
 
             if (error instanceof Error && error.message === 'User not found') {
                 trackError('user_not_found', 'get_profile_failed', 'auth')
@@ -71,7 +71,7 @@ export class ProfileController {
             const profile = await this.profileService.updateProfile(authReq.user.id, validatedInput)
             res.json(profile)
         } catch (error) {
-            logger.error('Update profile controller error:', error)
+            logger.error({ err: error }, 'Update profile controller error')
 
             if (error instanceof z.ZodError) {
                 trackError('validation', 'update_profile_validation_failed', 'auth')
@@ -105,7 +105,7 @@ export class ProfileController {
 
             res.json({ profileImage })
         } catch (error) {
-            logger.error('Upload avatar controller error:', error)
+            logger.error({ err: error }, 'Upload avatar controller error')
             trackError('server', 'upload_avatar_failed', 'auth')
             res.status(500).json({ message: 'Internal server error' })
         }
@@ -119,7 +119,7 @@ export class ProfileController {
             const result = await this.profileService.follow(authReq.user.id, userId)
             res.json(result)
         } catch (error) {
-            logger.error('Follow user controller error:', error)
+            logger.error({ err: error }, 'Follow user controller error')
 
             if (error instanceof Error) {
                 if (error.message === 'Cannot follow yourself') {
@@ -147,7 +147,7 @@ export class ProfileController {
             const result = await this.profileService.unfollow(authReq.user.id, userId)
             res.json(result)
         } catch (error) {
-            logger.error('Unfollow user controller error:', error)
+            logger.error({ err: error }, 'Unfollow user controller error')
 
             if (error instanceof Error && error.message === 'Cannot unfollow yourself') {
                 trackError('validation', 'self_unfollow', 'auth')
@@ -168,7 +168,7 @@ export class ProfileController {
             const result = await this.profileService.getFollowers(userId, page, limit)
             res.json(result)
         } catch (error) {
-            logger.error('Get followers controller error:', error)
+            logger.error({ err: error }, 'Get followers controller error')
 
             if (error instanceof z.ZodError) {
                 trackError('validation', 'get_followers_validation_failed', 'auth')
@@ -195,7 +195,7 @@ export class ProfileController {
             const result = await this.profileService.getFollowing(userId, page, limit)
             res.json(result)
         } catch (error) {
-            logger.error('Get following controller error:', error)
+            logger.error({ err: error }, 'Get following controller error')
 
             if (error instanceof z.ZodError) {
                 trackError('validation', 'get_following_validation_failed', 'auth')
@@ -224,7 +224,7 @@ export class ProfileController {
             const profile = await this.profileService.getPublicProfile(username, requestingUserId)
             res.json(profile)
         } catch (error) {
-            logger.error('Get public profile controller error:', error)
+            logger.error({ err: error }, 'Get public profile controller error')
 
             if (error instanceof Error && error.message === 'User not found') {
                 trackError('user_not_found', 'get_public_profile_failed', 'auth')
@@ -243,7 +243,7 @@ export class ProfileController {
             const prefs = await this.profileService.getNotificationPrefs(authReq.user.id)
             res.json(prefs)
         } catch (error) {
-            logger.error('Get notification preferences controller error:', error)
+            logger.error({ err: error }, 'Get notification preferences controller error')
 
             if (error instanceof Error && error.message === 'User not found') {
                 trackError('user_not_found', 'get_notification_prefs_failed', 'auth')
@@ -264,7 +264,7 @@ export class ProfileController {
             const prefs = await this.profileService.updateNotificationPrefs(authReq.user.id, validatedInput)
             res.json(prefs)
         } catch (error) {
-            logger.error('Update notification preferences controller error:', error)
+            logger.error({ err: error }, 'Update notification preferences controller error')
 
             if (error instanceof z.ZodError) {
                 trackError('validation', 'update_notification_prefs_validation_failed', 'auth')
@@ -298,7 +298,7 @@ export class ProfileController {
             await this.profileService.deleteAccount(authReq.user.id, validatedInput.password, token)
             res.json({ message: 'Account deleted successfully' })
         } catch (error) {
-            logger.error('Delete account controller error:', error)
+            logger.error({ err: error }, 'Delete account controller error')
 
             if (error instanceof z.ZodError) {
                 trackError('validation', 'delete_account_validation_failed', 'auth')

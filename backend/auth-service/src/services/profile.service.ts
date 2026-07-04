@@ -108,7 +108,7 @@ export class ProfileService {
             return updated.profileImage as string
         } catch (error) {
             dbTimer.end()
-            logger.error('Update avatar error:', error)
+            logger.error({ err: error }, 'Update avatar error')
             throw error
         }
     }
