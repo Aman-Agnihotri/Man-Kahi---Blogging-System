@@ -1,6 +1,6 @@
 # ManKahi Deployment
 
-Last updated: 2026-06-02
+Last updated: 2026-07-04
 
 ## Deployment Strategy
 
@@ -161,6 +161,14 @@ Notes:
 - Cloudflare will print a public URL.
 - The tunnel points to nginx only.
 - Do not point a public tunnel directly to Postgres, Redis, Elasticsearch, MinIO, or individual app services.
+
+Live-verified: with the stack running, the command above printed a public `https://*.trycloudflare.com` URL, and both the homepage and an API health check loaded correctly through it.
+
+If cloudflared's connectivity pre-check reports QUIC/UDP as blocked (common on networks or firewalls that don't allow outbound UDP on port 7844) and the tunnel keeps retrying without ever registering a connection, add `--protocol http2` to the command to force the TCP-based fallback instead of waiting on QUIC:
+
+```bash
+docker run --rm --name mankahi-tunnel cloudflare/cloudflared:latest tunnel --url http://host.docker.internal:8080 --protocol http2
+```
 
 For a stable domain, use a named Cloudflare Tunnel and route the domain to the same nginx gateway.
 

@@ -72,6 +72,14 @@ Once running, use the gateway:
 http://localhost:8080
 ```
 
+To share it on a temporary public link without any real deployment, point a Cloudflare quick tunnel at the gateway:
+
+```bash
+docker run --rm cloudflare/cloudflared:latest tunnel --url http://host.docker.internal:8080
+```
+
+Cloudflare prints a public `https://*.trycloudflare.com` URL that proxies straight to nginx. It's temporary and disappears when the container stops.
+
 Full setup, environment configuration, and production deployment steps live in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Documentation
