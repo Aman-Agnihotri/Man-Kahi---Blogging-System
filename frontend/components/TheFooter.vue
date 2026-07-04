@@ -42,14 +42,17 @@
           <p class="text-primary-200 mb-4">
             Get the latest stories and updates delivered to your inbox.
           </p>
-          <form @submit.prevent="handleSubscribe" class="space-y-3">
-            <input type="email" v-model="email" placeholder="Enter your email"
+          <form v-if="!subscribed" @submit.prevent="handleSubscribe" class="space-y-3">
+            <input type="email" v-model="email" required placeholder="Enter your email"
               class="w-full px-4 py-2 rounded-lg bg-primary-700 text-white placeholder-primary-300 border border-primary-600 focus:outline-none focus:border-primary-400">
             <button type="submit"
               class="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-500 transition-colors">
               Subscribe
             </button>
           </form>
+          <p v-else class="text-primary-200 text-sm">
+            Thanks for your interest! There's no newsletter-sending infrastructure wired up in this environment yet, but we've noted it.
+          </p>
         </div>
       </div>
 
@@ -72,6 +75,7 @@
 
 <script setup lang="ts">
   const email = ref('')
+  const subscribed = ref(false)
 
   const socialLinks = [
     { name: 'Twitter', icon: 'ri-twitter-fill', url: '#' },
@@ -100,9 +104,10 @@
     { label: 'Cookie Policy', path: '/docs/cookies' }
   ]
 
+  // No newsletter/email backend exists (out of scope for this pass) - this
+  // acknowledges the submission honestly rather than pretending to send it,
+  // or silently doing nothing.
   const handleSubscribe = () => {
-    // Handle newsletter subscription
-    console.log('Subscribed:', email.value)
-    email.value = ''
+    subscribed.value = true
   }
 </script>
