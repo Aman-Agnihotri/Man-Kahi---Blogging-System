@@ -1,6 +1,6 @@
 # ManKahi Professionalization Action Plan
 
-Last updated: 2026-07-02
+Last updated: 2026-07-04
 
 ## Goal
 
@@ -28,11 +28,11 @@ Turn ManKahi into a professional-grade blogging platform that runs well on a hom
 - [x] Cloudflare Tunnel path has been proven for laptop demo exposure.
 - [ ] Production Docker Compose is reliable and locked down.
 - [x] Frontend pages are connected to real backend data.
-  - Core loop pages (home, explore/search, post view, write/edit, dashboard, stories, admin moderation) are fully wired. Categories browsing and public profile pages remain dummy - deliberately deferred, see Phase 3 notes.
+  - Core loop pages (home, explore/search, post view, write/edit, dashboard, stories, admin moderation) are fully wired. Categories browsing and public profile pages were deferred in the original Phase 3 pass but are now real too (Phase 7): both use live backend data, and `content/write.vue` has a real category picker plus an admin category-management UI.
 - [x] Backend API contracts are cleaned up.
-  - Auth, blog, analytics, and admin services all typecheck and pass their full test suites independently (verified 2026-07-02). Note: none of the four services nor `backend/shared` had ever had `npm install`/`prisma generate` run outside Docker — see the new `backend/shared/scripts/generate-client.js` and each service's `prisma:generate`/`pretest` scripts, now required for local (non-Docker) dev and CI.
+  - Auth, blog, analytics, and admin services all typecheck and pass their full test suites independently. Note: none of the four services nor `backend/shared` had ever had `npm install`/`prisma generate` run outside Docker — see the new `backend/shared/scripts/generate-client.js` and each service's `prisma:generate`/`pretest` scripts, now required for local (non-Docker) dev and CI.
 - [x] Tests cover core user and admin workflows.
-  - 127 backend tests passing (`npm test` from repo root), including regression coverage for every live-verification bug fixed in this pass. See the Definition of Done section for the full list of what was found and fixed by actually running the stack.
+  - 293 backend tests passing (`npm test` from repo root), including regression coverage for every live-verification bug fixed across every pass (Phases 1-4, 7). See the Definition of Done section and Phase 7/8 notes for what was found and fixed by actually running the stack.
 - [x] README links to product, architecture, deployment, and action-plan docs.
 
 ## Architecture Direction
@@ -289,18 +289,40 @@ Acceptance criteria:
 
 Purpose: make the app safe enough for public demo and single-server use.
 
-- [ ] Add strong `.env` examples without real secrets.
-- [ ] Verify `.gitignore` excludes all real env and secret files.
-- [ ] Ensure all services use `helmet` and CORS intentionally.
-- [ ] Tighten CORS for production domain.
-- [ ] Review nginx security headers.
-- [ ] Add request body size limits appropriate to uploads.
-- [ ] Add rate limits that do not break normal use.
-- [ ] Add password reset flow.
-- [ ] Add email verification or explicitly mark it future.
-- [ ] Add basic account/profile update validation.
-- [ ] Add admin-only moderation protections.
-- [ ] Add dependency audit workflow.
+Audited helmet/CORS/rate-limiting/headers/env-hygiene across all 4
+services and nginx before changing anything. Two real, previously-live
+gaps stood out and are now fixed (see notes below): a reflected-origin
+CORS misconfiguration at the nginx layer, and every service's app-layer
+`cors()` silently defaulting to permissive with `CORS_ORIGIN` defined in
+every `.env.example` but never actually read. Fixing the app-layer CORS
+check then surfaced two more real bugs in the existing dev env values
+(`CORS_ORIGIN` and `FRONTEND_URL` both pointed at the wrong host for this
+nginx-fronted architecture) - see the "fix(phase-4)" commit.
+
+- [x] Add strong `.env` examples without real secrets.
+  - Audited all 8 tracked `.env.example` files - all placeholder values, no real secrets. Fixed one weak placeholder (`admin-service`'s `JWT_SECRET=your-secret-key` didn't meet the other services' documented 32-char minimum).
+- [x] Verify `.gitignore` excludes all real env and secret files.
+  - Already correct: root `.gitignore` has `.env` / `.env.*` / `!.env.example` / `!.env.*.example`, plus redundant per-service `.gitignore` entries. Verified live with `git check-ignore -v docker/compose/.env.development`.
+- [x] Ensure all services use `helmet` and CORS intentionally.
+  - `helmet()` was already applied everywhere (default config). CORS was not intentional: added `backend/shared/config/cors.ts` (`buildCorsOptions`), wired into all 4 servers - `CORS_ORIGIN` (comma-separated) is enforced in any non-development `NODE_ENV`; unset now fails closed instead of the previous bare `cors()` reflecting every origin.
+- [x] Tighten CORS for production domain.
+  - App layer: `CORS_ORIGIN` allowlist (above). Gateway layer: nginx's `cors.conf` previously reflected `$http_origin` back verbatim with `Access-Control-Allow-Credentials: true` - the classic reflected-origin+credentials misconfiguration. Replaced with an nginx `map`-based allowlist (`docker/nginx/nginx.conf`) - localhost/127.0.0.1 for dev, production domains need a direct edit (documented in `docs/DEPLOYMENT.md`, since this nginx setup isn't templated from env vars). Live-verified: an allowed origin gets `Access-Control-Allow-Origin` back, an arbitrary origin gets nothing, and the browser correctly blocks it.
+- [x] Review nginx security headers.
+  - Tightened the CSP from a near-permissive `default-src 'self' http: https: data: blob: 'unsafe-inline'` to an explicit per-directive policy, and added a `Permissions-Policy` header. Left `X-Frame-Options`/`X-Content-Type-Options`/`Strict-Transport-Security` as already-present and correct.
+- [x] Add request body size limits appropriate to uploads.
+  - Every service's `express.json()` was relying on Express's implicit 100kb default. Set explicit limits: 256kb for auth/analytics/admin, 1mb for blog-service (post content can be long markdown). Uploads themselves already had multer-level `MAX_FILE_SIZE`/`MAX_AVATAR_FILE_SIZE` limits and nginx's `client_max_body_size 20M`.
+- [x] Add rate limits that do not break normal use.
+  - Reviewed all 4 services - already substantially implemented (a custom Redis-backed limiter in `backend/shared/middlewares/rateLimit`, plus per-route options via `authenticate({ rateLimit: {...} })`). auth-service has a strict service-wide 5-per-15-min gate that also covers the new forgot/reset-password routes. Removed the unused `express-rate-limit` npm dependency (listed in 4 `package.json`s, never actually imported - all real limiting goes through the custom middleware).
+- [x] Add password reset flow.
+  - `POST /api/auth/forgot-password` + `POST /api/auth/reset-password`. Always returns the same generic response regardless of whether the email matches an account (no enumeration). Only a SHA-256 hash of the reset token is ever persisted (`User.resetPasswordTokenHash`), 1-hour expiry. No email provider is wired up (see next item), so `backend/auth-service/src/utils/mailer.ts` is a clearly-marked dev-only stub that logs the reset link - live-verified end-to-end (request reset, grab the logged link, set new password, log in with it). Also fixed the login page's "Forgot your password?" link, which pointed at a bare `#`.
+- [x] Add email verification or explicitly mark it future.
+  - Explicitly deferred: `User.emailVerified` exists in the schema but nothing ever sets it, and no email transport exists anywhere in the codebase (confirmed via full-repo search - no nodemailer/SES/SendGrid/SMTP config). Building real verification needs the same email-provider decision the password-reset flow's `mailer.ts` stub is waiting on; tracked as one future item instead of two.
+- [x] Add basic account/profile update validation.
+  - Reviewed `profile.controller.ts` (bio max 500 chars, social links validated as proper URLs, notification prefs validated as a boolean record, account deletion requires password confirmation) and `admin.controller.ts` (suspend requires a min-5-char reason, role assignment validates `roleId`, blog IDs pattern-validated, report status/action-taken validated) - both already solid from the Phase 7 pass, no gaps found.
+- [x] Add admin-only moderation protections.
+  - Reviewed all 4 services. `admin-service` gates its entire router with `router.use(adminMiddleware)` (`authenticate({roles:['admin']})`) before any route is registered. `blog-service`'s admin-only routes (`/:id/moderate`, `/:id/visibility`, category CRUD) independently re-verify the caller's own JWT role rather than trusting that the request came from admin-service - admin-service forwards the caller's real bearer token (`authHeaders()`), so this is genuine defense-in-depth, not just a single choke point.
+- [x] Add dependency audit workflow.
+  - Added an `audit` npm script (`npm audit --audit-level=high`) to every service and a root `npm run audit` that chains them. Ran `npm audit fix` (non-breaking only) across the backend - shared/auth/blog now report 0 vulnerabilities. The frontend's own audit still shows findings, all traced to dev-only build tooling (eslint/picomatch/minimatch glob-matching internals, never shipped to the browser) - deliberately not forced, since doing so broke the Nuxt dev server via an unrelated major-version jump with zero net reduction in reported vulnerabilities.
 
 Acceptance criteria:
 
