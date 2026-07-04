@@ -4,6 +4,7 @@ import { buildCorsOptions } from '@shared/config/cors';
 import helmet from 'helmet';
 import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
+import { redactSensitiveFields } from '@shared/utils/redact';
 import { setupSwagger } from '@shared/config/swagger';
 import adminRoutes from '@routes/admin.routes';
 import dotenv from 'dotenv';
@@ -63,11 +64,12 @@ app.use((req, res, next) => {
   const requestId = req.headers['x-request-id'] || Math.random().toString(36).substring(7);
   const startTime = process.hrtime();
   
-  logger.info(`[${requestId}] Incoming ${req.method} ${req.url}`, {
-    headers: req.headers,
+  logger.info({
+    reqId: requestId,
+    headers: redactSensitiveFields(req.headers),
     query: req.query,
-    body: req.body,
-  });
+    body: redactSensitiveFields(req.body),
+  }, `[${requestId}] Incoming ${req.method} ${req.url}`);
 
   // Track request metrics
   const requestMetrics = metrics.trackResource('admin_request', 'count');
@@ -81,11 +83,12 @@ app.use((req, res, next) => {
     const responseMetrics = metrics.trackResource('admin_response', 'latency');
     responseMetrics.setUsage(duration, 'ms');
 
-    logger.info(`[${requestId}] Completed ${req.method} ${req.url}`, {
+    logger.info({
+      reqId: requestId,
       statusCode: res.statusCode,
       duration: `${duration.toFixed(2)}ms`,
       headers: res.getHeaders()
-    });
+    }, `[${requestId}] Completed ${req.method} ${req.url}`);
   });
 
   next();

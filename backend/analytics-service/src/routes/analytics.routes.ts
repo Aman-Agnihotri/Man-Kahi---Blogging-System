@@ -4,6 +4,7 @@ import { authenticate, rateLimit } from '@shared/middlewares/auth';
 import type { Request, Response, NextFunction, RequestHandler } from 'express-serve-static-core';
 import { trackEventProcessing, trackAggregation } from '@middlewares/metrics.middleware';
 import logger from '@shared/utils/logger';
+import { redactSensitiveFields } from '@shared/utils/redact';
 
 // Enhanced request logging middleware
 const logRequest = (routeName: string) => {
@@ -11,23 +12,25 @@ const logRequest = (routeName: string) => {
     const start = process.hrtime();
     const requestId = req.headers['x-request-id'] || Math.random().toString(36).substring(7);
     
-    logger.info(`[${requestId}] Starting ${routeName}`, {
+    logger.info({
+      reqId: requestId,
       method: req.method,
       path: req.path,
       query: req.query,
-      body: req.body,
-      headers: req.headers
-    });
+      body: redactSensitiveFields(req.body),
+      headers: redactSensitiveFields(req.headers)
+    }, `[${requestId}] Starting ${routeName}`);
 
     res.on('finish', () => {
       const [seconds, nanoseconds] = process.hrtime(start);
       const duration = seconds * 1000 + nanoseconds / 1000000;
-      
-      logger.info(`[${requestId}] Completed ${routeName}`, {
+
+      logger.info({
+        reqId: requestId,
         duration: `${duration.toFixed(2)}ms`,
         statusCode: res.statusCode,
         headers: res.getHeaders()
-      });
+      }, `[${requestId}] Completed ${routeName}`);
     });
 
     next();
@@ -255,11 +258,11 @@ router.post(
   logRequest('Track Event'),
   trackEventProcessing('track_event'),
   (req, res, next) => {
-    logger.debug('Processing event tracking request', {
+    logger.debug({
       blogId: req.body.blogId,
       type: req.body.type,
       deviceId: req.body.deviceId
-    });
+    }, 'Processing event tracking request');
     analyticsController.trackEvent(req, res).catch(next);
   }
 );
@@ -309,11 +312,11 @@ router.post(
   logRequest('Track Progress'),
   trackEventProcessing('track_progress'),
   (req, res, next) => {
-    logger.debug('Processing progress tracking request', {
+    logger.debug({
       blogId: req.body.blogId,
       progress: req.body.progress,
       deviceId: req.body.deviceId
-    });
+    }, 'Processing progress tracking request');
     analyticsController.trackProgress(req, res).catch(next);
   }
 );
@@ -363,10 +366,10 @@ router.post(
   logRequest('Track Link'),
   trackEventProcessing('track_link'),
   (req, res, next) => {
-    logger.debug('Processing link tracking request', {
+    logger.debug({
       blogId: req.body.blogId,
       url: req.body.url
-    });
+    }, 'Processing link tracking request');
     analyticsController.trackLink(req, res).catch(next);
   }
 );
@@ -435,11 +438,11 @@ router.get(
   logRequest('Get Blog Analytics'),
   trackAggregation('get_blog_analytics'),
   (req, res, next) => {
-    logger.debug('Processing blog analytics request', {
+    logger.debug({
       blogId: req.params['blogId'],
       timeframe: req.query['timeframe'],
       userId: (req as any).user?.id
-    });
+    }, 'Processing blog analytics request');
     analyticsController.getBlogAnalytics(req, res).catch(next);
   }
 );

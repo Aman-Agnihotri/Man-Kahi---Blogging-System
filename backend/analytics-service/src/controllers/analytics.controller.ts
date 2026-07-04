@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
+import { redactSensitiveFields } from '@shared/utils/redact';
 import { analytics as analyticsRedis } from '@shared/config/redis';
 import crypto from 'crypto';
 import { metrics, analyticsMetrics } from '@config/metrics';
@@ -118,7 +119,7 @@ export class AnalyticsController {
 
     try {
       const startTime = process.hrtime();
-      logger.debug(`[${requestId}] Validating event input`, { body: req.body });
+      logger.debug({ body: redactSensitiveFields(req.body) }, `[${requestId}] Validating event input`);
       const validatedInput = trackEventSchema.parse(req.body);
       logger.debug(`[${requestId}] Input validation successful`);
       const { blogId, type, metadata, deviceId, path } = validatedInput;
@@ -187,12 +188,12 @@ export class AnalyticsController {
       const errorType = error instanceof z.ZodError ? 'validation' : 'processing';
       const errorMessage = error instanceof Error ? error.message : 'unknown';
 
-      logger.error(`[${requestId}] Error tracking event:`, {
+      logger.error({
         errorType,
         errorMessage,
         error: error instanceof Error ? error.stack : String(error),
-        body: req.body
-      });
+        body: redactSensitiveFields(req.body)
+      }, `[${requestId}] Error tracking event:`);
 
       metrics.trackError(
         errorType,

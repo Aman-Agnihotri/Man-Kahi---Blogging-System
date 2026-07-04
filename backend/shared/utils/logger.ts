@@ -1,3 +1,9 @@
+// Pino only merges a structured-fields object into the log record when it is
+// the FIRST argument: logger.info({ reqId, body }, 'message'). Passing the
+// object second - logger.info('message', { reqId, body }) - is silently
+// dropped (no error, no warning); pino treats a string first argument as a
+// printf-style message and ignores trailing args that don't fill a
+// placeholder. Every call site in this codebase must use object-first form.
 import pino from 'pino';
 import pinoPretty from 'pino-pretty';
 import createRotatingWriteStream from 'pino-rotating-file-stream';
@@ -63,7 +69,14 @@ const logger = (() => {
         return pino(
             {
                 level: 'debug',
-                timestamp: pino.stdTimeFunctions.isoTime
+                timestamp: pino.stdTimeFunctions.isoTime,
+                // Every log line carries which service emitted it - without
+                // this, `docker compose logs` (which does prefix by
+                // container name) is the only way to tell services apart,
+                // and any centralized/aggregated log view loses that
+                // entirely. SERVICE_NAME is set per-service in
+                // docker-compose.yml.
+                base: { service: process.env['SERVICE_NAME'] ?? 'unknown-service' }
             },
             pino.multistream(streams)
         );

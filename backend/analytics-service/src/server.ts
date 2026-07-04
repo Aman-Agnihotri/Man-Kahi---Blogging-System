@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import path from 'path';
 import { prisma } from '@shared/utils/prismaClient';
 import logger from '@shared/utils/logger';
+import { redactSensitiveFields } from '@shared/utils/redact';
 import { setupSwagger } from '@shared/config/swagger';
 import analyticsRoutes from '@routes/analytics.routes';
 import { redis } from '@shared/config/redis';
@@ -71,11 +72,13 @@ app.use(express.json({ limit: '256kb' })); // explicit limit, was relying on Exp
 logger.info('JSON body parser configured');
 
 app.use((req: Request, res: Response, next: NextFunction) => {
-  logger.debug(`${req.method} ${req.url}`, {
-    headers: req.headers,
+  const requestId = req.headers['x-request-id'] || Math.random().toString(36).substring(7);
+  logger.debug({
+    reqId: requestId,
+    headers: redactSensitiveFields(req.headers),
     query: req.query,
-    body: req.body,
-  });
+    body: redactSensitiveFields(req.body),
+  }, `[${requestId}] ${req.method} ${req.url}`);
   next();
 });
 logger.info('Request logging middleware configured');

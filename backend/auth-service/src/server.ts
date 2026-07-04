@@ -6,6 +6,7 @@ import dotenv from 'dotenv'
 import session from 'express-session'
 import { RedisStore } from 'connect-redis'
 import logger from '@shared/utils/logger'
+import { redactSensitiveFields } from '@shared/utils/redact'
 import authRoutes from '@routes/auth.routes'
 import { oauthRoutes } from '@routes/oauth.routes'
 import profileRoutes from '@routes/profile.routes'
@@ -81,12 +82,13 @@ app.use(express.json({ limit: '256kb' })) // Parse JSON bodies - explicit limit,
 app.use((req, res, next) => {
   const requestId = req.headers['x-request-id'] || Math.random().toString(36).substring(7);
   const startTime = process.hrtime();
-  
-  logger.info(`[${requestId}] Incoming ${req.method} ${req.url}`, {
-    headers: req.headers,
+
+  logger.info({
+    reqId: requestId,
+    headers: redactSensitiveFields(req.headers),
     query: req.query,
-    body: req.body,
-  });
+    body: redactSensitiveFields(req.body),
+  }, `[${requestId}] Incoming ${req.method} ${req.url}`);
 
   // Track active sessions
   const sessionTracker = metrics.trackResource('sessions', 'active');
@@ -96,11 +98,12 @@ app.use((req, res, next) => {
     const [seconds, nanoseconds] = process.hrtime(startTime);
     const duration = seconds * 1000 + nanoseconds / 1000000;
 
-    logger.info(`[${requestId}] Completed ${req.method} ${req.url}`, {
+    logger.info({
+      reqId: requestId,
       statusCode: res.statusCode,
       duration: `${duration.toFixed(2)}ms`,
       headers: res.getHeaders()
-    });
+    }, `[${requestId}] Completed ${req.method} ${req.url}`);
   });
 
   next();

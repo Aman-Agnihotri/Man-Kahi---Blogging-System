@@ -6,6 +6,7 @@ import path from 'path'
 import fs from 'fs'
 import dotenv from 'dotenv'
 import logger from '@shared/utils/logger'
+import { redactSensitiveFields } from '@shared/utils/redact'
 import { prisma } from '@shared/utils/prismaClient'
 import { redis } from '@shared/config/redis'
 import { setupSwagger } from '@shared/config/swagger'
@@ -82,11 +83,12 @@ app.use((req, res, next) => {
   const requestId = req.headers['x-request-id'] || Math.random().toString(36).substring(7);
   const startTime = process.hrtime();
   
-  logger.info(`[${requestId}] Incoming ${req.method} ${req.url}`, {
-    headers: req.headers,
+  logger.info({
+    reqId: requestId,
+    headers: redactSensitiveFields(req.headers),
     query: req.query,
-    body: req.body,
-  });
+    body: redactSensitiveFields(req.body),
+  }, `[${requestId}] Incoming ${req.method} ${req.url}`);
 
   // Track request size
   const requestSize = req.headers['content-length'] ? parseInt(req.headers['content-length'], 10) : 0;
@@ -101,12 +103,13 @@ app.use((req, res, next) => {
     const responseMetrics = metrics.trackResource('response', 'time');
     responseMetrics.setUsage(duration, 'ms');
 
-    logger.info(`[${requestId}] Completed ${req.method} ${req.url}`, {
+    logger.info({
+      reqId: requestId,
       statusCode: res.statusCode,
       duration: `${duration.toFixed(2)}ms`,
       responseSize: res.getHeader('content-length'),
       headers: res.getHeaders()
-    });
+    }, `[${requestId}] Completed ${req.method} ${req.url}`);
   });
 
   next();
