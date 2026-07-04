@@ -130,6 +130,6 @@ describe('AdminController - Delete Blog (moderation takedown)', () => {
       message: 'Internal server error',
       details: 'Failed to delete blog'
     });
-    expect(logger.error).toHaveBeenCalledWith('Error deleting blog (moderation):', unexpectedError);
+    expect(logger.error).toHaveBeenCalledWith({ err: unexpectedError }, 'Error deleting blog (moderation)');
   });
 });

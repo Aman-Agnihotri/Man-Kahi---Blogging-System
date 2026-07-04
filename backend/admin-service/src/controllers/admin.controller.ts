@@ -160,7 +160,7 @@ export class AdminController {
       });
     } catch (error) {
       trackAdminError('list_blogs_error');
-      logger.error('Error listing blogs for moderation:', error);
+      logger.error({ err: error }, 'Error listing blogs for moderation');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to list blogs'
@@ -215,7 +215,7 @@ export class AdminController {
         analytics: analyticsResponse.data
       });
     } catch (error) {
-      logger.error('Error fetching dashboard stats:', error);
+      logger.error({ err: error }, 'Error fetching dashboard stats');
       if (error instanceof z.ZodError) {
         trackAdminError('dashboard_stats_validation_error');
         return res.status(400).json({
@@ -251,7 +251,7 @@ export class AdminController {
       }
       
       trackAdminError('dashboard_stats_fetch_error');
-      logger.error('Unexpected error fetching dashboard stats:', error);
+      logger.error({ err: error }, 'Unexpected error fetching dashboard stats');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch dashboard statistics'
@@ -281,7 +281,7 @@ export class AdminController {
 
       return res.json(analyticsResponse.data);
     } catch (error) {
-      logger.error('Error fetching blog analytics:', error);
+      logger.error({ err: error }, 'Error fetching blog analytics');
       if (error instanceof z.ZodError) {
         trackAdminError('blog_analytics_validation_error');
         return res.status(400).json({
@@ -317,7 +317,7 @@ export class AdminController {
       }
       
       trackAdminError('blog_analytics_fetch_error');
-      logger.error('Unexpected error fetching blog analytics:', error);
+      logger.error({ err: error }, 'Unexpected error fetching blog analytics');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch blog analytics'
@@ -371,7 +371,7 @@ export class AdminController {
         blogs: blogAnalytics
       });
     } catch (error) {
-      logger.error('Error fetching user analytics:', error);
+      logger.error({ err: error }, 'Error fetching user analytics');
       if (error instanceof z.ZodError) {
         trackAdminError('user_analytics_validation_error');
         return res.status(400).json({
@@ -414,7 +414,7 @@ export class AdminController {
       }
       
       trackAdminError('user_analytics_fetch_error');
-      logger.error('Unexpected error fetching user analytics:', error);
+      logger.error({ err: error }, 'Unexpected error fetching user analytics');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch user analytics'
@@ -490,7 +490,7 @@ export class AdminController {
 
       return res.json(enrichedData);
     } catch (error) {
-      logger.error('Error fetching trending content:', error);
+      logger.error({ err: error }, 'Error fetching trending content');
       if (error instanceof z.ZodError) {
         trackAdminError('trending_content_validation_error');
         return res.status(400).json({ error: 'Invalid time parameters' });
@@ -559,7 +559,7 @@ export class AdminController {
 
       return res.json(tagAnalytics);
     } catch (error) {
-      logger.error('Error fetching tag analytics:', error);
+      logger.error({ err: error }, 'Error fetching tag analytics');
       if (error instanceof z.ZodError) {
         trackAdminError('tag_analytics_validation_error');
         return res.status(400).json({
@@ -595,7 +595,7 @@ export class AdminController {
       }
       
       trackAdminError('tag_analytics_fetch_error');
-      logger.error('Unexpected error fetching tag analytics:', error);
+      logger.error({ err: error }, 'Unexpected error fetching tag analytics');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch tag analytics'
@@ -664,7 +664,7 @@ export class AdminController {
 
       return res.json(response.data);
     } catch (error) {
-      logger.error('Error updating blog visibility:', error);
+      logger.error({ err: error }, 'Error updating blog visibility');
 
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 404) {
@@ -707,7 +707,7 @@ export class AdminController {
       }
 
       trackAdminError('blog_visibility_update_error');
-      logger.error('Unexpected error updating blog visibility:', error);
+      logger.error({ err: error }, 'Unexpected error updating blog visibility');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to update blog visibility'
@@ -755,7 +755,7 @@ export class AdminController {
 
       return res.json(response.data);
     } catch (error) {
-      logger.error('Error deleting blog (moderation):', error);
+      logger.error({ err: error }, 'Error deleting blog (moderation)');
 
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 404) {
@@ -788,7 +788,7 @@ export class AdminController {
       }
 
       trackAdminError('blog_delete_error');
-      logger.error('Unexpected error deleting blog:', error);
+      logger.error({ err: error }, 'Unexpected error deleting blog');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to delete blog'
@@ -866,7 +866,7 @@ export class AdminController {
       }
 
       trackAdminError('list_users_error');
-      logger.error('Error listing users for management:', error);
+      logger.error({ err: error }, 'Error listing users for management');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to list users',
@@ -930,7 +930,7 @@ export class AdminController {
       }
 
       trackAdminError('suspend_user_error');
-      logger.error('Error suspending user:', error);
+      logger.error({ err: error }, 'Error suspending user');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to suspend user',
@@ -981,7 +981,7 @@ export class AdminController {
       return res.json(updated);
     } catch (error) {
       trackAdminError('unsuspend_user_error');
-      logger.error('Error unsuspending user:', error);
+      logger.error({ err: error }, 'Error unsuspending user');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to unsuspend user',
@@ -1020,7 +1020,7 @@ export class AdminController {
       return res.json(shaped);
     } catch (error) {
       trackAdminError('list_roles_error');
-      logger.error('Error listing roles:', error);
+      logger.error({ err: error }, 'Error listing roles');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to list roles',
@@ -1096,7 +1096,7 @@ export class AdminController {
       }
 
       trackAdminError('assign_role_error');
-      logger.error('Error assigning role to user:', error);
+      logger.error({ err: error }, 'Error assigning role to user');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to assign role',
@@ -1132,7 +1132,7 @@ export class AdminController {
       return res.status(200).json({ success: true });
     } catch (error) {
       trackAdminError('revoke_role_error');
-      logger.error('Error revoking role from user:', error);
+      logger.error({ err: error }, 'Error revoking role from user');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to revoke role',
@@ -1184,7 +1184,7 @@ export class AdminController {
       }
 
       trackAdminError('list_reports_error');
-      logger.error('Error listing reports:', error);
+      logger.error({ err: error }, 'Error listing reports');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to list reports',
@@ -1242,7 +1242,7 @@ export class AdminController {
       }
 
       trackAdminError('resolve_report_error');
-      logger.error('Error resolving report:', error);
+      logger.error({ err: error }, 'Error resolving report');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to resolve report',
@@ -1288,7 +1288,7 @@ export class AdminController {
       return res.json(updated);
     } catch (error) {
       trackAdminError('dismiss_report_error');
-      logger.error('Error dismissing report:', error);
+      logger.error({ err: error }, 'Error dismissing report');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to dismiss report',
@@ -1332,7 +1332,7 @@ export class AdminController {
       });
     } catch (error) {
       trackAdminError('list_audit_log_error');
-      logger.error('Error listing audit log:', error);
+      logger.error({ err: error }, 'Error listing audit log');
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to list audit log',

@@ -181,8 +181,8 @@ describe('AdminController - User Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('analytics_service_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching user analytics:',
-        axiosError
+        { err: axiosError },
+        'Error fetching user analytics'
       );
     });
 
@@ -201,8 +201,8 @@ describe('AdminController - User Analytics', () => {
         details: 'User has no published blogs to analyze'
       });
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching user analytics:',
-        notFoundError
+        { err: notFoundError },
+        'Error fetching user analytics'
       );
     });
 
@@ -226,8 +226,8 @@ describe('AdminController - User Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('user_analytics_validation_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching user analytics:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching user analytics'
       );
     });
 
@@ -251,8 +251,8 @@ describe('AdminController - User Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('user_analytics_validation_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching user analytics:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching user analytics'
       );
     });
 
@@ -272,12 +272,12 @@ describe('AdminController - User Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('user_analytics_fetch_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching user analytics:',
-        dbError
+        { err: dbError },
+        'Error fetching user analytics'
       );
       expect(logger.error).toHaveBeenCalledWith(
-        'Unexpected error fetching user analytics:',
-        dbError
+        { err: dbError },
+        'Unexpected error fetching user analytics'
       );
     });
 
@@ -299,8 +299,8 @@ describe('AdminController - User Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('user_analytics_fetch_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching user analytics:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching user analytics'
       );
     });
 
@@ -323,8 +323,8 @@ describe('AdminController - User Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('analytics_service_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching user analytics:',
-        axiosError
+        { err: axiosError },
+        'Error fetching user analytics'
       );
     });
   });

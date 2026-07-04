@@ -101,8 +101,8 @@ describe('AdminController - Blog Visibility', () => {
     });
     expect(trackAdminError).toHaveBeenCalledWith('blog_not_found_error');
     expect(logger.error).toHaveBeenCalledWith(
-      'Error updating blog visibility:',
-      notFoundError
+      { err: notFoundError },
+      'Error updating blog visibility'
     );
   });
 
@@ -141,8 +141,8 @@ describe('AdminController - Blog Visibility', () => {
       details: 'The visibility value must be true or false'
     });
     expect(logger.error).toHaveBeenCalledWith(
-      'Error updating blog visibility:',
-      expect.any(Error)
+      { err: expect.any(Error) },
+      'Error updating blog visibility'
     );
   });
 
@@ -165,8 +165,8 @@ describe('AdminController - Blog Visibility', () => {
     });
     expect(trackAdminError).toHaveBeenCalledWith('blog_visibility_update_error');
     expect(logger.error).toHaveBeenCalledWith(
-      'Error updating blog visibility:',
-      expect.any(Error)
+      { err: expect.any(Error) },
+      'Error updating blog visibility'
     );
   });
 
@@ -189,8 +189,8 @@ describe('AdminController - Blog Visibility', () => {
     });
     expect(trackAdminError).toHaveBeenCalledWith('blog_visibility_update_error');
     expect(logger.error).toHaveBeenCalledWith(
-      'Error updating blog visibility:',
-      expect.any(Error)
+      { err: expect.any(Error) },
+      'Error updating blog visibility'
     );
   });
 
@@ -216,8 +216,8 @@ describe('AdminController - Blog Visibility', () => {
     });
     expect(trackAdminError).toHaveBeenCalledWith('blog_visibility_update_error');
     expect(logger.error).toHaveBeenCalledWith(
-      'Error updating blog visibility:',
-      expect.any(Error)
+      { err: expect.any(Error) },
+      'Error updating blog visibility'
     );
   });
 
@@ -237,8 +237,8 @@ describe('AdminController - Blog Visibility', () => {
     });
     expect(trackAdminError).toHaveBeenCalledWith('blog_visibility_update_error');
     expect(logger.error).toHaveBeenCalledWith(
-      'Error updating blog visibility:',
-      unexpectedError
+      { err: unexpectedError },
+      'Error updating blog visibility'
     );
   });
 });

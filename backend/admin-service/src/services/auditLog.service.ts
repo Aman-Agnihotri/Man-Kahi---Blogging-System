@@ -30,6 +30,6 @@ export async function recordAuditLog(
       },
     });
   } catch (error) {
-    logger.error('Failed to record audit log entry:', error);
+    logger.error({ err: error }, 'Failed to record audit log entry');
   }
 }

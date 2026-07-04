@@ -199,8 +199,8 @@ describe('AdminController - Tag Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('analytics_service_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching tag analytics:',
-        axiosError
+        { err: axiosError },
+        'Error fetching tag analytics'
       );
     });
 
@@ -220,12 +220,12 @@ describe('AdminController - Tag Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('tag_analytics_fetch_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching tag analytics:',
-        dbError
+        { err: dbError },
+        'Error fetching tag analytics'
       );
       expect(logger.error).toHaveBeenCalledWith(
-        'Unexpected error fetching tag analytics:',
-        dbError
+        { err: dbError },
+        'Unexpected error fetching tag analytics'
       );
     });
 
@@ -249,8 +249,8 @@ describe('AdminController - Tag Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('tag_analytics_validation_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching tag analytics:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching tag analytics'
       );
     });
 
@@ -274,8 +274,8 @@ describe('AdminController - Tag Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('tag_analytics_validation_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching tag analytics:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching tag analytics'
       );
     });
 

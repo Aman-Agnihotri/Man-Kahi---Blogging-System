@@ -237,8 +237,8 @@ describe('AdminController - Trending Content', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('analytics_service_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching trending content:',
-        axiosError
+        { err: axiosError },
+        'Error fetching trending content'
       );
     });
 
@@ -258,8 +258,8 @@ describe('AdminController - Trending Content', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('trending_content_fetch_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching trending content:',
-        dbError
+        { err: dbError },
+        'Error fetching trending content'
       );
     });
 
@@ -309,13 +309,13 @@ describe('AdminController - Trending Content', () => {
       );
 
       expect(mockResponse.status).toHaveBeenCalledWith(400);
-      expect(jsonMock).toHaveBeenCalledWith({ 
-        error: 'Invalid time parameters' 
+      expect(jsonMock).toHaveBeenCalledWith({
+        error: 'Invalid time parameters'
       });
       expect(trackAdminError).toHaveBeenCalledWith('trending_content_validation_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching trending content:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching trending content'
       );
     });
 
@@ -335,8 +335,8 @@ describe('AdminController - Trending Content', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('trending_content_validation_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching trending content:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching trending content'
       );
     });
   });

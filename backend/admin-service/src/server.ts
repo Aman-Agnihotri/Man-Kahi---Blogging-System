@@ -15,12 +15,12 @@ import { createHealthCheck } from '@shared/middlewares/health';
 
 // Enhanced startup logging
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error({ promise, reason }, 'Unhandled Rejection');
   trackError('process', 'unhandled_rejection', 'admin-service');
 });
 
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
+  logger.error({ err: error }, 'Uncaught Exception');
   trackError('process', 'uncaught_exception', 'admin-service');
 });
 
@@ -136,7 +136,7 @@ app.use('/api/admin', adminRoutes);
 
 // Error handling
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error('Unhandled error:', err);
+  logger.error({ err }, 'Unhandled error');
   trackError('server', 'unhandled_error', 'admin-service');
   
   const correlationId = (req.headers['x-correlation-id'] || 'unknown').toString();
@@ -156,7 +156,7 @@ const shutdown = async () => {
     dbTimer.end();
     process.exit(0);
   } catch (error) {
-    logger.error('Error during shutdown:', error);
+    logger.error({ err: error }, 'Error during shutdown');
     trackError('server', 'shutdown_error', 'admin-service');
     process.exit(1);
   }
@@ -168,7 +168,7 @@ process.on('SIGINT', shutdown);
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason: any) => {
-  logger.error('Unhandled Promise rejection:', reason);
+  logger.error({ reason }, 'Unhandled Promise rejection');
   trackError('server', 'unhandled_rejection', 'admin-service');
 });
 
@@ -187,7 +187,7 @@ const startServer = async () => {
       logger.info(`Admin service running on port ${PORT}`);
     });
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error({ err: error }, 'Failed to start server');
     trackError('server', 'startup_error', 'admin-service');
     process.exit(1);
   }

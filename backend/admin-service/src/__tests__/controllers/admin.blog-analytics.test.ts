@@ -139,8 +139,8 @@ describe('AdminController - Blog Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('blog_analytics_validation_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching blog analytics:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching blog analytics'
       );
     });
 
@@ -161,8 +161,8 @@ describe('AdminController - Blog Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('analytics_service_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching blog analytics:',
-        axiosError
+        { err: axiosError },
+        'Error fetching blog analytics'
       );
     });
 
@@ -181,8 +181,8 @@ describe('AdminController - Blog Analytics', () => {
         details: 'The specified blog does not exist'
       });
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching blog analytics:',
-        notFoundError
+        { err: notFoundError },
+        'Error fetching blog analytics'
       );
     });
 
@@ -206,8 +206,8 @@ describe('AdminController - Blog Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('blog_analytics_validation_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching blog analytics:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching blog analytics'
       );
     });
 
@@ -227,12 +227,12 @@ describe('AdminController - Blog Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('blog_analytics_fetch_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching blog analytics:',
-        unexpectedError
+        { err: unexpectedError },
+        'Error fetching blog analytics'
       );
       expect(logger.error).toHaveBeenCalledWith(
-        'Unexpected error fetching blog analytics:',
-        unexpectedError
+        { err: unexpectedError },
+        'Unexpected error fetching blog analytics'
       );
     });
 
@@ -254,8 +254,8 @@ describe('AdminController - Blog Analytics', () => {
       });
       expect(trackAdminError).toHaveBeenCalledWith('blog_analytics_fetch_error');
       expect(logger.error).toHaveBeenCalledWith(
-        'Error fetching blog analytics:',
-        expect.any(Error)
+        { err: expect.any(Error) },
+        'Error fetching blog analytics'
       );
     });
 
