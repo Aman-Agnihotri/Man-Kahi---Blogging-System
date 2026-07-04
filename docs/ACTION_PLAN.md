@@ -358,16 +358,26 @@ checklist items but are worth calling out:
    messageString)`). This was caught by live-testing inside a running
    container (`docker exec ... node -e "..."`), not by static review -
    the original code looked reasonable and typechecked fine. Fixed the
-   ~11 call sites touched by the redaction/service-name work (all 4
-   services' `server.ts` request-logging middleware, analytics-service's
-   `logRequest()` helper, and 2 sites in `analytics.controller.ts`) to use
-   object-first form. **Known remaining gap:** the same anti-pattern
-   exists in roughly 237 other logger calls across the rest of the
-   backend (most commonly `logger.error('X failed:', error)`, which means
-   the error's message/stack has never actually reached the logs at any
-   of those sites). Scoped deliberately to this session's touched files
-   only - a full codebase sweep is real, mechanical, low-risk-but-large
-   follow-up work, not done here.
+   ~11 call sites touched by the redaction/service-name work first, which
+   surfaced the same anti-pattern in roughly 236 other logger calls across
+   the rest of the backend (most commonly `logger.error('X failed:',
+   error)`, meaning the error's message/stack had never actually reached
+   the logs at any of those sites for the life of the project).
+   **Closed out in a follow-up pass**: fixed every remaining call site
+   across all 4 services plus `backend/shared` (bind-mounted into every
+   service, so its ~50 sites - Redis cache helpers, JWT sign/verify/decode,
+   the `authenticate()` middleware, rate limiting, health checks, and the
+   Prisma client's event handlers - had been silently affecting all four
+   services at once). Error objects now use the `{ err: error }` key Pino's
+   built-in serializer recognizes automatically, producing clean
+   `type`/`message`/`stack` fields; multi-argument calls were consolidated
+   into one object. admin-service's test suite asserts exact logger call
+   arguments in 6 files - all 31 affected assertions were updated to match.
+   Live-verified after a full container rebuild: a failed login now shows
+   a complete stack trace in the persisted log file (`err: { type, message,
+   stack }`) where previously nothing but the bare message ever appeared,
+   and the full smoke test still passes end-to-end. 300/300 backend tests
+   pass, all 4 services typecheck clean.
 
 - [x] Ensure every service exposes `/health`.
   - Live-verified: `docker compose ps` reports every service (auth, blog, analytics, admin, nginx, Postgres, Redis, Elasticsearch, MinIO, Prometheus, Grafana) as `healthy`, both on normal startup and after the fresh-volume rebuild during the backup/restore test.
