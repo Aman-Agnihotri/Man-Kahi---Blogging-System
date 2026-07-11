@@ -1,0 +1,86 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mankahi-ingress
+  namespace: mankahi
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/ingress.class: null
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - REPLACE_ME_DOMAIN
+      secretName: mankahi-tls
+  rules:
+    - host: REPLACE_ME_DOMAIN
+      http:
+        paths:
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 3001
+          - path: /blog
+            pathType: Prefix
+            backend:
+              service:
+                name: blog-service
+                port:
+                  number: 3002
+          - path: /analytics
+            pathType: Prefix
+            backend:
+              service:
+                name: analytics-service
+                port:
+                  number: 3003
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-service
+                port:
+                  number: 3004
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: monitoring-ingress
+  namespace: mankahi
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/ingress.class: null
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - grafana.REPLACE_ME_DOMAIN
+      secretName: grafana-tls
+  rules:
+    - host: grafana.REPLACE_ME_DOMAIN
+      http:
+        paths:
+          - path: /prometheus
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-service
+                port:
+                  number: 9090
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana-service
+                port:
+                  number: 3000

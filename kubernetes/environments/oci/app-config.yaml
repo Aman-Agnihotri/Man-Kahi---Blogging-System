@@ -1,0 +1,16 @@
+# Despite the filename, this patches the `services-config` ConfigMap —
+# the ConfigMap the services actually consume via envFrom. The base
+# `app-config` ConfigMap (kubernetes/base/config/environment.yaml) is
+# consumed by nothing (investigation-verified) and is left untouched.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: services-config
+  namespace: mankahi
+data:
+  NODE_ENV: "production"
+  MINIO_ENDPOINT: "bmknimruc4dp.compat.objectstorage.ap-mumbai-1.oraclecloud.com"
+  MINIO_PORT: "443"
+  MINIO_USE_SSL: "true"
+  MINIO_REGION: "ap-mumbai-1"
+  MINIO_PUBLIC_URL: "https://bmknimruc4dp.compat.objectstorage.ap-mumbai-1.oraclecloud.com"

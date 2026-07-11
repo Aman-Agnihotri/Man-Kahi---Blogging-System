@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+commonLabels:
+  app.kubernetes.io/name: mankahi
+  app.kubernetes.io/instance: mankahi
+  app.kubernetes.io/part-of: mankahi-blogging-platform
+
+namespace: mankahi
+
+images:
+  - name: mankahi/auth-service
+    newName: ghcr.io/aman-agnihotri/mankahi-auth-service
+    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+  - name: mankahi/blog-service
+    newName: ghcr.io/aman-agnihotri/mankahi-blog-service
+    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+  - name: mankahi/analytics-service
+    newName: ghcr.io/aman-agnihotri/mankahi-analytics-service
+    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+  - name: mankahi/admin-service
+    newName: ghcr.io/aman-agnihotri/mankahi-admin-service
+    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+  - name: frontend
+    newName: ghcr.io/aman-agnihotri/mankahi-frontend
+    newTag: REPLACE_ME_FRONTEND_IMAGE_SHA
+
+patches:
+  - path: app-config.yaml
+  - path: patches/resources.yaml
+  - path: patches/replicas.yaml
+  - path: patches/storageclass.yaml
+  - path: patches/elasticsearch.yaml
+  - path: patches/ingress-hosts.yaml
+  - path: patches/delete-ingress-controller.yaml
