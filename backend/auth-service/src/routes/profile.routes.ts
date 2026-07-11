@@ -302,4 +302,24 @@ router.get(
     }
 );
 
+/**
+ * @swagger
+ * /auth/avatars/{key}:
+ *   get:
+ *     tags:
+ *       - Profile
+ *     summary: Redirect to a presigned URL for an avatar image
+ *     responses:
+ *       302:
+ *         description: Redirect to a short-lived presigned GET URL
+ *       404:
+ *         description: Failed to generate a URL for the specified image
+ */
+router.get(
+    '/avatars/:key',
+    (req: Request, res: Response, next: NextFunction) => {
+        Promise.resolve(profileController.getAvatar(req, res, next));
+    }
+);
+
 export default router;

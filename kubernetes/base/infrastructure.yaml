@@ -23,7 +23,7 @@ spec:
             - configMapRef:
                 name: postgres-config
             - secretRef:
-                name: postgres-secret
+                name: db-secrets
           volumeMounts:
             - mountPath: /var/lib/postgresql/data
               name: postgres-data

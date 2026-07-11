@@ -22,6 +22,8 @@ type Environment = {
   // uses to talk to the MinIO server directly and is not reachable from
   // outside the Docker network.
   MINIO_PUBLIC_URL: string
+  MINIO_BUCKET_BLOG: string
+  MINIO_SKIP_BUCKET_SETUP: string
 }
 
 const defaults = {
@@ -43,7 +45,9 @@ const defaults = {
   MINIO_ACCESS_KEY: 'minioadmin',
   MINIO_SECRET_KEY: 'minioadmin',
   MINIO_REGION: 'ap-south-1',
-  MINIO_PUBLIC_URL: 'http://localhost:9000'
+  MINIO_PUBLIC_URL: 'http://localhost:9000',
+  MINIO_BUCKET_BLOG: 'blog-images',
+  MINIO_SKIP_BUCKET_SETUP: 'false'
 }
 
 export const env: Environment = {
@@ -67,5 +71,7 @@ export const env: Environment = {
   MINIO_ACCESS_KEY: process.env['MINIO_ACCESS_KEY'] ?? defaults.MINIO_ACCESS_KEY,
   MINIO_SECRET_KEY: process.env['MINIO_SECRET_KEY'] ?? defaults.MINIO_SECRET_KEY,
   MINIO_REGION: process.env['MINIO_REGION'] ?? defaults.MINIO_REGION,
-  MINIO_PUBLIC_URL: process.env['MINIO_PUBLIC_URL'] ?? defaults.MINIO_PUBLIC_URL
+  MINIO_PUBLIC_URL: process.env['MINIO_PUBLIC_URL'] ?? defaults.MINIO_PUBLIC_URL,
+  MINIO_BUCKET_BLOG: process.env['MINIO_BUCKET_BLOG'] ?? defaults.MINIO_BUCKET_BLOG,
+  MINIO_SKIP_BUCKET_SETUP: process.env['MINIO_SKIP_BUCKET_SETUP'] ?? defaults.MINIO_SKIP_BUCKET_SETUP
 }
