@@ -15,3 +15,9 @@ data:
   MINIO_REGION: "ap-mumbai-1"
   MINIO_PUBLIC_URL: "https://bmknimruc4dp.compat.objectstorage.ap-mumbai-1.oraclecloud.com"
   MINIO_SKIP_BUCKET_SETUP: "true"
+  # auth-service's OAuth callback defaults to the cluster-internal
+  # http://auth-service:3001/... (config/oauth.ts), which Google rejects
+  # as a redirect target. FRONTEND_URL is the post-OAuth redirect target
+  # back to the site.
+  FRONTEND_URL: "https://mankahi.work.gd"
+  GOOGLE_CALLBACK_URL: "https://mankahi.work.gd/api/auth/google/callback"
