@@ -292,3 +292,14 @@ d. The base's hand-rolled nginx ingress controller manifests
    controller on this cluster is the platform `ingress-nginx` install
    (§4 step 1). Never apply both — running two ingress controllers on the
    same cluster will conflict over the LoadBalancer ports.
+
+e. The base's `HorizontalPodAutoscaler` objects for `auth-service` (min 3),
+   `blog-service` (min 5), `analytics-service` (min 3), and `admin-service`
+   (min 2) are excluded from the `oci` render via `patches/delete-hpa.yaml`.
+   HPA `minReplicas` overrides `Deployment.spec.replicas` at runtime, so
+   leaving them in would push the running replica counts above the §10
+   budget table's fixed values (auth 2, blog 2, analytics 1, admin 1) and
+   exceed the free-tier memory budget (~7.3GB requests vs the 6144Mi cap).
+   Replica counts on OCI are fixed by `patches/replicas.yaml` instead. HPA
+   can be reintroduced here if the resource budget is re-planned for a
+   larger node shape.

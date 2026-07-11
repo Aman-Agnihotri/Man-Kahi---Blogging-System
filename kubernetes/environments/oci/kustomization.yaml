@@ -36,3 +36,4 @@ patches:
   - path: patches/elasticsearch.yaml
   - path: patches/ingress-hosts.yaml
   - path: patches/delete-ingress-controller.yaml
+  - path: patches/delete-hpa.yaml
