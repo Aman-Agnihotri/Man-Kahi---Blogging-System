@@ -1,25 +1,19 @@
----
-# Main Ingress configuration
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: mankahi-ingress
   namespace: mankahi
   annotations:
-    kubernetes.io/ingress.class: "nginx"
-    nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, PUT, POST, DELETE, PATCH, OPTIONS"
-    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/ingress.class: null
 spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - REPLACE_ME_DOMAIN
+      secretName: mankahi-tls
   rules:
-    - host: api.mankahi.local  # Change this to your actual domain in production
+    - host: REPLACE_ME_DOMAIN
       http:
         paths:
           - path: /auth
@@ -55,5 +49,38 @@ spec:
             backend:
               service:
                 name: frontend
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: monitoring-ingress
+  namespace: mankahi
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/ingress.class: null
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - grafana.REPLACE_ME_DOMAIN
+      secretName: grafana-tls
+  rules:
+    - host: grafana.REPLACE_ME_DOMAIN
+      http:
+        paths:
+          - path: /prometheus
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-service
+                port:
+                  number: 9090
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana-service
                 port:
                   number: 3000
