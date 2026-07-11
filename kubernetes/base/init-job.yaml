@@ -1,0 +1,29 @@
+# One-shot Prisma schema push (prisma migrate deploy / db push, per
+# backend/init-service's image CMD). Must complete before backend services
+# become healthy, since nothing else creates the Prisma schema in-cluster.
+#
+# Phase 4 note: once Argo CD manages this app, add
+# `argocd.argoproj.io/hook: PreSync` and
+# `argocd.argoproj.io/hook-delete-policy: BeforeHookCreation` annotations so
+# Argo re-runs this Job on every sync. Pre-Argo, this Job is immutable once
+# run to completion — delete the completed Job before re-applying
+# (`kubectl delete job mankahi-init-db -n mankahi`).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mankahi-init-db
+  namespace: mankahi
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: init-db
+          image: mankahi/init-service:1.0.0
+          envFrom:
+            - configMapRef:
+                name: services-config
+            - secretRef:
+                name: app-secrets

@@ -8,6 +8,7 @@ resources:
   - secrets/services-secrets.yaml
   - infrastructure.yaml
   - services.yaml
+  - init-job.yaml
   - frontend.yaml
   - ingress.yaml
   - ingress-config.yaml

@@ -25,6 +25,9 @@ images:
   - name: mankahi/admin-service
     newName: ghcr.io/aman-agnihotri/mankahi-admin-service
     newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+  - name: mankahi/init-service
+    newName: ghcr.io/aman-agnihotri/mankahi-init-service
+    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
   - name: frontend
     newName: ghcr.io/aman-agnihotri/mankahi-frontend
     newTag: REPLACE_ME_FRONTEND_IMAGE_SHA
