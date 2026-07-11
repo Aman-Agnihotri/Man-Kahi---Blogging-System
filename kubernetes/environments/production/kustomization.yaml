@@ -50,6 +50,9 @@ images:
 - name: admin-service
   newName: registry.mankahi.local/admin-service
   newTag: stable
+- name: frontend
+  newName: registry.mankahi.local/frontend
+  newTag: stable
 
 patchesJson6902:
 - target:

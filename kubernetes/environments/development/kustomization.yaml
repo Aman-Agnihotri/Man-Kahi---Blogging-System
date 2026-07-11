@@ -50,6 +50,9 @@ images:
 - name: admin-service
   newName: localhost:5000/admin-service
   newTag: dev
+- name: frontend
+  newName: localhost:5000/frontend
+  newTag: dev
 
 patchesJson6902:
 - target:
