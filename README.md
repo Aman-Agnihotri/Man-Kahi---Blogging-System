@@ -48,6 +48,22 @@ Browser
 
 Only nginx is public in production; every backing service stays private. Read the full architecture notes in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Repository layout
+
+| Path | Role |
+|---|---|
+| `frontend/` | Nuxt 3 frontend |
+| `backend/{auth,blog,analytics,admin,init}-service/` | Backend microservices |
+| `backend/shared/` | Shared library (Prisma schema, config, middlewares, utils) used by all backend services |
+| `docker/` | Docker Compose stack — the local dev environment (dev + production variants) |
+| `kubernetes/base/` | Kustomize base app manifests |
+| `kubernetes/environments/` | Kustomize overlays: `development/`, `production/`; `oci/` added in upcoming phases |
+| `kubernetes/platform/` | Cluster platform components (cert-manager issuers, Argo CD apps, sealed-secrets, ingress-nginx, network policies) — added in upcoming phases |
+| `kubernetes/scripts/` | Imperative deploy scripts — slated for removal in an upcoming phase (replaced by GitOps) |
+| `terraform/` | OCI infrastructure — added in upcoming phases |
+| `.github/workflows/` | CI: tests + multi-arch images to GHCR — added in upcoming phases |
+| `docs/` | Project documentation |
+
 ## Tech Stack
 
 - **Frontend:** Nuxt 3 (Vue), Tailwind CSS
