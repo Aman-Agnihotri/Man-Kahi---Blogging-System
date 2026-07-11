@@ -35,8 +35,6 @@ data:
     xpack.security.enabled: false
     indices.memory.index_buffer_size: 30%
     indices.queries.cache.size: 20%
-    thread_pool.write.size: 4
-    thread_pool.search.size: 8
 ---
 apiVersion: v1
 kind: ConfigMap
