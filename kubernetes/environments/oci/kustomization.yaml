@@ -15,22 +15,22 @@ namespace: mankahi
 images:
   - name: mankahi/auth-service
     newName: ghcr.io/aman-agnihotri/mankahi-auth-service
-    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
   - name: mankahi/blog-service
     newName: ghcr.io/aman-agnihotri/mankahi-blog-service
-    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
   - name: mankahi/analytics-service
     newName: ghcr.io/aman-agnihotri/mankahi-analytics-service
-    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
   - name: mankahi/admin-service
     newName: ghcr.io/aman-agnihotri/mankahi-admin-service
-    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
   - name: mankahi/init-service
     newName: ghcr.io/aman-agnihotri/mankahi-init-service
-    newTag: 9153a4948293b61684871be65da48a1d9b9e13d7
+    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
   - name: frontend
     newName: ghcr.io/aman-agnihotri/mankahi-frontend
-    newTag: REPLACE_ME_FRONTEND_IMAGE_SHA
+    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
 
 patches:
   - path: app-config.yaml
