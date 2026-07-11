@@ -15,22 +15,25 @@ namespace: mankahi
 images:
   - name: mankahi/auth-service
     newName: ghcr.io/aman-agnihotri/mankahi-auth-service
-    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
+    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
   - name: mankahi/blog-service
     newName: ghcr.io/aman-agnihotri/mankahi-blog-service
-    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
+    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
   - name: mankahi/analytics-service
     newName: ghcr.io/aman-agnihotri/mankahi-analytics-service
-    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
+    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
   - name: mankahi/admin-service
     newName: ghcr.io/aman-agnihotri/mankahi-admin-service
-    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
+    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
+  # init-service intentionally trails at ee0128de...: CI path-filters skip it
+  # when backend/shared is untouched, so it was not rebuilt; unchanged image,
+  # and the init Job already completed successfully with it.
   - name: mankahi/init-service
     newName: ghcr.io/aman-agnihotri/mankahi-init-service
     newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
   - name: frontend
     newName: ghcr.io/aman-agnihotri/mankahi-frontend
-    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
+    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
 
 patches:
   - path: app-config.yaml
