@@ -20,7 +20,7 @@ FROM node:20-slim AS production
 WORKDIR /app
 
 # Copy built files and dependencies
-COPY --from=builder /app/.output ./output
+COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/.nuxt ./.nuxt
 COPY --from=builder /app/package*.json ./
 
