@@ -209,6 +209,16 @@ router.delete(
   }) as RequestHandler
 );
 
+// Redirect to a presigned image URL (public, no auth) - single-segment
+// "images" prefix + key, must be registered before the "/:slug" catch-all
+// below or it would be swallowed as a slug lookup.
+router.get(
+  '/images/:key',
+  ((req: Request, res: Response, next: NextFunction) => {
+    blogController.getImage(req, res).catch(next);
+  }) as RequestHandler
+);
+
 // Get blog by slug
 router.get(
   '/:slug',

@@ -7,6 +7,13 @@ import { env } from '@config/env'
 // node_modules/Docker image, so cross-service imports aren't possible - the
 // duplication is intentional. It reuses the same MINIO_* env vars as
 // blog-service (already present in docker/compose/.env.development).
+//
+// Two modes, gated by MINIO_SKIP_BUCKET_SETUP: when unset/'false' (local
+// dev/compose), the bucket is auto-created with a public-read policy and
+// User.profileImage stores an absolute MINIO_PUBLIC_URL. When 'true' (cloud
+// deployments), the bucket is pre-created and private, setupMinio is a
+// no-op, and User.profileImage stores a relative /api/auth/avatars/:key path
+// that 302-redirects to a short-lived presigned GET (see getAvatarObjectUrl).
 
 const minioClient = new Client({
     endPoint: env.MINIO_ENDPOINT || 'localhost',
@@ -18,14 +25,20 @@ const minioClient = new Client({
 
 // Distinct bucket from blog-service's "blog-images" to avoid collisions -
 // each service owns its own MinIO bucket.
-const BUCKET_NAME = 'avatars'
+const BUCKET_NAME = env.MINIO_BUCKET_AVATARS
 // MINIO_PUBLIC_URL (not MINIO_ENDPOINT, which is the internal Docker
 // hostname the client above connects through) - this is what ends up in
 // User.profileImage and gets rendered directly in <img> tags across the
-// frontend, so it must be reachable from the browser.
+// frontend, so it must be reachable from the browser. Only used when
+// MINIO_SKIP_BUCKET_SETUP is not 'true' (public-bucket mode).
 const IMAGE_BASE_URL = `${env.MINIO_PUBLIC_URL}/${BUCKET_NAME}`
 
 export const setupMinio = async (): Promise<void> => {
+    if (env.MINIO_SKIP_BUCKET_SETUP === 'true') {
+        // Bucket is pre-created and private in cloud deployments.
+        return;
+    }
+
     try {
         const bucketExists = await minioClient.bucketExists(BUCKET_NAME)
         if (!bucketExists) {
@@ -76,7 +89,9 @@ export const uploadAvatar = async (
             }
         )
 
-        const imageUrl = `${IMAGE_BASE_URL}/${filename}`
+        const imageUrl = env.MINIO_SKIP_BUCKET_SETUP === 'true'
+            ? `/api/auth/avatars/${filename}`
+            : `${IMAGE_BASE_URL}/${filename}`
         logger.info(`Uploaded avatar: ${imageUrl}`)
         return imageUrl
     } catch (error) {
@@ -93,4 +108,11 @@ export const deleteAvatar = async (filename: string): Promise<void> => {
         logger.error({ err: error }, 'Error deleting avatar from MinIO')
         throw error
     }
+}
+
+// Presigned GET URL for private-bucket mode (MINIO_SKIP_BUCKET_SETUP='true') -
+// used by the GET /avatars/:key route to redirect callers to a short-lived,
+// authenticated URL instead of relying on a public bucket policy.
+export const getAvatarObjectUrl = async (key: string): Promise<string> => {
+    return minioClient.presignedGetObject(BUCKET_NAME, key, 3600)
 }

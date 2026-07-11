@@ -3,6 +3,7 @@ import { z } from 'zod'
 import logger from '@shared/utils/logger'
 import { BlogService } from '@services/blog.service'
 import { SearchService } from '@services/search.service'
+import { getImageObjectUrl } from '@utils/minio'
 import { 
   trackDbOperation,
   trackSearchOperation,
@@ -891,6 +892,30 @@ export class BlogController {
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to report blog post due to an unexpected error'
+      })
+    }
+  }
+
+  // Redirect to a short-lived presigned GET URL for a cover image stored in
+  // the (private, in cloud deployments) MinIO bucket - see
+  // utils/minio.ts's getImageObjectUrl.
+  async getImage(req: Request, res: Response): Promise<Response | void> {
+    const { key } = req.params
+    if (!key) {
+      return res.status(400).json({
+        message: 'Image key is required',
+        details: 'The image key parameter is missing from the request URL'
+      });
+    }
+
+    try {
+      const url = await getImageObjectUrl(key)
+      return res.redirect(302, url)
+    } catch (error) {
+      logger.error({ err: error }, 'Error presigning image URL')
+      return res.status(404).json({
+        message: 'Image not found',
+        details: 'Failed to generate a URL for the specified image'
       })
     }
   }

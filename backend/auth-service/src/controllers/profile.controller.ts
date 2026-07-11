@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { ProfileService } from '@services/profile.service'
 import { processAvatarImage } from '@config/upload'
+import { getAvatarObjectUrl } from '@utils/minio'
 import logger from '@shared/utils/logger'
 import { AuthenticatedRequest } from '@shared/middlewares/auth'
 import { RequestHandler } from 'express-serve-static-core'
@@ -321,6 +322,21 @@ export class ProfileController {
 
             trackError('server', 'delete_account_failed', 'auth')
             res.status(500).json({ message: 'Internal server error' })
+        }
+    }
+
+    // Redirect to a short-lived presigned GET URL for an avatar stored in
+    // the (private, in cloud deployments) MinIO bucket - see
+    // utils/minio.ts's getAvatarObjectUrl.
+    getAvatar: RequestHandler = async (req, res) => {
+        try {
+            const key = req.params['key'] as string
+            const url = await getAvatarObjectUrl(key)
+            res.redirect(302, url)
+        } catch (error) {
+            logger.error({ err: error }, 'Get avatar controller error')
+            trackError('server', 'get_avatar_failed', 'auth')
+            res.status(404).json({ message: 'Image not found' })
         }
     }
 }

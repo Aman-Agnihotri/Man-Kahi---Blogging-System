@@ -10,14 +10,20 @@ const minioClient = new Client({
   secretKey: env.MINIO_SECRET_KEY || 'minioadmin',
 })
 
-const BUCKET_NAME = 'blog-images'
+const BUCKET_NAME = env.MINIO_BUCKET_BLOG
 // MINIO_PUBLIC_URL (not MINIO_ENDPOINT, which is the internal Docker
 // hostname the client above connects through) - this is what ends up in
 // Blog.coverImage and gets rendered directly in <img> tags across the
-// frontend, so it must be reachable from the browser.
+// frontend, so it must be reachable from the browser. Only used when
+// MINIO_SKIP_BUCKET_SETUP is not 'true' (public-bucket mode).
 const IMAGE_BASE_URL = `${env.MINIO_PUBLIC_URL}/${BUCKET_NAME}`
 
 export const setupMinio = async (): Promise<void> => {
+  if (env.MINIO_SKIP_BUCKET_SETUP === 'true') {
+    // Bucket is pre-created and private in cloud deployments.
+    return;
+  }
+
   try {
     const bucketExists = await minioClient.bucketExists(BUCKET_NAME)
     if (!bucketExists) {
@@ -71,7 +77,9 @@ export const uploadImage = async (
       }
     )
 
-    const imageUrl = `${IMAGE_BASE_URL}/${filename}`
+    const imageUrl = env.MINIO_SKIP_BUCKET_SETUP === 'true'
+      ? `/api/blogs/images/${filename}`
+      : `${IMAGE_BASE_URL}/${filename}`
     logger.info(`Uploaded image: ${imageUrl}`)
     return imageUrl
   } catch (error) {
@@ -91,5 +99,14 @@ export const deleteImage = async (filename: string): Promise<void> => {
 }
 
 export const getImageUrl = (filename: string): string => {
-  return `${IMAGE_BASE_URL}/${filename}`
+  return env.MINIO_SKIP_BUCKET_SETUP === 'true'
+    ? `/api/blogs/images/${filename}`
+    : `${IMAGE_BASE_URL}/${filename}`
+}
+
+// Presigned GET URL for private-bucket mode (MINIO_SKIP_BUCKET_SETUP='true') -
+// used by the GET /images/:key route to redirect callers to a short-lived,
+// authenticated URL instead of relying on a public bucket policy.
+export const getImageObjectUrl = async (key: string): Promise<string> => {
+  return minioClient.presignedGetObject(BUCKET_NAME, key, 3600)
 }
