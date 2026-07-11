@@ -53,7 +53,7 @@ RUN npm install --only=production
 COPY --from=builder /app/blog-service/dist ./dist
 COPY --from=builder /app/blog-service/node_modules ./node_modules
 COPY --from=builder /app/shared/. ../shared/
-COPY --from=builder /app/shared/node_modules ../shared/node_modules
+COPY --from=builder /app/shared/node_modules ./dist/shared/node_modules
 
 # Create uploads and logs directories
 RUN mkdir -p uploads/images && mkdir -p logs

@@ -51,7 +51,7 @@ RUN npm install --only=production
 COPY --from=builder /app/analytics-service/dist ./dist
 COPY --from=builder /app/analytics-service/node_modules ./node_modules
 COPY --from=builder /app/shared/. ../shared/
-COPY --from=builder /app/shared/node_modules ../shared/node_modules
+COPY --from=builder /app/shared/node_modules ./dist/shared/node_modules
 
 # Create logs directory
 RUN mkdir -p logs

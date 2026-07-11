@@ -53,7 +53,7 @@ RUN npm install --only=production
 COPY --from=builder /app/auth-service/dist ./dist
 COPY --from=builder /app/auth-service/node_modules ./node_modules
 COPY --from=builder /app/shared/. ../shared/
-COPY --from=builder /app/shared/node_modules ../shared/node_modules
+COPY --from=builder /app/shared/node_modules ./dist/shared/node_modules
 
 # Set environment variables
 ENV NODE_ENV=production
