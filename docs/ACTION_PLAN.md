@@ -663,7 +663,7 @@ Acceptance criteria:
 - [x] Kubernetes Kustomize build currently fails due to missing base `.env`.
   - Fixed by removing the unused `configMapGenerator` block that referenced it - see Phase 8 notes.
 - [x] Kubernetes deployment paths are split between `overlays` and `environments`.
-  - Consolidated to `environments/`; `overlays/` archived - see Phase 8 notes.
+  - Consolidated to `environments/`; `overlays/` archived, since deleted entirely - see Phase 8 notes.
 
 ## Recommended Implementation Order
 
