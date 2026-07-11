@@ -1,0 +1,15 @@
+# Frontend browser calls must be same-origin so /api/* hits the ingress;
+# dev keeps the localhost default via docker-compose.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: mankahi
+spec:
+  template:
+    spec:
+      containers:
+        - name: frontend
+          env:
+            - name: NUXT_PUBLIC_API_URL
+              value: "https://REPLACE_ME_DOMAIN"
