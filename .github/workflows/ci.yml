@@ -1,0 +1,324 @@
+name: CI
+
+# Builds, tests, scans, and publishes SHA-tagged multi-arch images to GHCR
+# for exactly the components affected by a change. See docs/ci.md.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Change detection. Emits JSON matrices so downstream jobs need no per-
+  # component conditionals.
+  #   services   -> [{ "service": "auth-service" }, ...]           (test matrix)
+  #   components -> [{ "name", "context", "file", "target" }, ...] (build/scan)
+  #   frontend   -> "true" | "false"                               (frontend-check)
+  # Rollup rules:
+  #   * shared or ci change  -> all five backend components rebuild (they compile
+  #     against backend/shared).
+  #   * tag push (v*) or workflow_dispatch -> every component, unconditionally.
+  # ---------------------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.compute.outputs.services }}
+      components: ${{ steps.compute.outputs.components }}
+      frontend: ${{ steps.compute.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            shared:
+              - 'backend/shared/**'
+            auth:
+              - 'backend/auth-service/**'
+            blog:
+              - 'backend/blog-service/**'
+            analytics:
+              - 'backend/analytics-service/**'
+            admin:
+              - 'backend/admin-service/**'
+            init:
+              - 'backend/init-service/**'
+            frontend:
+              - 'frontend/**'
+            ci:
+              - '.github/workflows/**'
+
+      - name: Compute matrices
+        id: compute
+        env:
+          F_SHARED: ${{ steps.filter.outputs.shared }}
+          F_AUTH: ${{ steps.filter.outputs.auth }}
+          F_BLOG: ${{ steps.filter.outputs.blog }}
+          F_ANALYTICS: ${{ steps.filter.outputs.analytics }}
+          F_ADMIN: ${{ steps.filter.outputs.admin }}
+          F_INIT: ${{ steps.filter.outputs.init }}
+          F_FRONTEND: ${{ steps.filter.outputs.frontend }}
+          F_CI: ${{ steps.filter.outputs.ci }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          force_all=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then force_all=true; fi
+          case "$REF" in
+            refs/tags/v*) force_all=true ;;
+          esac
+
+          # A shared/ci change (or a force-all trigger) rebuilds every backend
+          # component because they all compile against backend/shared.
+          backend_all=false
+          if [ "$F_SHARED" = "true" ] || [ "$F_CI" = "true" ] || [ "$force_all" = "true" ]; then
+            backend_all=true
+          fi
+
+          want_auth=false
+          want_blog=false
+          want_analytics=false
+          want_admin=false
+          want_init=false
+          want_frontend=false
+
+          if [ "$backend_all" = "true" ]; then
+            want_auth=true
+            want_blog=true
+            want_analytics=true
+            want_admin=true
+            want_init=true
+          fi
+          if [ "$F_AUTH" = "true" ]; then want_auth=true; fi
+          if [ "$F_BLOG" = "true" ]; then want_blog=true; fi
+          if [ "$F_ANALYTICS" = "true" ]; then want_analytics=true; fi
+          if [ "$F_ADMIN" = "true" ]; then want_admin=true; fi
+          if [ "$F_INIT" = "true" ]; then want_init=true; fi
+          if [ "$F_FRONTEND" = "true" ] || [ "$force_all" = "true" ]; then want_frontend=true; fi
+
+          # Test matrix: only the four backend services have test suites
+          # (init-service has no test job).
+          services=$(jq -cn \
+            --argjson auth "$want_auth" \
+            --argjson blog "$want_blog" \
+            --argjson analytics "$want_analytics" \
+            --argjson admin "$want_admin" \
+            '[
+              {name:"auth-service",      enabled:$auth},
+              {name:"blog-service",      enabled:$blog},
+              {name:"analytics-service", enabled:$analytics},
+              {name:"admin-service",     enabled:$admin}
+            ] | map(select(.enabled)) | map({service: .name})')
+
+          # Build/scan matrix. init-service is single-stage -> target must be
+          # empty ("") so build-push-action passes no --target. The four
+          # services and the frontend are multi-stage with `development` last,
+          # so they must target the `production` stage explicitly.
+          components=$(jq -cn \
+            --argjson auth "$want_auth" \
+            --argjson blog "$want_blog" \
+            --argjson analytics "$want_analytics" \
+            --argjson admin "$want_admin" \
+            --argjson init "$want_init" \
+            --argjson frontend "$want_frontend" \
+            '[
+              {name:"auth-service",      context:"backend",  file:"backend/auth-service/Dockerfile",      target:"production", enabled:$auth},
+              {name:"blog-service",      context:"backend",  file:"backend/blog-service/Dockerfile",      target:"production", enabled:$blog},
+              {name:"analytics-service", context:"backend",  file:"backend/analytics-service/Dockerfile", target:"production", enabled:$analytics},
+              {name:"admin-service",     context:"backend",  file:"backend/admin-service/Dockerfile",     target:"production", enabled:$admin},
+              {name:"init-service",      context:"backend",  file:"backend/init-service/Dockerfile",      target:"",           enabled:$init},
+              {name:"frontend",          context:"frontend", file:"frontend/Dockerfile",                  target:"production", enabled:$frontend}
+            ] | map(select(.enabled)) | map(del(.enabled))')
+
+          echo "services=$services" >> "$GITHUB_OUTPUT"
+          echo "components=$components" >> "$GITHUB_OUTPUT"
+          echo "frontend=$want_frontend" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Test: matrix over affected backend services. Tests are fully mocked
+  # (Prisma/Redis/Elasticsearch), so no service containers and no injected env
+  # vars are needed. jest runs --runInBand (configured in each service) - do
+  # not parallelize; see docs/ci.md.
+  # ---------------------------------------------------------------------------
+  test:
+    needs: changes
+    if: ${{ needs.changes.outputs.services != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            backend/shared/package-lock.json
+            backend/${{ matrix.service }}/package-lock.json
+
+      # shared first: the service's `pretest` runs `prisma generate`, which
+      # resolves the prisma CLI from backend/shared/node_modules.
+      - name: Install shared dependencies
+        run: npm ci
+        working-directory: backend/shared
+
+      - name: Install service dependencies
+        run: npm ci
+        working-directory: backend/${{ matrix.service }}
+
+      - name: Run tests
+        run: npm test
+        working-directory: backend/${{ matrix.service }}
+
+  # ---------------------------------------------------------------------------
+  # Frontend build check (Nuxt build as a smoke test). No test/lint scripts
+  # exist in frontend/package.json.
+  # ---------------------------------------------------------------------------
+  frontend-check:
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Node 20 to match frontend/Dockerfile (node:20-slim); build under the
+      # same major the production image uses.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build
+        run: npm run build
+        working-directory: frontend
+
+  # ---------------------------------------------------------------------------
+  # Build & push. Runs after test and frontend-check, but still runs when
+  # either was SKIPPED (only-backend or only-frontend diffs): a skipped need
+  # has result 'skipped' (not 'failure'), so !cancelled() + failure-checks let
+  # it through, while a real test failure blocks the push.
+  # ---------------------------------------------------------------------------
+  build-push:
+    needs: [changes, test, frontend-check]
+    if: >-
+      ${{ !cancelled()
+          && needs.test.result != 'failure'
+          && needs.frontend-check.result != 'failure'
+          && needs.changes.outputs.components != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.components) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/aman-agnihotri/mankahi-${{ matrix.name }}
+          # `prefix=` overrides the default `sha-` so the tag is the bare
+          # 40-char commit SHA (required literally by spec sec 0.1.2). The
+          # branch ref gives the `main` tag; semver applies on v* tags.
+          tags: |
+            type=sha,format=long,prefix=
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+          # latest=auto would add a `latest` tag on v* semver tags; spec
+          # sec 0.1.2 forbids any `latest` tag.
+          flavor: |
+            latest=false
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          # Empty target (init-service) -> build-push-action omits --target,
+          # so the single-stage image builds correctly.
+          target: ${{ matrix.target }}
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # ---------------------------------------------------------------------------
+  # Trivy scan of each pushed image (non-PR only; PR builds are not pushed).
+  # Report-only for now (exit-code 0); SARIF uploaded to the Security tab with
+  # a per-component category to avoid overwrites. See docs/ci.md for the
+  # future CRITICAL-blocking toggle.
+  # ---------------------------------------------------------------------------
+  scan:
+    needs: [changes, build-push]
+    if: >-
+      ${{ !cancelled()
+          && needs.build-push.result == 'success'
+          && github.event_name != 'pull_request'
+          && needs.changes.outputs.components != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.components) }}
+    steps:
+      # The package may still be private (until the human visibility step);
+      # log in so Trivy can pull it via the Docker credential store.
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ghcr.io/aman-agnihotri/mankahi-${{ matrix.name }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+          format: sarif
+          output: trivy-${{ matrix.name }}.sarif
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-${{ matrix.name }}.sarif
+          category: trivy-${{ matrix.name }}
