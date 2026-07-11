@@ -31,6 +31,16 @@ apply. None of them may be left as-is in a live cluster.
 | `REPLACE_ME_ACME_EMAIL` | `kubernetes/platform/cert-manager/cluster-issuer.yaml` | Let's Encrypt account contact email. |
 | `REPLACE_ME_FRONTEND_IMAGE_SHA` | `kubernetes/environments/oci/kustomization.yaml` | No frontend image has been built yet. See §6. |
 | `${MINIO_ACCESS_KEY}` / `${MINIO_SECRET_KEY}` | `kubernetes/base/secrets/services-secrets.yaml` | `envsubst` placeholders. Values are the Terraform outputs `object_storage_access_key` / `object_storage_secret_key`. Phase 4 replaces this envsubst flow with SealedSecrets. |
+| `${GRAFANA_ADMIN_PASSWORD}` | `kubernetes/environments/oci/grafana-secret.yaml` | `envsubst` placeholder for the Grafana admin password, consumed as `GF_SECURITY_ADMIN_PASSWORD`. Sealed in Phase 4 like the other secrets. |
+
+**`POSTGRES_USER` constraint:** the value substituted for `${POSTGRES_USER}` in
+`db-secrets` (`kubernetes/base/secrets/services-secrets.yaml`) **must be
+`postgres`**. `app-secrets`' `DATABASE_URL` hardcodes the user as `postgres`
+(`postgresql://postgres:${POSTGRES_PASSWORD}@postgres-service:5432/mankahi`),
+and `db-secrets`' `POSTGRES_USER` overrides the `postgres-config` ConfigMap's
+default (also `postgres`) for the Postgres container itself. Substituting any
+other value will make the Postgres container start with a different user than
+the one the backends connect as.
 
 ## 3. DNS
 
@@ -95,14 +105,37 @@ and `KUBECONFIG` is pointed at the new cluster.
 
 5. Render the secrets with `envsubst` (using the Terraform object storage
    outputs — see §2), apply them, then apply the overlay. This step is
-   transitional and pre-Argo CD; Phase 4 replaces it with GitOps:
+   transitional and pre-Argo CD; Phase 4 replaces it with GitOps. Note the
+   `${POSTGRES_USER}` constraint in §2 (must resolve to `postgres`), and that
+   `kubernetes/environments/oci/grafana-secret.yaml` needs `${GRAFANA_ADMIN_PASSWORD}`
+   rendered the same way:
 
    ```
    envsubst < kubernetes/base/secrets/services-secrets.yaml | kubectl apply -f -
+   envsubst < kubernetes/environments/oci/grafana-secret.yaml | kubectl apply -f -
    kubectl apply -k kubernetes/environments/oci
    ```
 
-6. Verify:
+6. Run the one-shot database init Job (`mankahi-init-db`, defined in
+   `kubernetes/base/init-job.yaml`) to completion before expecting backend
+   services to become healthy — nothing else creates the Prisma schema
+   in-cluster:
+
+   ```
+   kubectl wait --for=condition=complete job/mankahi-init-db -n mankahi --timeout=180s
+   ```
+
+   This Job is not yet Argo-managed and is immutable once it reaches
+   `Complete`. If you need to re-run it (e.g. re-applying the overlay after a
+   schema change), delete it first:
+
+   ```
+   kubectl delete job mankahi-init-db -n mankahi
+   ```
+
+   Phase 4 replaces this manual step with an Argo CD PreSync hook.
+
+7. Verify:
 
    ```
    kubectl get pods -n mankahi -w
@@ -136,13 +169,15 @@ To deploy a newer build of a component:
    `kubernetes/environments/oci/kustomization.yaml`.
 3. Commit the change.
 
-Current pins — all four backend services are pinned to the same SHA:
+Current pins — all four backend services plus the init Job's image are
+pinned to the same SHA:
 
 ```
 mankahi/auth-service        -> 9153a4948293b61684871be65da48a1d9b9e13d7
 mankahi/blog-service        -> 9153a4948293b61684871be65da48a1d9b9e13d7
 mankahi/analytics-service   -> 9153a4948293b61684871be65da48a1d9b9e13d7
 mankahi/admin-service       -> 9153a4948293b61684871be65da48a1d9b9e13d7
+mankahi/init-service        -> 9153a4948293b61684871be65da48a1d9b9e13d7
 ```
 
 ## 6. Frontend image (currently missing)
@@ -160,6 +195,11 @@ replace the placeholder.
 
 Until this is done, the frontend `Deployment` in the `oci` overlay will fail
 to pull its image.
+
+Once it does run, the `oci` overlay's `patches/frontend-env.yaml` sets
+`NUXT_PUBLIC_API_URL=https://REPLACE_ME_DOMAIN`, so the browser's API calls
+are same-origin through the ingress rather than pointing at a separate API
+host.
 
 ## 7. Object storage (MinIO client -> OCI S3-compatible endpoint)
 
@@ -179,35 +219,48 @@ Values:
   (the application code appends `/<bucket>/<file>` to build the final public
   URL).
 
-**Application behavior (as currently coded, unchanged in Phase 3):**
+**Application behavior (Phase 3.5: private buckets, presigned reads):**
 
-- The app hard-codes two bucket names: `blog-images` (used by blog-service)
-  and `avatars` (used by auth-service).
-- On startup/use it checks `bucketExists()`; if the bucket does not exist it
-  calls `makeBucket()` and then `setBucketPolicy(public-read)`.
-- The resulting public URLs are stored **permanently** in the database.
-- The app uses **no presigned URLs** anywhere in this flow.
+The app now has two modes, gated by `MINIO_SKIP_BUCKET_SETUP`
+(`backend/blog-service/src/utils/minio.ts`,
+`backend/auth-service/src/utils/minio.ts`, both services' `config/env.ts`):
 
-**REQUIRED HUMAN STEP before first upload:** pre-create both buckets,
-`blog-images` and `avatars`, in the tenancy's Object Storage namespace with
-public read access (`access_type: ObjectRead`). With the buckets already
-present and already public, the app's `bucketExists()` check short-circuits
-true and it never calls `makeBucket()`/`setBucketPolicy()` —
-`setBucketPolicy()` is the call most likely to be unsupported (or behave
-differently) against the OCI S3-compatible endpoint.
+- **Unset / not `"true"` (local dev/compose — unchanged from before Phase
+  3.5):** on first use, the service checks `bucketExists()`; if the bucket
+  does not exist it calls `makeBucket()` then `setBucketPolicy(public-read)`,
+  and stores an **absolute** `MINIO_PUBLIC_URL`-based URL in the database
+  (`Blog.coverImage` / `User.profileImage`).
+- **`"true"` (the `oci` overlay — set in `app-config.yaml`'s
+  `services-config` patch):** `setupMinio()` is a no-op (bucket setup is
+  skipped entirely, so `makeBucket`/`setBucketPolicy` are never called), and
+  uploads store a **relative, same-origin** path instead —
+  `/api/blogs/images/<key>` (blog-service) or `/api/auth/avatars/<key>`
+  (auth-service). Those two endpoints resolve the key to a presigned GET URL
+  (`getImageObjectUrl` / `getAvatarObjectUrl`, 1-hour expiry via
+  `presignedGetObject`) against the S3-compatible endpoint and 302-redirect
+  the caller to it. Buckets stay `NoPublicAccess` in this mode.
 
-**Security note requiring ratification:** public-read buckets contradict the
-Phase 2 Terraform intent. The Terraform-provisioned buckets
-`mankahi-uploads` and `mankahi-backups` were created `NoPublicAccess`, with a
-comment indicating a presigned-URL-or-proxy access pattern was intended. The
-application's actual model — store a public URL permanently in the database —
-cannot be served through presigned URLs or a proxy without a code refactor.
-Phase 3 keeps the application code unchanged (per spec: this phase is
-config-only; an env-gated code change is only in scope if live verification
-in the next step fails). Note `mankahi-uploads` is currently unused by the
-application; `mankahi-backups` is reserved for a later backups phase.
+Bucket names are now configurable, not hard-coded: `MINIO_BUCKET_BLOG`
+(default `blog-images`) and `MINIO_BUCKET_AVATARS` (default `avatars`) can be
+set per environment; the `oci` overlay currently relies on the defaults (no
+override in `app-config.yaml`).
 
-**Live verification (HUMAN, acceptance criterion 5):**
+Existing dev rows created before this change (absolute URLs) keep working
+unmodified — the frontend renders whatever value is stored verbatim, and no
+production data exists yet, so no data migration is needed.
+
+**REQUIRED HUMAN STEP before first upload:** pre-create the two buckets
+(named per `MINIO_BUCKET_BLOG` / `MINIO_BUCKET_AVATARS` or their defaults,
+`blog-images` and `avatars`) in the tenancy's Object Storage namespace as
+**private** (`NoPublicAccess`) — matching the Phase 2 Terraform intent for
+`mankahi-uploads` / `mankahi-backups` — or manage them via Terraform instead
+of pre-creating manually. With `MINIO_SKIP_BUCKET_SETUP=true`, the services
+never call `bucketExists()`/`makeBucket()`/`setBucketPolicy()`, so the
+buckets must already exist.
+
+**Live verification (HUMAN, known risk item):** `presignedGetObject` against
+OCI's S3-compatible endpoint has not yet been exercised in this cluster and
+must be verified on first deploy:
 
 1. Upload an image via the blog UI.
 2. Confirm the object appears:
@@ -217,14 +270,71 @@ application; `mankahi-backups` is reserved for a later backups phase.
      s3://blog-images/
    ```
 
-3. Confirm the image renders in the published post.
+3. Confirm the image renders in the published post — this exercises the
+   `/api/blogs/images/<key>` redirect and the presigned URL it points to.
+4. If the redirect 404s, times out, or the presigned URL is rejected by OCI's
+   endpoint, that is a blocking finding for this deploy — do not treat the
+   upload path as working until this step passes.
 
-If `makeBucket`/`setBucketPolicy` errors appear in blog-service logs (they
-should not, if buckets were pre-created per the step above), the fallback is
-a minimal env-gated skip flag for that code path — this is a future change,
-not authored as part of Phase 3.
+## 8. Ingress routing
 
-## 8. Elasticsearch on small nodes
+`kubernetes/base/ingress.yaml`, patched by
+`kubernetes/environments/oci/patches/ingress-hosts.yaml`, routes on the
+primary host (`REPLACE_ME_DOMAIN`):
+
+| Path | Backend service | Port |
+|---|---|---|
+| `/api/auth` | `auth-service` | 3001 |
+| `/api/blogs` | `blog-service` | 3002 |
+| `/api/analytics` | `analytics-service` | 3003 |
+| `/api/admin` | `admin-service` | 3004 |
+| `/` | `frontend` | 3000 |
+
+The base `ingress.yaml`'s POC `rewrite-target` annotation, which rewrote
+every incoming URI and broke backend routing, is not carried into the `oci`
+overlay's ingress — backends receive the full incoming URI as-is, which is
+what their own path-prefixed route handlers expect.
+
+`monitoring-ingress`, on the separate `grafana.REPLACE_ME_DOMAIN` host, routes
+`/` to `grafana-service:3000` only. Prometheus is deliberately not exposed via
+either ingress — see §10.
+
+## 9. Database initialization (Job)
+
+`kubernetes/base/init-job.yaml` defines a one-shot Job, `mankahi-init-db`,
+running the `init-service` image (SHA-pinned in the `oci` overlay — see §5),
+whose container `CMD` runs `prisma migrate deploy` / `db push`. It takes
+`envFrom` both `services-config` and `app-secrets`. Nothing else creates the
+Prisma schema in-cluster, so this Job must reach `Complete` before backend
+services can work — see the first-deploy steps in §4.
+
+Pre-Argo CD, this Job is immutable once completed: re-running it (e.g. after
+a schema change) requires deleting it first
+(`kubectl delete job mankahi-init-db -n mankahi`) before re-applying the
+overlay. Phase 4 adds `argocd.argoproj.io/hook: PreSync` (with
+`hook-delete-policy: BeforeHookCreation`) so Argo CD re-runs it automatically
+on every sync.
+
+## 10. Monitoring / Grafana hardening
+
+Grafana is served on its own host, `grafana.REPLACE_ME_DOMAIN`, at the root
+path (`monitoring-ingress`, §8), rather than a subpath of the primary domain.
+The `oci` overlay's `patches/grafana-auth.yaml` disables anonymous access
+(`GF_AUTH_ANONYMOUS_ENABLED=false`), sources the admin password from
+`grafana-secrets` (`GF_SECURITY_ADMIN_PASSWORD`, the `${GRAFANA_ADMIN_PASSWORD}`
+placeholder — see §2), and sets
+`GF_SERVER_ROOT_URL=https://grafana.REPLACE_ME_DOMAIN` so Grafana generates
+correct absolute links behind the ingress.
+
+Prometheus is deliberately **not** exposed via ingress — it has no
+authentication of its own. Grafana reaches it in-cluster at
+`prometheus-service:9090`; there is no external route to Prometheus.
+
+The `grafana.<domain>` DNS record from §3 must exist before first apply, or
+cert-manager's ACME HTTP-01 challenge for the `grafana-tls` certificate will
+fail.
+
+## 11. Elasticsearch on small nodes
 
 The `oci` overlay's Elasticsearch patch
 (`kubernetes/environments/oci/patches/elasticsearch.yaml`) sets:
@@ -239,7 +349,7 @@ Terraform cloud-init on both nodes. If a node is ever rebuilt outside of
 Terraform (manual reimage, etc.), this sysctl must be re-set manually or
 Elasticsearch will fail to start.
 
-## 9. Storage (local-path)
+## 12. Storage (local-path)
 
 All three stateful PVCs use the k3s default `local-path` storage class:
 
@@ -256,7 +366,7 @@ small k3s clusters. It also means node loss equals data loss for that volume
 — there is no replication. Backups are a later phase (see `mankahi-backups`
 bucket in §7).
 
-## 10. Resource budget verification
+## 13. Resource budget verification
 
 The overlay's resource patches (`patches/resources.yaml`,
 `patches/replicas.yaml`) are meant to keep total Deployment memory requests
@@ -269,7 +379,7 @@ kubectl kustomize kubernetes/environments/oci | python kubernetes/environments/o
 This script (stdlib + PyYAML) sums each Deployment's memory request x its
 replica count. Budget: 6144Mi. Current total: 5120Mi.
 
-## 11. Known issues / scan exceptions
+## 14. Known issues / scan exceptions
 
 a. `${HOSTNAME}` appears in the `elasticsearch-config` ConfigMap. This is
    Elasticsearch's own runtime variable substitution (resolved by
@@ -297,7 +407,7 @@ e. The base's `HorizontalPodAutoscaler` objects for `auth-service` (min 3),
    `blog-service` (min 5), `analytics-service` (min 3), and `admin-service`
    (min 2) are excluded from the `oci` render via `patches/delete-hpa.yaml`.
    HPA `minReplicas` overrides `Deployment.spec.replicas` at runtime, so
-   leaving them in would push the running replica counts above the §10
+   leaving them in would push the running replica counts above the §13
    budget table's fixed values (auth 2, blog 2, analytics 1, admin 1) and
    exceed the free-tier memory budget (~7.3GB requests vs the 6144Mi cap).
    Replica counts on OCI are fixed by `patches/replicas.yaml` instead. HPA
