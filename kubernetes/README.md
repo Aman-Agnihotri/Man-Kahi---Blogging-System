@@ -37,14 +37,10 @@ kubernetes/
 
 There used to be a second, parallel `overlays/` directory attempting the
 same job as `environments/` with a different mechanism (`namePrefix`
-instead of generator merges). It's archived at `overlays.archived/` -
-`environments/` is now the single canonical path, and `deploy.sh` only
-references that one. `overlays.archived/`'s `namePrefix: dev-` approach
-was also independently broken: it renames every Service object (e.g.
-`redis-service` -> `dev-redis-service`) but `base/config.yaml` hardcodes
-the unprefixed names into `REDIS_HOST`/`ELASTICSEARCH_NODE` - only two of
-several hardcoded service hostnames had ad-hoc overrides, so it would
-have silently broken database/search connectivity for anything else.
+instead of generator merges). It was briefly archived at
+`overlays.archived/` and has since been deleted entirely -
+`environments/` is the single canonical path, and `deploy.sh` only
+references that one.
 
 ## Known Limitations (fixed some issues, one remains)
 

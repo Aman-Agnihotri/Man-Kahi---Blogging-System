@@ -314,11 +314,11 @@ Kubernetes manifests exist, but they are not the current supported deployment pa
 
 Fixed (2026-07-03): the missing `kubernetes/base/.env` reference, the
 duplicate `overlays/`/`environments/` trees (consolidated to
-`environments/`, `overlays/` archived), `services.yaml` never being wired
-into `base/kustomization.yaml` (three of four backend services had no
-Kubernetes objects at all), and a secret-name mismatch
-(`services-secret` vs the real `app-secrets`). `kubectl kustomize base`
-now builds cleanly.
+`environments/`, `overlays/` archived, since deleted entirely),
+`services.yaml` never being wired into `base/kustomization.yaml` (three
+of four backend services had no Kubernetes objects at all), and a
+secret-name mismatch (`services-secret` vs the real `app-secrets`).
+`kubectl kustomize base` now builds cleanly.
 
 Still outstanding:
 
