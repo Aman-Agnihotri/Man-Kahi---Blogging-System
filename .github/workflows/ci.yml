@@ -260,6 +260,10 @@ jobs:
             type=sha,format=long,prefix=
             type=ref,event=branch
             type=semver,pattern={{version}}
+          # latest=auto would add a `latest` tag on v* semver tags; spec
+          # sec 0.1.2 forbids any `latest` tag.
+          flavor: |
+            latest=false
 
       - name: Build and push
         uses: docker/build-push-action@v7
