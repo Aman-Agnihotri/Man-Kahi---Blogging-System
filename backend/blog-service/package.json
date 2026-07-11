@@ -8,7 +8,7 @@
     "prebuild": "npm run prisma:generate",
     "pretest": "npm run prisma:generate",
     "dev": "ts-node-dev -r tsconfig-paths/register --respawn --poll --transpile-only src/server.ts",
-    "build": "tsc --project tsconfig.json",
+    "build": "tsc --project tsconfig.json && tsc-alias --project tsconfig.json",
     "start": "node dist/server.js",
     "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -55,6 +55,7 @@
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
     "ts-node-dev": "^2.0.0",
+    "tsc-alias": "^1.9.0",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3"
   }

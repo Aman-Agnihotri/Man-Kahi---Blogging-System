@@ -69,7 +69,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
     CMD ["sh", "-c", "curl -sf http://localhost:3001/health | grep -q '\"status\":\"healthy\"'"]
 
 # Start the server
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/auth-service/src/server.js"]
 
 # Development image
 FROM builder AS development
