@@ -102,7 +102,6 @@ data "oci_core_vnic_attachments" "server" {
 
 data "oci_core_private_ips" "server" {
   vnic_id    = data.oci_core_vnic_attachments.server.vnic_attachments[0].vnic_id
-  ip_address = var.server_private_ip
 }
 
 resource "oci_core_public_ip" "server" {
@@ -120,7 +119,6 @@ data "oci_core_vnic_attachments" "agent" {
 
 data "oci_core_private_ips" "agent" {
   vnic_id    = data.oci_core_vnic_attachments.agent.vnic_attachments[0].vnic_id
-  ip_address = var.agent_private_ip
 }
 
 resource "oci_core_public_ip" "agent" {
