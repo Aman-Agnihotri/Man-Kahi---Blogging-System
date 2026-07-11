@@ -13,18 +13,20 @@ commonLabels:
 namespace: mankahi
 
 images:
+  # backends trail frontend by one commit: only backend/ changed in
+  # 4f2bac5, so backend images were rebuilt while frontend stayed at b4f0a5e
   - name: mankahi/auth-service
     newName: ghcr.io/aman-agnihotri/mankahi-auth-service
-    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
+    newTag: 4f2bac5ed53ddda17082ca1efdd1213b2cf1108d
   - name: mankahi/blog-service
     newName: ghcr.io/aman-agnihotri/mankahi-blog-service
-    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
+    newTag: 4f2bac5ed53ddda17082ca1efdd1213b2cf1108d
   - name: mankahi/analytics-service
     newName: ghcr.io/aman-agnihotri/mankahi-analytics-service
-    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
+    newTag: 4f2bac5ed53ddda17082ca1efdd1213b2cf1108d
   - name: mankahi/admin-service
     newName: ghcr.io/aman-agnihotri/mankahi-admin-service
-    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
+    newTag: 4f2bac5ed53ddda17082ca1efdd1213b2cf1108d
   # init-service intentionally trails at ee0128de...: CI path-filters skip it
   # when backend/shared is untouched, so it was not rebuilt; unchanged image,
   # and the init Job already completed successfully with it.
