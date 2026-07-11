@@ -15,7 +15,13 @@ write_files:
       export INSTALL_K3S_VERSION="${k3s_version}"
       export K3S_URL="https://${server_ip}:6443"
       export K3S_TOKEN="${k3s_token}"
-      curl -sfL https://get.k3s.io | sh -s - agent --node-name mankahi-k3s-agent
+      # Download the installer to a file first: 'curl -sf | sh' pipes EMPTY
+      # input on download failure and exits 0 -- a silent no-op that left the
+      # node without k3s on first boot. A file download under 'set -e' with
+      # retries fails loudly instead.
+      curl -sfL --retry 10 --retry-delay 15 --retry-all-errors \
+        -o /opt/mankahi/get-k3s.sh https://get.k3s.io
+      sh /opt/mankahi/get-k3s.sh agent --node-name mankahi-k3s-agent
 runcmd:
   - iptables -F
   - iptables -P INPUT ACCEPT
