@@ -10,10 +10,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - REPLACE_ME_DOMAIN
+        - mankahi.work.gd
       secretName: mankahi-tls
   rules:
-    - host: REPLACE_ME_DOMAIN
+    - host: mankahi.work.gd
       http:
         paths:
           - path: /api/auth
@@ -69,10 +69,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - grafana.REPLACE_ME_DOMAIN
+        - grafana.mankahi.work.gd
       secretName: grafana-tls
   rules:
-    - host: grafana.REPLACE_ME_DOMAIN
+    - host: grafana.mankahi.work.gd
       http:
         paths:
           - path: /

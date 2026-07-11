@@ -5,7 +5,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: REPLACE_ME_ACME_EMAIL
+    email: amanagnihotri412002@gmail.com
     privateKeySecretRef:
       name: letsencrypt-staging
     solvers:
@@ -20,7 +20,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: REPLACE_ME_ACME_EMAIL
+    email: amanagnihotri412002@gmail.com
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
