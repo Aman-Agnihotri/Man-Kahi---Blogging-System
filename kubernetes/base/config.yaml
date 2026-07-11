@@ -46,6 +46,12 @@ data:
   REDIS_HOST: redis-service
   REDIS_PORT: "6379"
   ELASTICSEARCH_NODE: http://elasticsearch-service:9200
+  # The shared redis client (backend/shared/config/redis.ts) reads REDIS_URL
+  # (falls back to localhost - bit us in-cluster), and blog-service reads
+  # ELASTICSEARCH_URL. The older REDIS_HOST/REDIS_PORT and ELASTICSEARCH_NODE
+  # keys above are not consumed by current code but are left for compatibility.
+  REDIS_URL: redis://redis-service:6379
+  ELASTICSEARCH_URL: http://elasticsearch-service:9200
   ANALYTICS_SERVICE_URL: http://analytics-service:3003
   AUTH_SERVICE_URL: http://auth-service:3001
   BLOG_SERVICE_URL: http://blog-service:3002
