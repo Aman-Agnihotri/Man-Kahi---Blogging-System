@@ -1,0 +1,32 @@
+#cloud-config
+# NSGs already enforce ingress at the VCN layer, so the host iptables is
+# redundant, and Ubuntu-on-OCI's default REJECT rules only break
+# flannel/kubelet — flushing and persisting the empty table is the reliable
+# choice.
+write_files:
+  - path: /etc/sysctl.d/99-mankahi.conf
+    content: |
+      vm.max_map_count=262144
+  - path: /opt/mankahi/install-k3s.sh
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      set -e
+      export INSTALL_K3S_VERSION="${k3s_version}"
+      export K3S_URL="https://${server_ip}:6443"
+      export K3S_TOKEN="${k3s_token}"
+      curl -sfL https://get.k3s.io | sh -s - agent --node-name mankahi-k3s-agent
+runcmd:
+  - iptables -F
+  - iptables -P INPUT ACCEPT
+  - iptables -P FORWARD ACCEPT
+  - iptables -P OUTPUT ACCEPT
+  - ip6tables -F
+  - ip6tables -P INPUT ACCEPT
+  - ip6tables -P FORWARD ACCEPT
+  - ip6tables -P OUTPUT ACCEPT
+  - netfilter-persistent save
+  - swapoff -a
+  - sed -i '/ swap / s/^/#/' /etc/fstab
+  - sysctl --system
+  - /opt/mankahi/install-k3s.sh

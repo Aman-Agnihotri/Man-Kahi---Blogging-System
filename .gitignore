@@ -49,3 +49,8 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Terraform
+*.tfstate*
+.terraform/
+terraform.tfvars

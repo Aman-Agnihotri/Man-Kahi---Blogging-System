@@ -1,0 +1,15 @@
+tenancy_ocid     = "REPLACE_ME_TENANCY_OCID"
+user_ocid        = "REPLACE_ME_USER_OCID"
+fingerprint      = "REPLACE_ME_API_KEY_FINGERPRINT"
+private_key_path = "REPLACE_ME_PATH_TO_API_PRIVATE_KEY_PEM"
+region           = "REPLACE_ME_HOME_REGION"
+compartment_ocid = "REPLACE_ME_COMPARTMENT_OCID"
+ssh_public_key   = "REPLACE_ME_SSH_PUBLIC_KEY_CONTENTS"
+admin_cidr       = "REPLACE_ME_ADMIN_CIDR_e.g_1.2.3.4/32" # NEVER 0.0.0.0/0
+
+# Optional overrides (safe defaults in variables.tf):
+# k3s_version               = "v1.33.13+k3s1"
+# availability_domain_index = 0
+# instance_ocpus            = 2
+# instance_memory_in_gbs    = 12
+# boot_volume_size_in_gbs   = 50
