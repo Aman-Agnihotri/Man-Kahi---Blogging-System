@@ -27,11 +27,17 @@ apply. None of them may be left as-is in a live cluster.
 
 | Placeholder | Location | Notes |
 |---|---|---|
-| `REPLACE_ME_DOMAIN` | `kubernetes/environments/oci/patches/ingress-hosts.yaml` | Appears as the primary ingress host, as `grafana.<domain>`, and in the TLS `hosts` list(s) for both. |
-| `REPLACE_ME_ACME_EMAIL` | `kubernetes/platform/cert-manager/cluster-issuer.yaml` | Let's Encrypt account contact email. |
-| `REPLACE_ME_FRONTEND_IMAGE_SHA` | `kubernetes/environments/oci/kustomization.yaml` | No frontend image has been built yet. See §6. |
 | `${MINIO_ACCESS_KEY}` / `${MINIO_SECRET_KEY}` | `kubernetes/base/secrets/services-secrets.yaml` | `envsubst` placeholders. Values are the Terraform outputs `object_storage_access_key` / `object_storage_secret_key`. Phase 4 replaces this envsubst flow with SealedSecrets. |
 | `${GRAFANA_ADMIN_PASSWORD}` | `kubernetes/environments/oci/grafana-secret.yaml` | `envsubst` placeholder for the Grafana admin password, consumed as `GF_SECURITY_ADMIN_PASSWORD`. Sealed in Phase 4 like the other secrets. |
+
+The three former fill-in-before-deploy placeholders are now resolved: the domain is
+`mankahi.work.gd` (with a `grafana.` subdomain) in
+`kubernetes/environments/oci/patches/ingress-hosts.yaml`, the ACME contact
+email is set in `kubernetes/platform/cert-manager/cluster-issuer.yaml` (both
+issuers), and the frontend image SHA is pinned in
+`kubernetes/environments/oci/kustomization.yaml` (see §5, §6). Only the
+deploy-time `${VAR}`-style secret placeholders in the table above remain,
+until Phase 4's SealedSecrets migration.
 
 **`POSTGRES_USER` constraint:** the value substituted for `${POSTGRES_USER}` in
 `db-secrets` (`kubernetes/base/secrets/services-secrets.yaml`) **must be
@@ -44,13 +50,31 @@ the one the backends connect as.
 
 ## 3. DNS
 
-Buy one domain (roughly $10/yr is sufficient). Create A records for:
+The domain is `mankahi.work.gd`, a free domain from freedomain.one. Two
+caveats worth knowing:
 
-- `<domain>`
-- `grafana.<domain>`
+- Renewal is only possible within the 30 days before expiry (expires
+  2027-07-11) — if that window is missed, the domain lapses and is not
+  recoverable.
+- It is a third-level name under the shared `work.gd` domain, so Let's
+  Encrypt's per-registered-domain rate limit may be shared with other
+  work.gd users. The staging-issuer-first flow in §4 step 4 mitigates the
+  discovery cost of hitting that limit; if it ever becomes a real blocker,
+  the fallback is to swap in another domain, which is a one-commit change
+  (`patches/ingress-hosts.yaml` + `cluster-issuer.yaml` email if desired).
+
+Create A records for:
+
+- `mankahi.work.gd`
+- `grafana.mankahi.work.gd`
 
 Both records must point at **both** reserved node public IPs (Terraform
-outputs from Phase 2).
+outputs from Phase 2) — four A records total:
+
+- `mankahi.work.gd` -> node 1 public IP
+- `mankahi.work.gd` -> node 2 public IP
+- `grafana.mankahi.work.gd` -> node 1 public IP
+- `grafana.mankahi.work.gd` -> node 2 public IP
 
 Why both IPs: k3s ServiceLB (Klipper) fulfills the ingress-nginx `Service`
 of `type: LoadBalancer` by binding ports 80/443 on **every** node, so both
@@ -169,37 +193,28 @@ To deploy a newer build of a component:
    `kubernetes/environments/oci/kustomization.yaml`.
 3. Commit the change.
 
-Current pins — all four backend services plus the init Job's image are
-pinned to the same SHA:
+Current pins — all four backend services, the init Job's image, and the
+frontend image are all pinned to the same SHA:
 
 ```
-mankahi/auth-service        -> 9153a4948293b61684871be65da48a1d9b9e13d7
-mankahi/blog-service        -> 9153a4948293b61684871be65da48a1d9b9e13d7
-mankahi/analytics-service   -> 9153a4948293b61684871be65da48a1d9b9e13d7
-mankahi/admin-service       -> 9153a4948293b61684871be65da48a1d9b9e13d7
-mankahi/init-service        -> 9153a4948293b61684871be65da48a1d9b9e13d7
+mankahi/auth-service        -> ee0128de70760300bbb5a4a023ecbf64114b892a
+mankahi/blog-service        -> ee0128de70760300bbb5a4a023ecbf64114b892a
+mankahi/analytics-service   -> ee0128de70760300bbb5a4a023ecbf64114b892a
+mankahi/admin-service       -> ee0128de70760300bbb5a4a023ecbf64114b892a
+mankahi/init-service        -> ee0128de70760300bbb5a4a023ecbf64114b892a
+frontend                    -> ee0128de70760300bbb5a4a023ecbf64114b892a
 ```
 
-## 6. Frontend image (currently missing)
+## 6. Frontend image
 
-The frontend image has never been built by CI — no commit touching the
-frontend has landed since the CI workflow went live, so there is no GHCR tag
-to pin. `newTag:` for `frontend` in
-`kubernetes/environments/oci/kustomization.yaml` is currently
-`REPLACE_ME_FRONTEND_IMAGE_SHA`.
+The frontend image was built via a `workflow_dispatch` CI run on `main`
+(2026-07-11) and is now pinned in
+`kubernetes/environments/oci/kustomization.yaml` alongside the backend
+services and the init Job's image — see §5 for the current SHA.
 
-To fix: trigger the frontend CI workflow — either via `workflow_dispatch` if
-the workflow supports it, or by landing any commit that touches `frontend/`.
-Once the image lands in GHCR, take the resulting full 40-character SHA and
-replace the placeholder.
-
-Until this is done, the frontend `Deployment` in the `oci` overlay will fail
-to pull its image.
-
-Once it does run, the `oci` overlay's `patches/frontend-env.yaml` sets
-`NUXT_PUBLIC_API_URL=https://REPLACE_ME_DOMAIN`, so the browser's API calls
-are same-origin through the ingress rather than pointing at a separate API
-host.
+The `oci` overlay's `patches/frontend-env.yaml` sets
+`NUXT_PUBLIC_API_URL=https://mankahi.work.gd`, so the browser's API calls are
+same-origin through the ingress rather than pointing at a separate API host.
 
 ## 7. Object storage (MinIO client -> OCI S3-compatible endpoint)
 
@@ -258,9 +273,13 @@ of pre-creating manually. With `MINIO_SKIP_BUCKET_SETUP=true`, the services
 never call `bucketExists()`/`makeBucket()`/`setBucketPolicy()`, so the
 buckets must already exist.
 
-**Live verification (HUMAN, known risk item):** `presignedGetObject` against
-OCI's S3-compatible endpoint has not yet been exercised in this cluster and
-must be verified on first deploy:
+**Live verification (2026-07-11):** the presign mechanism itself has been
+verified live against OCI — an object was uploaded to the private
+`blog-images` bucket via the AWS CLI, and a `aws s3 presign` URL for that
+object was fetched successfully with `curl` (HTTP 200) against the OCI
+S3-compatible endpoint. What remains unverified is the in-app redirect path
+(`/api/blogs/images/<key>` -> `presignedGetObject`), which must be checked on
+first deploy:
 
 1. Upload an image via the blog UI.
 2. Confirm the object appears:
@@ -276,11 +295,23 @@ must be verified on first deploy:
    endpoint, that is a blocking finding for this deploy — do not treat the
    upload path as working until this step passes.
 
+**Operator note (AWS CLI gotcha found during the 2026-07-11 test):** AWS CLI
+v2.23+ defaults to aws-chunked streaming uploads, which OCI's S3-compatible
+endpoint rejects with `NotImplemented: AWS chunked encoding not supported`.
+This affects `aws s3 cp` (e.g. the manual upload step above) but not the
+app's MinIO SDK, which is unaffected. Fix, for the AWS CLI profile used
+against this endpoint:
+
+```
+aws configure set request_checksum_calculation when_required
+aws configure set response_checksum_validation when_required
+```
+
 ## 8. Ingress routing
 
 `kubernetes/base/ingress.yaml`, patched by
 `kubernetes/environments/oci/patches/ingress-hosts.yaml`, routes on the
-primary host (`REPLACE_ME_DOMAIN`):
+primary host (`mankahi.work.gd`):
 
 | Path | Backend service | Port |
 |---|---|---|
@@ -295,7 +326,7 @@ every incoming URI and broke backend routing, is not carried into the `oci`
 overlay's ingress — backends receive the full incoming URI as-is, which is
 what their own path-prefixed route handlers expect.
 
-`monitoring-ingress`, on the separate `grafana.REPLACE_ME_DOMAIN` host, routes
+`monitoring-ingress`, on the separate `grafana.mankahi.work.gd` host, routes
 `/` to `grafana-service:3000` only. Prometheus is deliberately not exposed via
 either ingress — see §10.
 
@@ -317,13 +348,13 @@ on every sync.
 
 ## 10. Monitoring / Grafana hardening
 
-Grafana is served on its own host, `grafana.REPLACE_ME_DOMAIN`, at the root
+Grafana is served on its own host, `grafana.mankahi.work.gd`, at the root
 path (`monitoring-ingress`, §8), rather than a subpath of the primary domain.
 The `oci` overlay's `patches/grafana-auth.yaml` disables anonymous access
 (`GF_AUTH_ANONYMOUS_ENABLED=false`), sources the admin password from
 `grafana-secrets` (`GF_SECURITY_ADMIN_PASSWORD`, the `${GRAFANA_ADMIN_PASSWORD}`
 placeholder — see §2), and sets
-`GF_SERVER_ROOT_URL=https://grafana.REPLACE_ME_DOMAIN` so Grafana generates
+`GF_SERVER_ROOT_URL=https://grafana.mankahi.work.gd` so Grafana generates
 correct absolute links behind the ingress.
 
 Prometheus is deliberately **not** exposed via ingress — it has no
@@ -389,12 +420,15 @@ a. `${HOSTNAME}` appears in the `elasticsearch-config` ConfigMap. This is
 b. `${VAR}`-style placeholders remain **only** in `Secret` resources (see
    §2). They are removed in Phase 4 by SealedSecrets.
 
-c. The `development/` and `production/` overlays currently fail
-   `kustomize build` with a pre-existing `app-config` `configMapGenerator`
-   `behavior: merge` error. This predates Phase 3: the base `app-config` is a
-   plain `resource`, not a generator output, and kustomize v5 requires a
-   generator-produced target for a `merge` behavior to apply against. The
-   `oci` overlay deliberately avoids this pattern (see §7) and is unaffected.
+c. The `development/` and `production/` overlays now build cleanly with
+   `kustomize build`. Phase 3.5 (commit `a1ea385`) deleted the broken
+   `app-config` `configMapGenerator` `behavior: merge` block and the
+   corresponding `secretGenerator` merge blocks that previously caused a
+   build failure (kustomize v5 requires a generator-produced target for a
+   `merge` behavior to apply against, and the base `app-config` was a plain
+   `resource`, not a generator output). The `oci` overlay was already
+   unaffected (see §7). Overlay-level secret overrides for `development`/
+   `production` return with Phase 4's SealedSecrets work.
 
 d. The base's hand-rolled nginx ingress controller manifests
    (`ingress-config.yaml`, `ingress-rbac.yaml`) are excluded from the `oci`
