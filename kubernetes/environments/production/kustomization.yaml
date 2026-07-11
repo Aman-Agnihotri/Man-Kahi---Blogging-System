@@ -6,48 +6,20 @@ namespace: mankahi
 resources:
   - ../../base
 
-configMapGenerator:
-  - name: app-config
-    behavior: merge
-    files:
-      - app-config.yaml
-
-secretGenerator:
-  - name: app-secrets
-    behavior: merge
-    files:
-      - secrets.yaml
-  - name: db-secrets
-    behavior: merge
-    files:
-      - secrets.yaml
-  - name: redis-secrets
-    behavior: merge
-    files:
-      - secrets.yaml
-  - name: minio-secrets
-    behavior: merge
-    files:
-      - secrets.yaml
-  - name: elasticsearch-secrets
-    behavior: merge
-    files:
-      - secrets.yaml
-
 patchesStrategicMerge:
   []
 
 images:
-- name: auth-service
+- name: mankahi/auth-service
   newName: registry.mankahi.local/auth-service
   newTag: stable
-- name: blog-service
+- name: mankahi/blog-service
   newName: registry.mankahi.local/blog-service
   newTag: stable
-- name: analytics-service
+- name: mankahi/analytics-service
   newName: registry.mankahi.local/analytics-service
   newTag: stable
-- name: admin-service
+- name: mankahi/admin-service
   newName: registry.mankahi.local/admin-service
   newTag: stable
 - name: frontend
