@@ -15,9 +15,10 @@ namespace: mankahi
 images:
   # backends trail frontend by one commit: only backend/ changed in
   # 4f2bac5, so backend images were rebuilt while frontend stayed at b4f0a5e
+  # (auth-service pinned separately at bc6bf3c for the OAuth join-row fix)
   - name: mankahi/auth-service
     newName: ghcr.io/aman-agnihotri/mankahi-auth-service
-    newTag: 4f2bac5ed53ddda17082ca1efdd1213b2cf1108d
+    newTag: bc6bf3c83285d135483438d3354f4ea6928c5d40
   - name: mankahi/blog-service
     newName: ghcr.io/aman-agnihotri/mankahi-blog-service
     newTag: 4f2bac5ed53ddda17082ca1efdd1213b2cf1108d
