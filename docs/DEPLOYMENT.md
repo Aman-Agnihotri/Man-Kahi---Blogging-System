@@ -327,7 +327,8 @@ Still outstanding:
   base ConfigMaps/Secrets that are plain static resources rather than
   generator-produced ones, which this kustomize version rejects. Needs a
   restructure of `kubernetes/base/config/environment.yaml` and
-  `kubernetes/base/secrets/services-secrets.yaml` to originate from
+  `kubernetes/base/secrets/services-secrets.yaml` (retired in Phase 4 —
+  secrets are SealedSecrets now; see docs/gitops.md) to originate from
   generators too - see `kubernetes/README.md`'s Known Limitations section
   for the exact error and fix direction.
 - Stateful components are modeled as basic Deployments and PVCs, not production-grade StatefulSets/operators/clusters.
