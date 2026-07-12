@@ -15,10 +15,9 @@ Build it with plain `kubectl`:
 kubectl kustomize kubernetes/environments/oci
 ```
 
-There is no Argo CD yet. Applying this overlay directly with
-`kubectl apply -k` is a transitional, human-driven deploy path. Phase 4
-introduces Argo CD, which takes over syncing this overlay (or its successor)
-from Git and retires the manual `kubectl apply -k` step described in §4.
+Deployment is GitOps via Argo CD (see `docs/gitops.md`), which continuously
+syncs this overlay (or its successor) from Git. Applying this overlay
+directly with `kubectl apply -k` is break-glass only — see §4.
 
 ## 2. Prerequisites / placeholders to fill
 
@@ -27,8 +26,8 @@ apply. None of them may be left as-is in a live cluster.
 
 | Placeholder | Location | Notes |
 |---|---|---|
-| `${MINIO_ACCESS_KEY}` / `${MINIO_SECRET_KEY}` | `kubernetes/base/secrets/services-secrets.yaml` | `envsubst` placeholders. Values are the Terraform outputs `object_storage_access_key` / `object_storage_secret_key`. Phase 4 replaces this envsubst flow with SealedSecrets. |
-| `${GRAFANA_ADMIN_PASSWORD}` | `kubernetes/environments/oci/grafana-secret.yaml` | `envsubst` placeholder for the Grafana admin password, consumed as `GF_SECURITY_ADMIN_PASSWORD`. Sealed in Phase 4 like the other secrets. |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | `kubernetes/environments/oci/sealed-secrets/` | Now supplied via SealedSecrets (see `docs/gitops.md`), not `envsubst`. Values are the Terraform outputs `object_storage_access_key` / `object_storage_secret_key`. |
+| `GRAFANA_ADMIN_PASSWORD` | `kubernetes/environments/oci/sealed-secrets/` | Now supplied via SealedSecrets (see `docs/gitops.md`), consumed as `GF_SECURITY_ADMIN_PASSWORD`. |
 
 The three former fill-in-before-deploy placeholders are now resolved: the domain is
 `mankahi.work.gd` (with a `grafana.` subdomain) in
@@ -36,12 +35,13 @@ The three former fill-in-before-deploy placeholders are now resolved: the domain
 email is set in `kubernetes/platform/cert-manager/cluster-issuer.yaml` (both
 issuers), and the frontend image SHA is pinned in
 `kubernetes/environments/oci/kustomization.yaml` (see §5, §6). Only the
-deploy-time `${VAR}`-style secret placeholders in the table above remain,
-until Phase 4's SealedSecrets migration.
+deploy-time secret values in the table above are now supplied via
+SealedSecrets (`kubernetes/environments/oci/sealed-secrets/`, see
+`docs/gitops.md`).
 
-**`POSTGRES_USER` constraint:** the value substituted for `${POSTGRES_USER}` in
-`db-secrets` (`kubernetes/base/secrets/services-secrets.yaml`) **must be
-`postgres`**. `app-secrets`' `DATABASE_URL` hardcodes the user as `postgres`
+**`POSTGRES_USER` constraint:** the value sealed for `POSTGRES_USER` in
+`db-secrets` (`kubernetes/environments/oci/sealed-secrets/`, see
+`docs/gitops.md`) **must be `postgres`**. `app-secrets`' `DATABASE_URL` hardcodes the user as `postgres`
 (`postgresql://postgres:${POSTGRES_PASSWORD}@postgres-service:5432/mankahi`),
 and `db-secrets`' `POSTGRES_USER` overrides the `postgres-config` ConfigMap's
 default (also `postgres`) for the Postgres container itself. Substituting any
@@ -84,101 +84,39 @@ can fall back to the other.
 
 ## 4. First-deploy order
 
-These are all HUMAN steps, performed after `terraform apply` has completed
-and `KUBECONFIG` is pointed at the new cluster.
+**Superseded by GitOps (Phase 4).** The deployment path is now: install Argo
+CD → apply the root app → everything converges with zero further `kubectl
+apply` commands. Follow `docs/gitops.md` §3 (fresh-cluster bootstrap) — it
+covers the Argo CD install, the SealedSecret health-check patch, DNS, the
+root app, sealing, and the one-time DB seed. Platform components
+(ingress-nginx, cert-manager, sealed-secrets) and the application are all
+Argo-managed with sync-wave ordering; the DB-init Job runs as an Argo PreSync
+hook (no manual Job deletion needed).
 
-1. Install the pinned, vendored ingress controller:
+First-bring-up TLS note (still valid): to avoid Let's Encrypt production
+rate limits on a brand-new cluster, annotate the ingresses to the staging
+issuer first, verify issuance, then switch back to `letsencrypt-prod`:
 
-   ```
-   kubectl apply -k kubernetes/platform/ingress-nginx
-   ```
+```
+kubectl annotate ingress -n mankahi mankahi-ingress monitoring-ingress \
+  cert-manager.io/cluster-issuer=letsencrypt-staging --overwrite
+# verify: kubectl get certificate -n mankahi
+kubectl annotate ingress -n mankahi mankahi-ingress monitoring-ingress \
+  cert-manager.io/cluster-issuer=letsencrypt-prod --overwrite
+```
 
-   (pinned v1.15.1, vendored manifests — see
-   `kubernetes/platform/ingress-nginx/README.md`.)
+### Historical / break-glass note (pre-GitOps manual apply)
 
-2. Install cert-manager and wait for it to be ready:
-
-   ```
-   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.0/cert-manager.yaml
-   kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=180s
-   ```
-
-3. Apply the ClusterIssuer:
-
-   ```
-   kubectl apply -f kubernetes/platform/cert-manager/cluster-issuer.yaml
-   ```
-
-4. On the FIRST bring-up only, avoid Let's Encrypt production rate limits by
-   pointing the ingress objects at the staging issuer first:
-
-   ```
-   kubectl annotate ingress -n mankahi mankahi-ingress monitoring-ingress \
-     cert-manager.io/cluster-issuer=letsencrypt-staging --overwrite
-   ```
-
-   Verify staging certificates issue successfully (`kubectl get certificate -n mankahi`,
-   `kubectl describe certificate <name> -n mankahi`), then switch back to
-   production — either re-apply the overlay (which ships the prod issuer) or
-   re-annotate directly:
-
-   ```
-   kubectl annotate ingress -n mankahi mankahi-ingress monitoring-ingress \
-     cert-manager.io/cluster-issuer=letsencrypt-prod --overwrite
-   ```
-
-5. Render the secrets with `envsubst` (using the Terraform object storage
-   outputs — see §2), apply them, then apply the overlay. This step is
-   transitional and pre-Argo CD; Phase 4 replaces it with GitOps. Note the
-   `${POSTGRES_USER}` constraint in §2 (must resolve to `postgres`), and that
-   `kubernetes/environments/oci/grafana-secret.yaml` needs `${GRAFANA_ADMIN_PASSWORD}`
-   rendered the same way:
-
-   ```
-   envsubst < kubernetes/base/secrets/services-secrets.yaml | kubectl apply -f -
-   envsubst < kubernetes/environments/oci/grafana-secret.yaml | kubectl apply -f -
-   kubectl apply -k kubernetes/environments/oci
-   ```
-
-6. Run the one-shot database init Job (`mankahi-init-db`, defined in
-   `kubernetes/base/init-job.yaml`) to completion before expecting backend
-   services to become healthy — nothing else creates the Prisma schema
-   in-cluster:
-
-   ```
-   kubectl wait --for=condition=complete job/mankahi-init-db -n mankahi --timeout=180s
-   ```
-
-   This Job is not yet Argo-managed and is immutable once it reaches
-   `Complete`. If you need to re-run it (e.g. re-applying the overlay after a
-   schema change), delete it first:
-
-   ```
-   kubectl delete job mankahi-init-db -n mankahi
-   ```
-
-   Phase 4 replaces this manual step with an Argo CD PreSync hook.
-
-7. Verify:
-
-   ```
-   kubectl get pods -n mankahi -w
-   ```
-
-   All pods (including frontend, once its image is built — see §6) should
-   reach `Ready` within roughly 10 minutes.
-
-   ```
-   curl -vI https://<domain>
-   ```
-
-   should show a Let's Encrypt-issued certificate.
-
-   ```
-   kubectl top nodes
-   ```
-
-   should show memory usage at or below roughly 70% on each node.
+The pre-Phase-4 flow (envsubst-rendered Secrets + `kubectl apply -k`) is
+retired: the `${VAR}` placeholder files it depended on are deleted, and a
+plain apply of placeholder Secrets over live ones is exactly the incident
+that motivated SealedSecrets. If Argo CD is ever unavailable and a manual
+apply is unavoidable, the proven-safe order is: apply the overlay MINUS all
+Secrets (filter `kind: Secret` out of the render with a small python filter),
+then create the real Secrets by hand — pods wait in
+`CreateContainerConfigError` until Secrets exist, which is safe by
+construction. Prefer `argocd app sync mankahi` (break-glass) over any manual
+apply.
 
 ## 5. Manual image-SHA update flow
 
@@ -339,12 +277,10 @@ whose container `CMD` runs `prisma migrate deploy` / `db push`. It takes
 Prisma schema in-cluster, so this Job must reach `Complete` before backend
 services can work — see the first-deploy steps in §4.
 
-Pre-Argo CD, this Job is immutable once completed: re-running it (e.g. after
-a schema change) requires deleting it first
-(`kubectl delete job mankahi-init-db -n mankahi`) before re-applying the
-overlay. Phase 4 adds `argocd.argoproj.io/hook: PreSync` (with
-`hook-delete-policy: BeforeHookCreation`) so Argo CD re-runs it automatically
-on every sync.
+This Job is now an Argo CD PreSync hook (`argocd.argoproj.io/hook: PreSync`,
+`hook-delete-policy: BeforeHookCreation`), so Argo CD re-runs it
+automatically on every sync — no manual `kubectl delete job mankahi-init-db`
+step is needed.
 
 ## 10. Monitoring / Grafana hardening
 
@@ -417,8 +353,9 @@ a. `${HOSTNAME}` appears in the `elasticsearch-config` ConfigMap. This is
    Elasticsearch itself at container start), not an unresolved `envsubst`
    placeholder. It is expected to appear as-is in the rendered manifest.
 
-b. `${VAR}`-style placeholders remain **only** in `Secret` resources (see
-   §2). They are removed in Phase 4 by SealedSecrets.
+b. `${VAR}`-style placeholders no longer appear in `Secret` resources (see
+   §2). Done in Phase 4: they are removed by SealedSecrets — see
+   `docs/gitops.md`.
 
 c. The `development/` and `production/` overlays now build cleanly with
    `kustomize build`. Phase 3.5 (commit `a1ea385`) deleted the broken

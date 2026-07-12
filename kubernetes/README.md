@@ -46,7 +46,7 @@ templated. Sealing, rotation, and key backup: `docs/gitops.md`.
 ```
 kubectl kustomize kubernetes/environments/oci
 kubectl kustomize kubernetes/environments/development
-python kubernetes/environments/oci/verify-memory-budget.py   # app requests <= 6144Mi
+kubectl kustomize kubernetes/environments/oci | python kubernetes/environments/oci/verify-memory-budget.py   # app requests within 6144Mi
 ```
 
 ## Sync-wave ordering (why bootstrap converges safely)
