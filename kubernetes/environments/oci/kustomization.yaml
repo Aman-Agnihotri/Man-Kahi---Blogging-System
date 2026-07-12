@@ -13,8 +13,8 @@ commonLabels:
 namespace: mankahi
 
 images:
-  # backends trail frontend by one commit: only backend/ changed in
-  # 4f2bac5, so backend images were rebuilt while frontend stayed at b4f0a5e
+  # backends trail frontend: only backend/ changed in
+  # 4f2bac5, so backend images were rebuilt while frontend is pinned at 71d0ef0
   # (auth-service pinned separately at bc6bf3c for the OAuth join-row fix)
   - name: mankahi/auth-service
     newName: ghcr.io/aman-agnihotri/mankahi-auth-service
@@ -36,7 +36,7 @@ images:
     newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
   - name: frontend
     newName: ghcr.io/aman-agnihotri/mankahi-frontend
-    newTag: b4f0a5ed861e961e339353f84ec733c2fc24f776
+    newTag: 71d0ef0da381e4ddc46dac1bafa13bbda2a66435
 
 patches:
   - path: app-config.yaml
