@@ -192,13 +192,27 @@ function setupGoogleStrategy() {
       },
       async (req: any, accessToken: string, refreshToken: string, profile: any, done: Function) => {
         try {
+          // Shape the raw passport profile into the OAuthUser form the
+          // callback route's service calls (findOrCreateOAuthUser /
+          // handleOAuthCallback) read via req.authInfo.oauthProfile.
+          const oauthProfile = {
+            id: profile.id,
+            email: profile.emails?.[0]?.value,
+            profile: {
+              name: profile.displayName,
+              picture: profile.photos?.[0]?.value,
+            },
+            provider: profile.provider,
+          }
+
           // Check if we're linking to existing account
           const stateToken = req.query.state
           if (stateToken) {
             const result = await linkProvider(stateToken, profile)
-            return done(null, result.user, { 
+            return done(null, result.user, {
               token: result.token,
-              refreshToken: result.refreshToken 
+              refreshToken: result.refreshToken,
+              oauthProfile,
             })
           }
 
@@ -207,9 +221,10 @@ function setupGoogleStrategy() {
           const authToken = await authService.generateToken(user.id)
           const refreshToken = await authService.generateRefreshToken(user.id)
           updateActiveTokens(1);
-          return done(null, user, { 
+          return done(null, user, {
             token: authToken,
-            refreshToken 
+            refreshToken,
+            oauthProfile,
           })
         } catch (error) {
           trackError('oauth', 'oauth_strategy', 'google');
