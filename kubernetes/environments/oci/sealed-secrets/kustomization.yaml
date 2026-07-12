@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# EMPTY BY DESIGN — renders exit 0 with zero output today.
+# When the human seals the three SealedSecrets (see ../../../../docs/gitops.md and
+# ./README.md), replace the empty list below with:
+#   resources:
+#     - app-secrets.yaml
+#     - db-secrets.yaml
+#     - grafana-secrets.yaml
+# All three are strict-scope, name-bound, namespace `mankahi`. Plaintext NEVER lives here.
+resources: []

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Relocate the whole controller from upstream's kube-system into a dedicated
+# namespace. The `namespace:` transformer sets .metadata.namespace on every
+# namespaced object AND rewrites the ServiceAccount subject namespace in the
+# RoleBinding + ClusterRoleBinding (kube-system -> sealed-secrets). Cluster-scoped
+# objects (CRD, ClusterRole, ClusterRoleBinding metadata) and the Namespace object
+# itself are left untouched. See README.md.
+namespace: sealed-secrets
+
+resources:
+  - namespace.yaml     # must sort/apply first; Argo & kubectl apply namespaces ahead of namespaced objects
+  - controller.yaml    # vendored verbatim from v0.38.4 release (see README.md)
