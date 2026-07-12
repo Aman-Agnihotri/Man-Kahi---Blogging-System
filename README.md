@@ -1,8 +1,12 @@
 # ManKahi
 
+[![CI](https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System/actions/workflows/ci.yml/badge.svg)](https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System/actions/workflows/ci.yml)
+
+**Live at [mankahi.work.gd](https://mankahi.work.gd/)** — a production two-node arm64 k3s cluster engineered to fit entirely within Oracle Cloud's Always Free tier: twelve services memory-budgeted into 6 GiB, multi-arch images, TLS, and private object storage. (Domain is temporary and moving to a permanent one soon.)
+
 ManKahi is a blogging platform for writers who want a clean publishing space: markdown posts, searchable stories, author profiles, reader engagement, analytics, and moderation tools.
 
-It's a service-oriented application, built to run well on a laptop or a single server, with a clean enough architecture to scale further later.
+It's a service-oriented application that runs the same codebase everywhere: Docker Compose on a laptop for development, and a Kubernetes cluster in production — CI-built multi-arch images, Kustomize overlays, TLS via cert-manager/Let's Encrypt, and private object storage served through presigned URLs.
 
 ## Features
 
@@ -40,13 +44,13 @@ ManKahi is a service-oriented application:
 
 ```text
 Browser
-  -> Nginx gateway
+  -> Gateway (Nginx in dev / ingress-nginx + TLS in production)
   -> Nuxt frontend
   -> Auth, Blog, Analytics, and Admin services
   -> PostgreSQL, Redis, Elasticsearch, and object storage
 ```
 
-Only nginx is public in production; every backing service stays private. Read the full architecture notes in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+In development, an Nginx gateway fronts everything; in production, ingress-nginx terminates TLS (cert-manager + Let's Encrypt) and routes `/api/*` prefixes to the backend services and `/` to the frontend. Only the ingress is public; every backing service stays private. Read the full architecture notes in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Repository layout
 
@@ -57,21 +61,22 @@ Only nginx is public in production; every backing service stays private. Read th
 | `backend/shared/` | Shared library (Prisma schema, config, middlewares, utils) used by all backend services |
 | `docker/` | Docker Compose stack — the local dev environment (dev + production variants) |
 | `kubernetes/base/` | Kustomize base app manifests |
-| `kubernetes/environments/` | Kustomize overlays: `development/`, `production/`; `oci/` added in upcoming phases |
-| `kubernetes/platform/` | Cluster platform components (cert-manager issuers, Argo CD apps, sealed-secrets, ingress-nginx, network policies) — added in upcoming phases |
+| `kubernetes/environments/` | Kustomize overlays: development/, production/, and oci/ — the live production overlay (SHA-pinned images, resource budget, TLS ingress) |
+| `kubernetes/platform/` | Cluster platform components: ingress-nginx (vendored, pinned), cert-manager issuers; Argo CD + sealed-secrets arrive with the GitOps phase |
 | `kubernetes/scripts/` | Imperative deploy scripts — slated for removal in an upcoming phase (replaced by GitOps) |
-| `terraform/` | OCI infrastructure — added in upcoming phases |
-| `.github/workflows/` | CI: tests + multi-arch images to GHCR — added in upcoming phases |
+| `terraform/` | OCI infrastructure (VCN, two A1.Flex nodes, object storage) — applied and live |
+| `.github/workflows/` | CI: tests + multi-arch images to GHCR + Trivy scans |
 | `docs/` | Project documentation |
 
 ## Tech Stack
 
 - **Frontend:** Nuxt 3 (Vue), Tailwind CSS
 - **Backend:** Node.js/TypeScript microservices (auth, blog, analytics, admin), Express, Prisma
-- **Data:** PostgreSQL, Redis, Elasticsearch, MinIO (S3-compatible object storage)
-- **Gateway:** Nginx
+- **Data:** PostgreSQL, Redis, Elasticsearch
+- **Gateway:** Nginx (dev) / ingress-nginx + cert-manager (production)
 - **Observability:** Prometheus, Grafana, Pino structured logging
-- **Infra:** Docker Compose (dev and production), with Kubernetes manifests in progress
+- **Infra:** Docker Compose (dev), k3s on OCI Always Free (production) with Kustomize overlays, Terraform-provisioned infrastructure, GitHub Actions CI → GHCR (multi-arch), cert-manager + Let's Encrypt TLS
+- **Object storage:** MinIO locally; OCI Object Storage (S3-compatible) in production — private buckets, reads served via presigned URLs
 
 ## Getting Started
 
@@ -96,12 +101,18 @@ docker run --rm cloudflare/cloudflared:latest tunnel --url http://host.docker.in
 
 Cloudflare prints a public `https://*.trycloudflare.com` URL that proxies straight to nginx. It's temporary and disappears when the container stops.
 
+### Production
+
+The production deployment runs on a two-node k3s cluster on OCI's Always Free tier, deployed from the `kubernetes/environments/oci` overlay. The full story — infrastructure provisioning, image pinning, first-deploy order, TLS, and object storage — lives in [docs/oci-deployment.md](docs/oci-deployment.md). Deployments move to GitOps (Argo CD) in the next phase.
+
 Full setup, environment configuration, and production deployment steps live in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment](docs/DEPLOYMENT.md)
+- [OCI Production Deployment](docs/oci-deployment.md)
+- [CI Pipeline](docs/ci.md)
 - [Scaling Guidance](docs/SCALING.md)
 - [Alerting Recommendations](docs/ALERTING.md)
 - [Operational Runbook](docs/RUNBOOK.md)
