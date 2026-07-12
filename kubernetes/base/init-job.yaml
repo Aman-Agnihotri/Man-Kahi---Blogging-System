@@ -13,6 +13,12 @@ kind: Job
 metadata:
   name: mankahi-init-db
   namespace: mankahi
+  annotations:
+    # Argo CD lifecycle: run this Job as a PreSync hook on every sync; delete the
+    # previous Job object before creating the new one (Jobs are immutable — without
+    # this, a re-sync would fail on the fixed-name completed Job).
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 3
   template:
