@@ -148,7 +148,11 @@ async function handleOAuthAuthentication(profile: any) {
         email,
         username: profile.displayName || email.split('@')[0],
         roles: {
-          connect: { id: defaultRole.id },
+          create: {
+            role: {
+              connect: { id: defaultRole.id },
+            },
+          },
         },
         oAuthProviders: {
           create: {
