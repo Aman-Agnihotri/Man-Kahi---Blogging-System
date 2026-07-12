@@ -6,6 +6,26 @@ namespace: mankahi
 resources:
   - ../../base
 
+# Dev secrets: generated from committed .env files with obviously-fake values.
+# Names must stay literal (no hash suffix) — base workloads reference them via
+# envFrom/secretKeyRef as app-secrets / db-secrets / grafana-secrets.
+generatorOptions:
+  disableNameSuffixHash: true
+
+secretGenerator:
+  - name: app-secrets
+    type: Opaque
+    envs:
+      - secrets/app-secrets.env
+  - name: db-secrets
+    type: Opaque
+    envs:
+      - secrets/db-secrets.env
+  - name: grafana-secrets
+    type: Opaque
+    envs:
+      - secrets/grafana-secrets.env
+
 patchesStrategicMerge:
   []
 
