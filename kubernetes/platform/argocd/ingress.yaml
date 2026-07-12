@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # argocd-server runs --insecure (server.insecure=true): nginx terminates TLS
+    # and forwards plain HTTP to :80. gRPC (argocd CLI) is served over HTTP/2 on
+    # the same port in insecure mode, so backend-protocol stays HTTP — no GRPC/HTTPS.
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - argocd.mankahi.work.gd
+      secretName: argocd-server-tls
+  rules:
+    - host: argocd.mankahi.work.gd
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
