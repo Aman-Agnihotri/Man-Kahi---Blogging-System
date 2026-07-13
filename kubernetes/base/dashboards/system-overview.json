@@ -3,221 +3,559 @@
     "list": []
   },
   "editable": true,
-  "gnetId": null,
   "graphTooltip": 0,
-  "id": null,
   "links": [],
-  "panels": [
-    {
-      "title": "System Health",
-      "type": "row",
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      }
-    },
-    {
-      "title": "Service Status",
-      "type": "stat",
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 0,
-        "y": 1
-      },
-      "targets": [
-        {
-          "expr": "up",
-          "legendFormat": "{{job}}",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "textMode": "name"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "title": "Error Rates by Service",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 18,
-        "x": 6,
-        "y": 1
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(admin_errors_total[5m])) by (error_type)",
-          "legendFormat": "Admin - {{error_type}}",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(blog_operations_total{status='failure'}[5m])) by (operation)",
-          "legendFormat": "Blog - {{operation}}",
-          "refId": "B"
-        },
-        {
-          "expr": "sum(rate(auth_login_attempts_total{status='failure'}[5m]))",
-          "legendFormat": "Auth - Login Failures",
-          "refId": "C"
-        }
-      ]
-    },
-    {
-      "title": "User Activity",
-      "type": "row",
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 9
-      }
-    },
-    {
-      "title": "Active Users",
-      "type": "gauge",
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 0,
-        "y": 10
-      },
-      "targets": [
-        {
-          "expr": "analytics_active_users",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Authentication Activity",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 9,
-        "x": 6,
-        "y": 10
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(auth_login_attempts_total[5m])) by (status)",
-          "legendFormat": "Logins - {{status}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Content Activity",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 9,
-        "x": 15,
-        "y": 10
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(blog_operations_total[5m])) by (operation)",
-          "legendFormat": "{{operation}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Performance",
-      "type": "row",
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 18
-      }
-    },
-    {
-      "title": "Service Latencies (p95)",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 19
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(auth_operation_duration_seconds_bucket[5m])) by (operation, le))",
-          "legendFormat": "Auth - {{operation}}",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(blog_operation_duration_seconds_bucket[5m])) by (operation, le))",
-          "legendFormat": "Blog - {{operation}}",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(admin_operation_duration_seconds_bucket[5m])) by (operation, le))",
-          "legendFormat": "Admin - {{operation}}",
-          "refId": "C"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        }
-      }
-    },
-    {
-      "title": "Resource Usage",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 19
-      },
-      "targets": [
-        {
-          "expr": "rate(process_cpu_seconds_total[5m])",
-          "legendFormat": "{{job}} CPU",
-          "refId": "A"
-        },
-        {
-          "expr": "process_resident_memory_bytes",
-          "legendFormat": "{{job}} Memory",
-          "refId": "B"
-        }
-      ]
-    }
-  ],
-  "refresh": "10s",
-  "schemaVersion": 33,
+  "schemaVersion": 38,
   "style": "dark",
-  "tags": ["overview", "system"],
   "time": {
     "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "System Overview",
-  "uid": "system-overview",
-  "version": 1
+  "version": 1,
+  "uid": "mankahi-system-overview",
+  "title": "ManKahi - System Overview",
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "auth up",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count(auth_process_resident_memory_bytes) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "range",
+              "options": {
+                "from": 1,
+                "to": 1000000,
+                "result": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "blog up",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count(blog_process_resident_memory_bytes) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "range",
+              "options": {
+                "from": 1,
+                "to": 1000000,
+                "result": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "admin up",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count(admin_process_resident_memory_bytes) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "range",
+              "options": {
+                "from": 1,
+                "to": 1000000,
+                "result": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "analytics up",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count(analytics_process_resident_memory_bytes) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "range",
+              "options": {
+                "from": 1,
+                "to": 1000000,
+                "result": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Per-service RSS vs 6144Mi budget",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "auth_process_resident_memory_bytes",
+          "refId": "A",
+          "legendFormat": "auth"
+        },
+        {
+          "expr": "blog_process_resident_memory_bytes",
+          "refId": "B",
+          "legendFormat": "blog"
+        },
+        {
+          "expr": "admin_process_resident_memory_bytes",
+          "refId": "C",
+          "legendFormat": "admin"
+        },
+        {
+          "expr": "analytics_process_resident_memory_bytes",
+          "refId": "D",
+          "legendFormat": "analytics"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "stacking": {
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 6442450944
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "Total backend RSS",
+      "type": "stat",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(auth_process_resident_memory_bytes) + sum(blog_process_resident_memory_bytes) + sum(admin_process_resident_memory_bytes) + sum(analytics_process_resident_memory_bytes)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Aggregate request rate",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(auth_http_requests_total[5m])) + sum(rate(blog_http_requests_total[5m])) + sum(rate(admin_http_requests_total[5m])) + sum(rate(analytics_http_requests_total[5m]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Aggregate 5xx error ratio",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "( sum(rate(auth_http_requests_total{status_code=~\"5..\"}[5m])) + sum(rate(blog_http_requests_total{status_code=~\"5..\"}[5m])) + sum(rate(admin_http_requests_total{status_code=~\"5..\"}[5m])) + sum(rate(analytics_http_requests_total{status_code=~\"5..\"}[5m])) ) / clamp_min( sum(rate(auth_http_requests_total[5m])) + sum(rate(blog_http_requests_total[5m])) + sum(rate(admin_http_requests_total[5m])) + sum(rate(analytics_http_requests_total[5m])), 1 )",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "title": "Rate-limit hits",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(shared_rate_limit_hits_total[5m])) by (endpoint, limit_type)",
+          "refId": "A",
+          "legendFormat": "{{endpoint}} - {{limit_type}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "title": "Elasticsearch health - follow-up",
+      "type": "text",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "### Elasticsearch health - follow-up\n\nElasticsearch is not scraped by Prometheus (no exporter deployed). Cluster health is currently only visible via the Kubernetes readiness/liveness probes on the Elasticsearch pods.\n\nFollow-up: deploy prometheus-elasticsearch-exporter, then add elasticsearch_cluster_health_status panels to this dashboard."
+      }
+    }
+  ],
+  "tags": [
+    "system",
+    "overview"
+  ],
+  "gnetId": null,
+  "id": null
 }
