@@ -10,12 +10,11 @@ spec:
   source:
     repoURL: https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System.git
     targetRevision: main
+    # Directory source (auto-detected): Argo reads every *.yaml here as an Application
+    # manifest; new files are picked up automatically. recurse defaults to false and is
+    # deliberately NOT set: Argo normalizes default values off the live object, and a
+    # git-only default field would keep the self-managed root app permanently OutOfSync.
     path: kubernetes/platform/argocd/apps
-    directory:
-      # Directory source: Argo reads every *.yaml here as an Application manifest.
-      # New files (packet-2 platform-sealed-secrets.yaml, mankahi-secrets.yaml) are
-      # picked up automatically — no kustomization.yaml, recurse off (flat dir).
-      recurse: false
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
