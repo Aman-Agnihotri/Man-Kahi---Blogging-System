@@ -80,7 +80,19 @@ immediately. It is never committed, never `git add`ed, never in history.
      8-agent consumption sweep)
    - `db-secrets`: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_MULTIPLE_DATABASES
    - `grafana-secrets`: GF_SECURITY_ADMIN_PASSWORD
-2. Seal (against the live controller):
+2. **Lint the staging file before sealing** — two incident classes died here:
+   whitespace inside values, and base64-encoded values pasted without decoding
+   (`kubectl get secret -o yaml` backups store values base64-encoded under
+   `data:` — ALWAYS `echo '<value>' | base64 -d` before placing them in
+   `stringData`). All of these must pass:
+
+       grep -n " @" <staging-file>          # no space before the DATABASE_URL host — must print nothing
+       grep -n "[[:space:]]\"$" <staging-file>   # no trailing whitespace inside quoted values — must print nothing
+       grep -n "apps.googleusercontent.com" app-secrets.plain.yaml   # GOOGLE_CLIENT_ID decoded correctly — exactly one hit
+
+   Sanity-read every value: does it LOOK like the thing it claims to be
+   (a URL, a client id, a key), not like base64 of it?
+3. Seal (against the live controller):
 
        kubeseal \
          --controller-namespace sealed-secrets \
@@ -94,8 +106,8 @@ immediately. It is never committed, never `git add`ed, never in history.
    cert once with `kubeseal --controller-namespace sealed-secrets
    --controller-name sealed-secrets-controller --fetch-cert` and seal with
    `--cert`.
-3. Delete the staging files.
-4. Uncomment the three resource lines in
+4. Delete the staging files.
+5. Uncomment the three resource lines in
    `kubernetes/environments/oci/sealed-secrets/kustomization.yaml`, commit,
    merge to main. Argo does the rest.
 
@@ -147,16 +159,24 @@ exactly:
    changed. Running pods still hold OLD env — do not restart anything yet,
    and proceed to step 7 promptly (a pod that self-reschedules now would read
    the new DATABASE_URL before the DB password changes and crash-loop).
+   This verification is a HARD GATE: do not run step 7 until the
+   ownerReferences check prints `SealedSecret` AND a decoded spot-check of the
+   new data confirms the values changed and look correct.
 7. **ALTER USER on the live DB** (postgres reads POSTGRES_PASSWORD only at
    initdb; on an existing volume the env change alone does nothing —
    `ALTER USER` is the live rotation). Confirm first that the live superuser
    role is `postgres` (if not, substitute the real role in BOTH places):
 
-       kubectl exec -n mankahi deploy/postgres -- \
-         psql -U postgres -c "ALTER USER postgres WITH PASSWORD '<NEW>';"
+       kubectl exec -it -n mankahi deploy/postgres -- psql -U postgres
+       -- then TYPE inside the psql prompt (never paste a runbook line
+       -- containing a placeholder; a literal '<NEW>' became the live DB
+       -- password once):
+       ALTER USER postgres WITH PASSWORD 'the-real-new-value';
+       \q
 
    Existing pooled connections keep working; only NEW connections with the
-   old password fail from this instant.
+   old password fail from this instant. Interactive entry also keeps the
+   password out of shell history.
 8. **Immediately rolling-restart the backends** (new pods read new
    DATABASE_URL + rotated JWT/SESSION):
 
@@ -183,7 +203,8 @@ Reseal = section 4 steps 1-4 for the affected secret only.
 
 - **POSTGRES_PASSWORD**: follow section 6 steps 3-8 (ALTER USER order is the
   whole point). Update BOTH `db-secrets.POSTGRES_PASSWORD` and
-  `app-secrets.DATABASE_URL`.
+  `app-secrets.DATABASE_URL` (use the interactive psql form from section 6
+  step 7 — never a pasted one-liner).
 - **JWT_SECRET / SESSION_SECRET**: reseal app-secrets → merge → rolling
   restart all four backends. Global logout by design; low-traffic window.
 - **GRAFANA_ADMIN_PASSWORD**: reseal grafana-secrets → merge → restart

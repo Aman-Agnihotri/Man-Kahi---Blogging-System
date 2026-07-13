@@ -104,6 +104,8 @@ docs/gitops.md). If backends cannot connect after rotation:
 1. Pause self-heal (C1).
 2. Revert the live password:
    `kubectl exec -n mankahi deploy/postgres -- psql -U postgres -c "ALTER USER postgres WITH PASSWORD '<OLD-password-from-password-manager>';"`
+   Prefer the interactive psql form (see docs/gitops.md §6 step 7) — typed,
+   verified, and absent from shell history.
 3. Restore old `app-secrets`/`db-secrets` from the C0 snapshot.
 4. `kubectl rollout restart deployment -n mankahi`.
 
