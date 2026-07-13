@@ -63,7 +63,6 @@ In development, an Nginx gateway fronts everything; in production, ingress-nginx
 | `kubernetes/base/` | Kustomize base app manifests |
 | `kubernetes/environments/` | Kustomize overlays: development/, production/, and oci/ — the live production overlay (SHA-pinned images, resource budget, TLS ingress) |
 | `kubernetes/platform/` | Cluster platform components: ingress-nginx (vendored, pinned), cert-manager issuers; Argo CD + sealed-secrets arrive with the GitOps phase |
-| `kubernetes/scripts/` | Imperative deploy scripts — slated for removal in an upcoming phase (replaced by GitOps) |
 | `terraform/` | OCI infrastructure (VCN, two A1.Flex nodes, object storage) — applied and live |
 | `.github/workflows/` | CI: tests + multi-arch images to GHCR + Trivy scans |
 | `docs/` | Project documentation |
@@ -103,7 +102,7 @@ Cloudflare prints a public `https://*.trycloudflare.com` URL that proxies straig
 
 ### Production
 
-The production deployment runs on a two-node k3s cluster on OCI's Always Free tier, deployed from the `kubernetes/environments/oci` overlay. The full story — infrastructure provisioning, image pinning, first-deploy order, TLS, and object storage — lives in [docs/oci-deployment.md](docs/oci-deployment.md). Deployments move to GitOps (Argo CD) in the next phase.
+The production deployment runs on a two-node k3s cluster on OCI's Always Free tier, deployed from the `kubernetes/environments/oci` overlay. The full story — infrastructure provisioning, image pinning, first-deploy order, TLS, and object storage — lives in [docs/oci-deployment.md](docs/oci-deployment.md). Deployments run on GitOps (Argo CD) — see [docs/gitops.md](docs/gitops.md).
 
 Full setup, environment configuration, and production deployment steps live in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
