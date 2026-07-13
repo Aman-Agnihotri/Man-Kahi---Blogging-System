@@ -27,6 +27,9 @@ spec:
         - containerPort: 3000
           name: http
           protocol: TCP
+        env:
+          - name: HOME
+            value: /tmp
         resources:
           limits:
             memory: "512Mi"

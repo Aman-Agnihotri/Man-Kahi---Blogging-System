@@ -177,6 +177,8 @@ spec:
             mountPath: /app/blog-service/logs
           - name: tmp
             mountPath: /tmp
+          - name: uploads
+            mountPath: /app/blog-service/dist/blog-service/uploads
         readinessProbe:
           httpGet:
             path: /health
@@ -193,6 +195,8 @@ spec:
         - name: logs
           emptyDir: {}
         - name: tmp
+          emptyDir: {}
+        - name: uploads
           emptyDir: {}
 ---
 apiVersion: v1
