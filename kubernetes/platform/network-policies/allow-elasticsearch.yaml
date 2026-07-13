@@ -1,0 +1,24 @@
+# Applied by: mankahi-network-policies (platform child app, wave 1).
+# Evidence: ES client exists only in blog-service/src/utils/elasticsearch.ts; admin.controller
+# ES mentions are comments; analytics has zero ES references.
+# Push order: 3/8.
+# Enforcement begins only when default-deny-ingress (8/8) lands; until then this allow is inert.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-elasticsearch
+  namespace: mankahi
+spec:
+  podSelector:
+    matchLabels:
+      app: elasticsearch
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: blog-service
+      ports:
+        - protocol: TCP
+          port: 9200
