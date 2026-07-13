@@ -9,4 +9,7 @@ kind: Kustomization
 #     - db-secrets.yaml
 #     - grafana-secrets.yaml
 # All three are strict-scope, name-bound, namespace `mankahi`. Plaintext NEVER lives here.
-resources: []
+resources:
+  - app-secrets.yaml
+  - db-secrets.yaml
+  - grafana-secrets.yaml
