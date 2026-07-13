@@ -20,7 +20,7 @@ Prometheus, Grafana) has a healthcheck wired in, so this one command tells
 you almost everything at a glance.
 
 ```bash
-./scripts/health-check.sh -e development   # deeper check via docker/scripts/health-check.sh
+./docker/scripts/health-check.sh -e development   # deeper compose health check
 ```
 
 ## View logs

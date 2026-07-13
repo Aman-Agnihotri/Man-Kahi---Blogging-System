@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System.git
+    targetRevision: main
+    path: kubernetes/platform/argocd/apps
+    directory:
+      # Directory source: Argo reads every *.yaml here as an Application manifest.
+      # New files (packet-2 platform-sealed-secrets.yaml, mankahi-secrets.yaml) are
+      # picked up automatically — no kustomization.yaml, recurse off (flat dir).
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      # prune:false on the ROOT: never let a transiently-missing file cause Argo to
+      # delete a child platform Application and cascade-tear-down live platform infra.
+      # Each child manages its own resource pruning. Removing a child app is a
+      # deliberate manual `argocd app delete`, not an accidental prune.
+      prune: false

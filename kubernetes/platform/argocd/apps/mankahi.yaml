@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mankahi
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"   # after platform (-2) and sealed secrets (-1)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System.git
+    targetRevision: main
+    # Kustomize overlay: Argo auto-detects kustomization.yaml here — no source.kustomize
+    # block and no custom kustomize.buildOptions needed. Argo v3.4.5 bundles kustomize
+    # v5, which renders `patches:`/`images:`/`commonLabels` identically to `kubectl
+    # kustomize`; commonLabels emits a deprecation warning only, not an error.
+    path: kubernetes/environments/oci
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mankahi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

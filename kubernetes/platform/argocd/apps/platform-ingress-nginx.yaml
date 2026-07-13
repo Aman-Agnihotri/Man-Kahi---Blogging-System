@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-ingress-nginx
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"   # platform controllers first
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System.git
+    targetRevision: main
+    # Vendored v1.15.1 deploy.yaml + patches/budget.yaml via kustomization.yaml.
+    path: kubernetes/platform/ingress-nginx
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ingress-nginx      # created by the vendored manifest's own Namespace object
+  syncPolicy:
+    # LIVE-ADOPTION GATE: MANUAL initially. A false-positive selfHeal/prune of
+    # ingress-nginx drops all ingress for real users. Sync once by hand, confirm
+    # `argocd app diff` shows only additive tracking metadata, THEN uncomment the
+    # automated block below (spec end-state) and commit.
+    # automated:
+    #   prune: false     # never prune ingress-nginx: OCI LB / webhook-created objects
+    #                    # aren't all enumerated in git; a prune = ingress outage
+    #   selfHeal: true
+    syncOptions:
+      - ApplyOutOfSyncOnly=true   # no CRDs, 17KB manifest: client-side apply is fine (no SSA)
