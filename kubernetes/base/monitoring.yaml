@@ -41,7 +41,8 @@ spec:
       labels:
         app: prometheus
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: prometheus
+      automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534

@@ -13,6 +13,7 @@ resources:
   - ingress-config.yaml
   - ingress-rbac.yaml
   - monitoring.yaml
+  - monitoring-rbac.yaml
 
 commonLabels:
   app.kubernetes.io/name: mankahi

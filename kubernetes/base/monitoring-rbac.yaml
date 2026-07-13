@@ -1,0 +1,33 @@
+# Prometheus service discovery RBAC.
+# kubernetes_sd (role: pod) in prometheus.yml authenticates with the pod's
+# ServiceAccount token; without a token Prometheus discovers ZERO targets
+# (monitoring.yaml previously set automountServiceAccountToken: false with no SA).
+# ClusterRole scope matches the existing unfiltered pod SD config.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: mankahi
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mankahi-prometheus-pod-reader
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mankahi-prometheus-pod-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mankahi-prometheus-pod-reader
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: mankahi
