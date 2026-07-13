@@ -18,13 +18,10 @@ spec:
     server: https://kubernetes.default.svc
     namespace: ingress-nginx      # created by the vendored manifest's own Namespace object
   syncPolicy:
-    # LIVE-ADOPTION GATE: MANUAL initially. A false-positive selfHeal/prune of
-    # ingress-nginx drops all ingress for real users. Sync once by hand, confirm
-    # `argocd app diff` shows only additive tracking metadata, THEN uncomment the
-    # automated block below (spec end-state) and commit.
-    # automated:
-    #   prune: false     # never prune ingress-nginx: OCI LB / webhook-created objects
-    #                    # aren't all enumerated in git; a prune = ingress outage
-    #   selfHeal: true
+    # Live-adoption gate passed 2026-07-13 (manual syncs verified Synced/Healthy); automated end-state active.
+    automated:
+      prune: false     # never prune ingress-nginx: OCI LB / webhook-created objects
+                       # aren't all enumerated in git; a prune = ingress outage
+      selfHeal: true
     syncOptions:
       - ApplyOutOfSyncOnly=true   # no CRDs, 17KB manifest: client-side apply is fine (no SSA)
