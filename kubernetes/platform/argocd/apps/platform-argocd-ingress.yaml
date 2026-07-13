@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-argocd-ingress
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"   # after cert-manager and the Argo install (-2); the Ingress needs the ClusterIssuer and argocd-server Service
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System.git
+    targetRevision: main
+    path: kubernetes/platform/argocd/ingress
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    # Automated from day one: the live Ingress was kubectl-applied once as an unblock;
+    # first sync adopts it (additive tracking metadata only).
+    automated:
+      prune: false     # an accidental prune would drop the Argo UI's TLS entrypoint
+      selfHeal: true
