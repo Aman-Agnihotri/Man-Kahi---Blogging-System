@@ -42,6 +42,12 @@ spec:
         app: prometheus
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: prometheus
           image: prom/prometheus:v2.45.0
@@ -65,6 +71,10 @@ spec:
               memory: "1Gi"
               cpu: "500m"
               ephemeral-storage: "12Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
       volumes:
         - name: prometheus-config
           configMap:
@@ -266,6 +276,12 @@ spec:
         app: grafana
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: grafana
           image: grafana/grafana:10.2.0
@@ -297,6 +313,10 @@ spec:
               memory: "512Mi"
               cpu: "500m"
               ephemeral-storage: "6Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
       volumes:
         - name: grafana-config
           configMap:

@@ -18,6 +18,12 @@ spec:
         prometheus.io/port: "3001"
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: auth-service
         image: mankahi/auth-service:1.0.0
@@ -25,6 +31,9 @@ spec:
         - containerPort: 3001
           name: http
           protocol: TCP
+        env:
+          - name: SERVICE_NAME
+            value: "auth-service"
         envFrom:
         - configMapRef:
             name: services-config
@@ -38,6 +47,16 @@ spec:
             memory: "512Mi"
             cpu: "500m"
             ephemeral-storage: "1Gi"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+          - name: logs
+            mountPath: /app/auth-service/logs
+          - name: tmp
+            mountPath: /tmp
         readinessProbe:
           httpGet:
             path: /health
@@ -50,6 +69,11 @@ spec:
             port: http
           initialDelaySeconds: 15
           periodSeconds: 20
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -114,6 +138,12 @@ spec:
         prometheus.io/port: "3002"
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: blog-service
         image: mankahi/blog-service:1.0.0
@@ -121,6 +151,9 @@ spec:
         - containerPort: 3002
           name: http
           protocol: TCP
+        env:
+          - name: SERVICE_NAME
+            value: "blog-service"
         envFrom:
         - configMapRef:
             name: services-config
@@ -134,6 +167,16 @@ spec:
             memory: "1Gi"
             cpu: "1000m"
             ephemeral-storage: "2Gi"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+          - name: logs
+            mountPath: /app/blog-service/logs
+          - name: tmp
+            mountPath: /tmp
         readinessProbe:
           httpGet:
             path: /health
@@ -146,6 +189,11 @@ spec:
             port: http
           initialDelaySeconds: 15
           periodSeconds: 20
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -219,6 +267,12 @@ spec:
         prometheus.io/port: "3003"
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: analytics-service
         image: mankahi/analytics-service:1.0.0
@@ -230,6 +284,8 @@ spec:
         env:
           - name: PORT
             value: "3003"
+          - name: SERVICE_NAME
+            value: "analytics-service"
         envFrom:
         - configMapRef:
             name: services-config
@@ -243,6 +299,16 @@ spec:
             memory: "1Gi"
             cpu: "750m"
             ephemeral-storage: "2Gi"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+          - name: logs
+            mountPath: /app/analytics-service/logs
+          - name: tmp
+            mountPath: /tmp
         readinessProbe:
           httpGet:
             path: /health
@@ -255,6 +321,11 @@ spec:
             port: http
           initialDelaySeconds: 15
           periodSeconds: 20
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -319,6 +390,12 @@ spec:
         prometheus.io/port: "3004"
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: admin-service
         image: mankahi/admin-service:1.0.0
@@ -326,6 +403,9 @@ spec:
         - containerPort: 3004
           name: http
           protocol: TCP
+        env:
+          - name: SERVICE_NAME
+            value: "admin-service"
         envFrom:
         - configMapRef:
             name: services-config
@@ -339,6 +419,16 @@ spec:
             memory: "512Mi"
             cpu: "500m"
             ephemeral-storage: "1Gi"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+          - name: logs
+            mountPath: /app/admin-service/logs
+          - name: tmp
+            mountPath: /tmp
         readinessProbe:
           httpGet:
             path: /health
@@ -351,6 +441,11 @@ spec:
             port: http
           initialDelaySeconds: 15
           periodSeconds: 20
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

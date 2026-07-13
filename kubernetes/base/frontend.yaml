@@ -14,6 +14,12 @@ spec:
         app: frontend
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: frontend
         image: frontend:1.0.0
@@ -28,6 +34,14 @@ spec:
           requests:
             memory: "256Mi"
             cpu: "100m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
         readinessProbe:
           httpGet:
             path: /
@@ -40,6 +54,9 @@ spec:
             port: http
           initialDelaySeconds: 15
           periodSeconds: 20
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
