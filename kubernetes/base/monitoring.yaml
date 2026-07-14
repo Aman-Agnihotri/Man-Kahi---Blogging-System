@@ -215,21 +215,14 @@ data:
         uid: prometheus
 ---
 # Bridge rule: any firing Prometheus alert notifies Discord - Phase 6 alerts need zero Grafana churn. Rule model JSON must be validated against a 10.2.0 UI export before acceptance closes (human step).
+# Rules ship here (GitOps-visible); the notification policy travels WITH the contact point inside the sealed
+# grafana-alerting secret so an undefined-receiver reference can never exist at startup.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-alerting-provisioning
   namespace: mankahi
 data:
-  policies.yaml: |
-    apiVersion: 1
-    policies:
-      - orgId: 1
-        receiver: discord
-        group_by: ['alertname']
-        group_wait: 30s
-        group_interval: 5m
-        repeat_interval: 4h
   rules.yaml: |
     apiVersion: 1
     groups:

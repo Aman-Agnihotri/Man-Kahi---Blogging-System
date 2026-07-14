@@ -87,7 +87,7 @@ h. Drill log:
 
 Delivery channel: Grafana unified alerting to a Discord webhook (sealed).
 
-Delivery: Grafana unified alerting bridge rule (any firing Prometheus alert) routed to the discord contact point; webhook sealed as grafana-alerting; post-seal grafana restart required.
+Delivery: the bridge rule (any firing Prometheus alert) is provisioned from git; the Discord contact point and its routing policy arrive together via the sealed grafana-alerting secret; post-seal grafana restart required.
 
 ## 5. Incident log convention
 

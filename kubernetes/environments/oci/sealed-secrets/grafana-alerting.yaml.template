@@ -1,6 +1,8 @@
 # HUMAN: seal per docs/gitops.md section 4 (strict scope, ns mankahi) - LINT step mandatory.
 # After sealing + uncommenting: kubectl rollout restart deployment/grafana -n mankahi
 # (Grafana file-provisions alerting at startup only).
+# Sealing delivers BOTH the contact point and the notification policy; until sealed, Grafana runs with
+# only the bridge rule routed to its default receiver (no Discord).
 apiVersion: v1
 kind: Secret
 metadata:
@@ -18,3 +20,12 @@ stringData:
             type: discord
             settings:
               url: REPLACE_ME_DISCORD_WEBHOOK_URL
+  policies.yaml: |
+    apiVersion: 1
+    policies:
+      - orgId: 1
+        receiver: discord
+        group_by: ['alertname']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
