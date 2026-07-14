@@ -1,0 +1,24 @@
+# Applied by: mankahi-network-policies (platform child app, wave 1).
+# Push order: 9/10 - BEFORE default-deny-ingress which becomes 10/10.
+# Evidence: prometheus annotation-scrape of kube-state-metrics:8080
+# (kube-state-metrics.yaml pod annotations).
+# Enforcement begins only when default-deny-ingress (10/10) lands; until then this allow is inert.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kube-state-metrics
+  namespace: mankahi
+spec:
+  podSelector:
+    matchLabels:
+      app: kube-state-metrics
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8080
