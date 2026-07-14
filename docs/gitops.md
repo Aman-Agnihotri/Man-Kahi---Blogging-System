@@ -243,6 +243,8 @@ login fails with "Default role not found" until it exists. Idempotent seed
 (The proper fix — seeding inside init-service with tests — is deferred to a
 dedicated backend PR; tracked in `internal-docs/phase-carryovers.md`.)
 
+This manual SQL unblock is now superseded by the automated seed (`backend/shared/prisma/seed.ts`, `seedRoles`) that runs on every init-service PreSync run; the SQL above remains documented as a break-glass reference only.
+
 ## 9. Drift test and rollback drill (acceptance criteria 3-4)
 
 Drift test: `kubectl scale deploy/auth-service -n mankahi --replicas=5` —

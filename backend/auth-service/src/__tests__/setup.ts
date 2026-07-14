@@ -24,6 +24,7 @@ const prismaMock = {
   },
   role: {
     findUnique: jest.fn(),
+    upsert: jest.fn(),
   },
   follow: {
     upsert: jest.fn(),
