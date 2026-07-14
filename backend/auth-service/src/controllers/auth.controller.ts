@@ -3,12 +3,13 @@ import { AuthService, AccountSuspendedError } from '@services/auth.service'
 import logger from '@shared/utils/logger'
 import { AuthenticatedRequest } from '@shared/middlewares/auth'
 import { RequestHandler } from 'express-serve-static-core'
-import { 
-  updateActiveTokens, 
-  trackDbOperation, 
+import {
+  updateActiveTokens,
+  trackDbOperation,
   trackError,
-  trackRedisOperation 
+  trackRedisOperation
 } from '@middlewares/metrics.middleware'
+import { REFRESH_COOKIE_MAX_AGE_MS } from '@config/cookies'
 
 // Input validation schemas
 const registerSchema = z.object({
@@ -35,7 +36,10 @@ const addRoleSchema = z.object({
 })
 
 const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(1),
+  // Optional in the body: the cookie set by the OAuth callback / a prior
+  // refresh is the primary transport. Presence is enforced post-resolution
+  // (cookie ?? body) in the handler, not by this schema.
+  refreshToken: z.string().min(1).optional(),
 })
 
 const forgotPasswordSchema = z.object({
@@ -164,7 +168,10 @@ export class AuthController {
       await this.authService.logout(token)
       updateActiveTokens(-1)
       redisTimer.end()
-      
+
+      // stateless refresh JWT is not individually revoked server-side (follow-up); cookie clearing is the browser-side revocation
+      res.clearCookie('refresh_token', { path: '/api/auth' })
+
       res.json({ message: 'Logged out successfully' })
     } catch (error) {
       redisTimer.end()
@@ -228,14 +235,31 @@ export class AuthController {
       // Validate input
       const validatedInput = refreshTokenSchema.parse(req.body);
 
+      // Cookie is the primary transport (set by the OAuth callback / a prior
+      // refresh); body field kept as a fallback for non-cookie clients.
+      const refreshToken = req.cookies?.['refresh_token'] ?? validatedInput.refreshToken;
+      if (!refreshToken) {
+        trackError('validation', 'refresh_token_missing', 'auth');
+        res.status(400).json({ message: 'Refresh token is required' });
+        return;
+      }
+
       // Refresh token with database tracking
       const dbTimer = trackDbOperation('select', 'user');
-      const result = await this.authService.refreshToken(validatedInput.refreshToken);
+      const result = await this.authService.refreshToken(refreshToken);
       dbTimer.end();
 
       // Update metrics
       updateActiveTokens(1);
       redisTimer.end();
+
+      res.cookie('refresh_token', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env['NODE_ENV'] === 'production',
+        sameSite: 'lax',
+        path: '/api/auth',
+        maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+      });
 
       res.json(result);
     } catch (error) {

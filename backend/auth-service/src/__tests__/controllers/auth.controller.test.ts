@@ -140,3 +140,67 @@ describe('AuthController - resetPassword', () => {
     expect(resetPasswordMock).not.toHaveBeenCalled();
   });
 });
+
+describe('AuthController - refreshToken', () => {
+  let authController: AuthController;
+  let mockResponse: Partial<Response>;
+  let jsonMock: jest.Mock;
+  let statusMock: jest.Mock;
+  let cookieMock: jest.Mock;
+  let refreshTokenMock: jest.Mock;
+
+  beforeEach(() => {
+    authController = new AuthController();
+    refreshTokenMock = jest.fn();
+    (authController as unknown as { authService: { refreshToken: jest.Mock } }).authService.refreshToken = refreshTokenMock;
+
+    jsonMock = jest.fn();
+    statusMock = jest.fn().mockReturnValue({ json: jsonMock });
+    cookieMock = jest.fn();
+    mockResponse = { json: jsonMock, status: statusMock, cookie: cookieMock } as Partial<Response>;
+  });
+
+  it('rotates the cookie when the refresh token arrives via the cookie only', async () => {
+    refreshTokenMock.mockResolvedValue({ accessToken: 'a-token', refreshToken: 'r-token' });
+    const mockRequest = {
+      body: {},
+      cookies: { refresh_token: 'cookie-token' },
+    } as unknown as Request;
+
+    await authController.refreshToken(mockRequest, mockResponse as Response, jest.fn());
+
+    expect(refreshTokenMock).toHaveBeenCalledWith('cookie-token');
+    expect(cookieMock).toHaveBeenCalledWith(
+      'refresh_token',
+      'r-token',
+      expect.objectContaining({ httpOnly: true, path: '/api/auth', sameSite: 'lax' })
+    );
+    expect(jsonMock).toHaveBeenCalledWith({ accessToken: 'a-token', refreshToken: 'r-token' });
+  });
+
+  it('falls back to the body field when there is no cookie', async () => {
+    refreshTokenMock.mockResolvedValue({ accessToken: 'a-token', refreshToken: 'r-token' });
+    const mockRequest = {
+      body: { refreshToken: 'body-token' },
+      cookies: {},
+    } as unknown as Request;
+
+    await authController.refreshToken(mockRequest, mockResponse as Response, jest.fn());
+
+    expect(refreshTokenMock).toHaveBeenCalledWith('body-token');
+    expect(jsonMock).toHaveBeenCalledWith({ accessToken: 'a-token', refreshToken: 'r-token' });
+  });
+
+  it('returns 400 when neither the cookie nor the body carries a refresh token', async () => {
+    const mockRequest = {
+      body: {},
+      cookies: {},
+    } as unknown as Request;
+
+    await authController.refreshToken(mockRequest, mockResponse as Response, jest.fn());
+
+    expect(statusMock).toHaveBeenCalledWith(400);
+    expect(jsonMock).toHaveBeenCalledWith({ message: 'Refresh token is required' });
+    expect(refreshTokenMock).not.toHaveBeenCalled();
+  });
+});
