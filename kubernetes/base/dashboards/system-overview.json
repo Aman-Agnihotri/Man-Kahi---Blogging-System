@@ -13,7 +13,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "version": 1,
+  "version": 2,
   "uid": "mankahi-system-overview",
   "title": "ManKahi - System Overview",
   "refresh": "30s",
@@ -549,6 +549,183 @@
       "options": {
         "mode": "markdown",
         "content": "### Elasticsearch health - follow-up\n\nElasticsearch is not scraped by Prometheus (no exporter deployed). Cluster health is currently only visible via the Kubernetes readiness/liveness probes on the Elasticsearch pods.\n\nFollow-up: deploy prometheus-elasticsearch-exporter, then add elasticsearch_cluster_health_status panels to this dashboard."
+      }
+    },
+    {
+      "id": 11,
+      "title": "Replica availability (backends)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "kube_deployment_status_replicas_available{namespace=\"mankahi\", deployment=~\"auth-service|blog-service|admin-service|analytics-service\"}",
+          "refId": "A",
+          "legendFormat": "{{deployment}}"
+        },
+        {
+          "expr": "kube_deployment_spec_replicas{namespace=\"mankahi\", deployment=~\"auth-service|blog-service|admin-service|analytics-service\"}",
+          "refId": "B",
+          "legendFormat": "{{deployment}} desired"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "title": "Pod restarts (1h)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"mankahi\"}[1h]))",
+          "refId": "A",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 13,
+      "title": "Infra availability",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 0,
+        "y": 36
+      },
+      "targets": [
+        {
+          "expr": "kube_deployment_status_replicas_available{namespace=\"mankahi\", deployment=~\"postgres|redis|elasticsearch\"}",
+          "refId": "A",
+          "legendFormat": "{{deployment}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "title": "init-db job failed",
+      "type": "stat",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 36
+      },
+      "targets": [
+        {
+          "expr": "kube_job_status_failed{namespace=\"mankahi\", job_name=~\"mankahi-init-db.*\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OK",
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "range",
+              "options": {
+                "from": 1,
+                "to": 1000000,
+                "result": {
+                  "text": "FAILED",
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
       }
     }
   ],
