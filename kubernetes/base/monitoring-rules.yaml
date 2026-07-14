@@ -1,0 +1,15 @@
+# Prometheus alert rules. Loaded via the prometheus-config configMapGenerator
+# (kustomization.yaml) at /etc/prometheus/monitoring-rules.yaml; the generator
+# hash rolls the prometheus pod on every edit (no live-reload endpoint exists).
+# Phase 6 appends ESCircuitBreakerOpen as one more "- alert:" item below.
+groups:
+  - name: mankahi
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} down"
+          description: "{{ $labels.job }} target {{ $labels.instance }} has been unreachable (up == 0) for more than 5 minutes."
