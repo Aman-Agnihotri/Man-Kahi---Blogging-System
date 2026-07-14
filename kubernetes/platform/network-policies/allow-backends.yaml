@@ -1,0 +1,51 @@
+# Applied by: mankahi-network-policies (platform child app, wave 1).
+# Evidence: ingress-nginx path-routes /api/* to the 4 backends (ingress-hosts.yaml);
+# Prometheus scrapes the annotated backend pods on their http ports (prometheus.io/scrape
+# annotations in services.yaml; SD fixed in c4b7a99). Port set is the union across the 4
+# selected pods - each pod listens on exactly one of them.
+# Push order: 7/8.
+# Enforcement begins only when default-deny-ingress (8/8) lands; until then this allow is inert.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backends
+  namespace: mankahi
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - auth-service
+          - blog-service
+          - analytics-service
+          - admin-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3001
+        - protocol: TCP
+          port: 3002
+        - protocol: TCP
+          port: 3003
+        - protocol: TCP
+          port: 3004
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 3001
+        - protocol: TCP
+          port: 3002
+        - protocol: TCP
+          port: 3003
+        - protocol: TCP
+          port: 3004
