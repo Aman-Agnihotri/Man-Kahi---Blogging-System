@@ -11,6 +11,7 @@ function authFetch<T>(path: string, opts: { method: string; body?: any; token?: 
     baseURL: config.public.apiUrl as string,
     method: opts.method as any,
     body: opts.body,
+    credentials: 'include',
     headers: opts.token ? { Authorization: `Bearer ${opts.token}` } : undefined,
   });
 }
@@ -147,15 +148,9 @@ export const useAuthStore = defineStore('auth', {
 
     /** Returns true if the session was refreshed, false otherwise (never throws). */
     async refreshSession(): Promise<boolean> {
-      if (!this.refreshToken) {
-        this.clearAuthData();
-        return false;
-      }
-
       try {
         const data = await authFetch<AuthResponse>('/api/auth/refresh', {
           method: 'POST',
-          body: { refreshToken: this.refreshToken },
         });
 
         this.setAuthData(data);
@@ -179,36 +174,23 @@ export const useAuthStore = defineStore('auth', {
       this.token = data.token;
       this.refreshToken = data.refreshToken;
       this.user = data.user;
-
-      if (import.meta.client) {
-        localStorage.setItem('auth_token', data.token);
-        localStorage.setItem('refresh_token', data.refreshToken);
-      }
     },
 
     clearAuthData() {
       this.token = null;
       this.refreshToken = null;
       this.user = null;
-
-      if (import.meta.client) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-      }
     },
 
-    /** Restores session from localStorage on app boot. Safe to call multiple times. */
+    /** Restores session from the HttpOnly refresh cookie on app boot. Safe to call multiple times. */
     async initAuth() {
       if (this.initialized || !import.meta.client) return;
       this.initialized = true;
 
-      const token = localStorage.getItem('auth_token');
-      const refreshToken = localStorage.getItem('refresh_token');
-
-      if (token && refreshToken) {
-        this.token = token;
-        this.refreshToken = refreshToken;
+      try {
         await this.refreshSession();
+      } catch {
+        // Anonymous visitor - no cookie, stay logged out silently.
       }
     },
   },
