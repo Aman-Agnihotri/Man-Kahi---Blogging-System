@@ -5,8 +5,8 @@
 # backend/blog-service/src/utils/analytics.ts:9,55 (ANALYTICS_SERVICE_URL=http://analytics-service:3003,
 # config.yaml:55). Under default-deny-ingress, analytics-service would reject ingress from those
 # two pods without this rule.
-# Push order: 8/9.
-# Enforcement begins only when default-deny-ingress (9/9) lands; until then this allow is inert.
+# Push order: 8/10.
+# Enforcement begins only when default-deny-ingress (10/10) lands; until then this allow is inert.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

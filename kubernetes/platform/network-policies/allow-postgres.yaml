@@ -2,8 +2,8 @@
 # Evidence: DB clients: prisma consumers auth/blog/analytics/admin (services.yaml envFrom
 # DATABASE_URL) + init Job schema push (init-job.yaml, label added in 8ae48ca) + backup
 # CronJob pg_dump (postgres-backup-cronjob.yaml, label app: postgres-backup).
-# Push order: 1/8.
-# Enforcement begins only when default-deny-ingress (8/8) lands; until then this allow is inert.
+# Push order: 1/10.
+# Enforcement begins only when default-deny-ingress (10/10) lands; until then this allow is inert.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

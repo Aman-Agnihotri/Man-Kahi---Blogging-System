@@ -3,8 +3,8 @@
 # Prometheus scrapes the annotated backend pods on their http ports (prometheus.io/scrape
 # annotations in services.yaml; SD fixed in c4b7a99). Port set is the union across the 4
 # selected pods - each pod listens on exactly one of them.
-# Push order: 7/8.
-# Enforcement begins only when default-deny-ingress (8/8) lands; until then this allow is inert.
+# Push order: 7/10.
+# Enforcement begins only when default-deny-ingress (10/10) lands; until then this allow is inert.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
