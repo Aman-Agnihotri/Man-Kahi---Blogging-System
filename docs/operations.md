@@ -77,9 +77,10 @@ h. Drill log:
 
 | Alert | Meaning | First response |
 |-------|---------|-----------------|
-| InstanceDown | A scraped backend target has been unreachable for 5m. | Check `kubectl get pods -n mankahi`, then the Argo CD app health, then node memory. |
+| _(none shipping yet)_ | No alert rules exist in the repo today. | — |
 
-**Planned rules (pending metric sources):**
+**Planned rules (pending metric sources or delivery):**
+- `InstanceDown` — a scraped backend target unreachable for 5m — ships in the Phase 5 alerts packet (monitoring-rules.yaml + Grafana alerting delivery).
 - `PodCrashLooping` — needs `kube-state-metrics`.
 - PVC above 80 percent — needs kubelet volume stats.
 - Node memory above 85 percent — needs `node-exporter`.
