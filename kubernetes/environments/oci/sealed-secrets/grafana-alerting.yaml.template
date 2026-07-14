@@ -1,0 +1,20 @@
+# HUMAN: seal per docs/gitops.md section 4 (strict scope, ns mankahi) - LINT step mandatory.
+# After sealing + uncommenting: kubectl rollout restart deployment/grafana -n mankahi
+# (Grafana file-provisions alerting at startup only).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-alerting
+  namespace: mankahi
+type: Opaque
+stringData:
+  contactpoints.yaml: |
+    apiVersion: 1
+    contactPoints:
+      - orgId: 1
+        name: discord
+        receivers:
+          - uid: discord-primary
+            type: discord
+            settings:
+              url: REPLACE_ME_DISCORD_WEBHOOK_URL

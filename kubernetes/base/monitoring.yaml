@@ -152,6 +152,9 @@ spec:
               mountPath: /var/lib/grafana/dashboards
             - name: grafana-datasources
               mountPath: /etc/grafana/provisioning/datasources
+            - name: grafana-alerting
+              mountPath: /etc/grafana/provisioning/alerting
+              readOnly: true
           env:
             - name: GF_AUTH_DISABLE_LOGIN_FORM
               value: "false"
@@ -185,6 +188,15 @@ spec:
         - name: grafana-datasources
           configMap:
             name: grafana-datasources
+        # optional secret = grafana starts before the webhook is sealed; post-seal rollout restart required (startup-only provisioning)
+        - name: grafana-alerting
+          projected:
+            sources:
+              - configMap:
+                  name: grafana-alerting-provisioning
+              - secret:
+                  name: grafana-alerting
+                  optional: true
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -200,6 +212,71 @@ data:
         access: proxy
         url: http://prometheus-service:9090
         isDefault: true
+        uid: prometheus
+---
+# Bridge rule: any firing Prometheus alert notifies Discord - Phase 6 alerts need zero Grafana churn. Rule model JSON must be validated against a 10.2.0 UI export before acceptance closes (human step).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-provisioning
+  namespace: mankahi
+data:
+  policies.yaml: |
+    apiVersion: 1
+    policies:
+      - orgId: 1
+        receiver: discord
+        group_by: ['alertname']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+  rules.yaml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: mankahi-bridge
+        folder: Alerts
+        interval: 1m
+        rules:
+          - uid: mankahi-prometheus-bridge
+            title: PrometheusAlertFiring
+            condition: C
+            for: 0m
+            noDataState: OK
+            execErrState: Error
+            labels:
+              severity: critical
+            annotations:
+              summary: "A Prometheus alert is firing"
+              description: "One or more Prometheus alert rules are in the firing state."
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  refId: A
+                  instant: true
+                  editorMode: code
+                  expr: ALERTS{alertstate="firing"}
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: reduce
+                  expression: A
+                  reducer: count
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  refId: C
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
 ---
 apiVersion: v1
 kind: Service
