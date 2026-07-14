@@ -2,8 +2,9 @@
 # Evidence: Deny-by-default for every pod in ns mankahi (spec acceptance: nc -zv
 # postgres-service 5432 from a debug pod FAILS, from an auth-service pod SUCCEEDS).
 # MUST be the last policy pushed - all seven allows above must be live and gated first.
-# Push order: 8/8.
-# Enforcement begins only when default-deny-ingress (8/8) lands; until then this allow is inert.
+# Push order: 9/9.
+# allow-analytics-internal (8/9) must be live first.
+# Enforcement begins only when default-deny-ingress (9/9) lands; until then this allow is inert.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
