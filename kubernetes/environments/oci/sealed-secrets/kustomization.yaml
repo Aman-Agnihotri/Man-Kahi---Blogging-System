@@ -11,8 +11,8 @@ resources:
   - app-secrets.yaml
   - db-secrets.yaml
   - grafana-secrets.yaml
-  # - backup-s3-secret.yaml   # uncomment after HUMAN seals backup-s3-secret.yaml.template per docs/gitops.md section 4
-  # - secret-shared-core.yaml   # uncomment after HUMAN seals (split step 1 of 3)
-  # - secret-auth.yaml          # uncomment after HUMAN seals (split step 1 of 3)
-  # - secret-media.yaml         # uncomment after HUMAN seals (split step 1 of 3)
-  # - grafana-alerting.yaml     # uncomment after HUMAN seals grafana-alerting.yaml.template per docs/gitops.md section 4
+  - backup-s3-secret.yaml
+  - secret-shared-core.yaml
+  - secret-auth.yaml
+  - secret-media.yaml
+  - grafana-alerting.yaml
