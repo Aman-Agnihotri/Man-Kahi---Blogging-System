@@ -39,8 +39,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: services-config
+            # least-privilege split (Phase 5): only the keys this service consumes
             - secretRef:
-                name: app-secrets
+                name: secret-shared-core
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

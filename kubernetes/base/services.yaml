@@ -37,8 +37,13 @@ spec:
         envFrom:
         - configMapRef:
             name: services-config
+        # least-privilege split (Phase 5): only the keys this service consumes
         - secretRef:
-            name: app-secrets
+            name: secret-shared-core
+        - secretRef:
+            name: secret-auth
+        - secretRef:
+            name: secret-media
         resources:
           limits:
             memory: "1Gi"
@@ -157,8 +162,11 @@ spec:
         envFrom:
         - configMapRef:
             name: services-config
+        # least-privilege split (Phase 5): only the keys this service consumes
         - secretRef:
-            name: app-secrets
+            name: secret-shared-core
+        - secretRef:
+            name: secret-media
         resources:
           limits:
             memory: "2Gi"
@@ -293,8 +301,9 @@ spec:
         envFrom:
         - configMapRef:
             name: services-config
+        # least-privilege split (Phase 5): only the keys this service consumes
         - secretRef:
-            name: app-secrets
+            name: secret-shared-core
         resources:
           limits:
             memory: "2Gi"
@@ -413,8 +422,9 @@ spec:
         envFrom:
         - configMapRef:
             name: services-config
+        # least-privilege split (Phase 5): only the keys this service consumes
         - secretRef:
-            name: app-secrets
+            name: secret-shared-core
         resources:
           limits:
             memory: "1Gi"

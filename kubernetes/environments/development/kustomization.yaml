@@ -13,10 +13,23 @@ generatorOptions:
   disableNameSuffixHash: true
 
 secretGenerator:
+  # retired from base envFrom (Phase 5 split); generator removed together with the oci retirement
   - name: app-secrets
     type: Opaque
     envs:
       - secrets/app-secrets.env
+  - name: secret-shared-core
+    type: Opaque
+    envs:
+      - secrets/shared-core-secrets.env
+  - name: secret-auth
+    type: Opaque
+    envs:
+      - secrets/auth-secrets.env
+  - name: secret-media
+    type: Opaque
+    envs:
+      - secrets/media-secrets.env
   - name: db-secrets
     type: Opaque
     envs:
