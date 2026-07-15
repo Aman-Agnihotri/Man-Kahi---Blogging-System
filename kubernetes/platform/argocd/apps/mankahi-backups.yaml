@@ -1,0 +1,24 @@
+# mankahi-backups: platform child app (wave 1) - postgres backup CronJob lives in ns mankahi;
+# S3 creds arrive via the mankahi-secrets app (wave -1) as SealedSecret backup-s3-secret.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mankahi-backups
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System.git
+    targetRevision: main
+    path: kubernetes/platform/backups
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mankahi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

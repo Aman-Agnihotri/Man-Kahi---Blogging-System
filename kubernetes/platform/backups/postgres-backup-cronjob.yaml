@@ -1,0 +1,109 @@
+# Applied by the Argo CD child Application "mankahi-backups" (kubernetes/platform/argocd/apps/mankahi-backups.yaml).
+# Decision record: homed under kubernetes/platform/ per THE SPEC directory ownership (L44); runs in ns mankahi;
+# a dedicated child app (prune+selfHeal, wave 1) keeps backup lifecycle decoupled from the app overlay.
+# Images: postgres:16-alpine matches the running server tag exactly (pg_dump version parity forever);
+# amazon/aws-cli:2.15.0 pinned - HUMAN must verify arm64 manifest before first push:
+#   docker manifest inspect amazon/aws-cli:2.15.0   (expect arm64 entry; fallback: minio/mc RELEASE tag)
+# Path-style S3 addressing: the app's MinIO SDK already talks path-style to this same OCI compat endpoint.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: mankahi
+spec:
+  schedule: "0 2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: backup
+              emptyDir: {}
+          initContainers:
+            - name: dump
+              image: postgres:16-alpine
+              env:
+                - name: PGHOST
+                  value: postgres-service
+                - name: PGPORT
+                  value: "5432"
+                - name: PGUSER
+                  valueFrom:
+                    configMapKeyRef:
+                      name: postgres-config
+                      key: POSTGRES_USER
+                - name: PGDATABASE
+                  valueFrom:
+                    configMapKeyRef:
+                      name: postgres-config
+                      key: POSTGRES_DB
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-secrets
+                      key: POSTGRES_PASSWORD
+              command: ["sh", "-c", "set -eu; pg_dump -Fc -f /backup/mankahi.dump; ls -l /backup"]
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "250m"
+          containers:
+            - name: upload
+              image: amazon/aws-cli:2.15.0
+              env:
+                - name: AWS_DEFAULT_REGION
+                  value: ap-mumbai-1
+              envFrom:
+                - secretRef:
+                    name: backup-s3-secret
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  EP="https://bmknimruc4dp.compat.objectstorage.ap-mumbai-1.oraclecloud.com"
+                  aws configure set default.s3.addressing_style path
+                  STAMP=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+                  aws --endpoint-url "$EP" s3 cp /backup/mankahi.dump "s3://mankahi-backups/postgres/mankahi-$STAMP.dump"
+                  echo "uploaded mankahi-$STAMP.dump"
+                  # retention: keep newest 14 (ISO timestamps sort lexicographically)
+                  aws --endpoint-url "$EP" s3 ls s3://mankahi-backups/postgres/ | awk '{print $4}' | sort | head -n -14 | while read -r key; do
+                    if [ -n "$key" ]; then aws --endpoint-url "$EP" s3 rm "s3://mankahi-backups/postgres/$key"; echo "pruned $key"; fi
+                  done
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"

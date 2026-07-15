@@ -13,3 +13,4 @@ resources:
   - app-secrets.yaml
   - db-secrets.yaml
   - grafana-secrets.yaml
+  # - backup-s3-secret.yaml   # uncomment after HUMAN seals backup-s3-secret.yaml.template per docs/gitops.md section 4
