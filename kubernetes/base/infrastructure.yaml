@@ -17,6 +17,8 @@ spec:
         app: postgres
     spec:
       automountServiceAccountToken: false
+      # shutdown checkpoint headroom - a SIGKILLed checkpoint means crash recovery on next boot (slow, not lossy)
+      terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
         runAsUser: 70
@@ -182,6 +184,8 @@ spec:
         app: elasticsearch
     spec:
       automountServiceAccountToken: false
+      # clean shard close avoids translog replay on the already-slow restart
+      terminationGracePeriodSeconds: 120
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
