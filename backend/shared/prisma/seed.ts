@@ -32,6 +32,8 @@ if (require.main === module) {
     seedRoles(prisma)
         .then(async () => {
             await prismaHelpers.disconnect();
+            // the shared logger's rotating streams keep the event loop alive; exit explicitly (2026-07-15 hang)
+            process.exit(0);
         })
         .catch(async (error: unknown) => {
             // eslint-disable-next-line no-console
