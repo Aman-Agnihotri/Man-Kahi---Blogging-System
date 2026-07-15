@@ -1,0 +1,26 @@
+# Applied by: mankahi-network-policies (platform child app, wave 1).
+# Evidence: cert-manager creates acme-http-solver pods IN ns mankahi (HTTP-01,
+# ingress-class solver, port 8089, canonical label
+# acme.cert-manager.io/http01-solver: true); default-deny blocked them -
+# discovered live 2026-07-15 when mankahi-xyz-tls stayed READY=False. Also
+# required for RENEWALS of every existing cert in this namespace.
+# Push order: 11th policy - allows are inert without traffic; safe to apply any time.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-acme-http-solver
+  namespace: mankahi
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8089
