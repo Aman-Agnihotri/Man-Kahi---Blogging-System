@@ -46,3 +46,10 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            # seed imports the shared logger which mkdirs cwd/logs at import time; uid 1000 cannot create it in the root-owned image layer (2026-07-15 EACCES repro)
+            - name: logs
+              mountPath: /app/shared/logs
+      volumes:
+        - name: logs
+          emptyDir: {}
