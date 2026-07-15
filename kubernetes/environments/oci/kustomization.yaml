@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - redirect-ingresses.yaml
 
 commonLabels:
   app.kubernetes.io/name: mankahi

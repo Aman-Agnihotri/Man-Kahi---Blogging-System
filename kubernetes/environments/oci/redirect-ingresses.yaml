@@ -1,0 +1,78 @@
+# domain cutover push C: old hosts 301 to mankahi.xyz. KNOWN TRADE-OFF (ruled): permanent-redirect does not preserve deep-link paths - all old URLs land on the new homepage. Kept certs renew via the acme-solver NetworkPolicy.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mankahi-workgd-redirect
+  namespace: mankahi
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://mankahi.xyz"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - mankahi.work.gd
+      secretName: mankahi-tls
+  rules:
+    - host: mankahi.work.gd
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-workgd-redirect
+  namespace: mankahi
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://grafana.mankahi.xyz"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - grafana.mankahi.work.gd
+      secretName: grafana-tls
+  rules:
+    - host: grafana.mankahi.work.gd
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana-service
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: www-redirect
+  namespace: mankahi
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://mankahi.xyz"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - www.mankahi.xyz
+      secretName: mankahi-www-tls
+  rules:
+    - host: www.mankahi.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
