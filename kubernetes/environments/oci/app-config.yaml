@@ -19,5 +19,5 @@ data:
   # http://auth-service:3001/... (config/oauth.ts), which Google rejects
   # as a redirect target. FRONTEND_URL is the post-OAuth redirect target
   # back to the site.
-  FRONTEND_URL: "https://mankahi.work.gd"
-  GOOGLE_CALLBACK_URL: "https://mankahi.work.gd/api/auth/google/callback"
+  FRONTEND_URL: "https://mankahi.xyz"
+  GOOGLE_CALLBACK_URL: "https://mankahi.xyz/api/auth/google/callback"

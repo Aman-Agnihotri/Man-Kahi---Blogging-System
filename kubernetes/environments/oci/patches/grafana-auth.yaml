@@ -19,4 +19,4 @@ spec:
                   name: grafana-secrets
                   key: GF_SECURITY_ADMIN_PASSWORD
             - name: GF_SERVER_ROOT_URL
-              value: "https://grafana.mankahi.work.gd"
+              value: "https://grafana.mankahi.xyz"
