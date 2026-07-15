@@ -14,10 +14,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - argocd.mankahi.work.gd
+        - argocd.mankahi.xyz
       secretName: argocd-server-tls
   rules:
-    - host: argocd.mankahi.work.gd
+    - host: argocd.mankahi.xyz
       http:
         paths:
           - path: /
