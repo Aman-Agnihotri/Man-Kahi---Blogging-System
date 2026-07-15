@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import logger from '../utils/logger';
 
 /**
  * System roles required for the platform to function (OAuth first-login,
@@ -11,7 +12,11 @@ const SYSTEM_ROLES = ['admin', 'author', 'reader'] as const;
  * Seed the system roles (admin, author, reader) idempotently.
  */
 export async function seedRoles(prisma: PrismaClient): Promise<void> {
+    logger.info({ roles: SYSTEM_ROLES }, 'Seeding system roles');
+
     for (const name of SYSTEM_ROLES) {
+        // prisma.role.upsert does not report created-vs-existing without an
+        // extra read, so we log a single idempotent-outcome line per role.
         await prisma.role.upsert({
             where: { name },
             update: {},
@@ -22,7 +27,10 @@ export async function seedRoles(prisma: PrismaClient): Promise<void> {
                 isSystem: true,
             },
         });
+        logger.info(`ensured role: ${name}`);
     }
+
+    logger.info(`Role seed complete: ${SYSTEM_ROLES.length} roles ensured`);
 }
 
 if (require.main === module) {

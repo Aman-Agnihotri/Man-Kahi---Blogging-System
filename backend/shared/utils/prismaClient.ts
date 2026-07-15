@@ -160,8 +160,14 @@ function createPrismaClient(config: PrismaClientConfig = {}): ExtendedPrismaClie
         process.exit(1);
     });
 
-    // Graceful shutdown handling
-    process.on('beforeExit', async () => {
+    // Graceful shutdown handling.
+    // Node's 'beforeExit' fires every time the event loop drains and the
+    // process is about to exit - including the drain caused by this very
+    // handler's own async disconnect() call. With process.on() that made the
+    // handler re-fire itself indefinitely (each re-fire logging "Disconnected
+    // from database" again), producing the observed burst of 10+ identical
+    // INFO lines within 1ms. process.once() runs the handler a single time.
+    process.once('beforeExit', async () => {
         await prismaHelpers.disconnect();
     });
 
