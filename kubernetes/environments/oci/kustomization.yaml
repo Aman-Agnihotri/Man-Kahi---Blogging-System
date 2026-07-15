@@ -12,30 +12,27 @@ commonLabels:
 namespace: mankahi
 
 images:
-  # backends trail frontend: only backend/ changed in
-  # 4f2bac5, so backend images were rebuilt while frontend is pinned at 71d0ef0
-  # (auth-service pinned separately at 15b89ad for the oauthProfile info-contract fix)
+  # auth-service and frontend move together: the OAuth refresh-cookie
+  # contract (33a94c2 backend, 6620a45 frontend) is atomic - both must be
+  # pinned to the same SHA on every bump.
   - name: mankahi/auth-service
     newName: ghcr.io/aman-agnihotri/mankahi-auth-service
-    newTag: 15b89ad03d0e8efa6e4ec7ab1c1c5746546f08dd
+    newTag: e74f1731bcdcb97058878764a5eb97894ac9dbbd
   - name: mankahi/blog-service
     newName: ghcr.io/aman-agnihotri/mankahi-blog-service
-    newTag: 4f2bac5ed53ddda17082ca1efdd1213b2cf1108d
+    newTag: e74f1731bcdcb97058878764a5eb97894ac9dbbd
   - name: mankahi/analytics-service
     newName: ghcr.io/aman-agnihotri/mankahi-analytics-service
-    newTag: 4f2bac5ed53ddda17082ca1efdd1213b2cf1108d
+    newTag: e74f1731bcdcb97058878764a5eb97894ac9dbbd
   - name: mankahi/admin-service
     newName: ghcr.io/aman-agnihotri/mankahi-admin-service
-    newTag: 4f2bac5ed53ddda17082ca1efdd1213b2cf1108d
-  # init-service intentionally trails at ee0128de...: CI path-filters skip it
-  # when backend/shared is untouched, so it was not rebuilt; unchanged image,
-  # and the init Job already completed successfully with it.
+    newTag: e74f1731bcdcb97058878764a5eb97894ac9dbbd
   - name: mankahi/init-service
     newName: ghcr.io/aman-agnihotri/mankahi-init-service
-    newTag: ee0128de70760300bbb5a4a023ecbf64114b892a
+    newTag: e74f1731bcdcb97058878764a5eb97894ac9dbbd
   - name: frontend
     newName: ghcr.io/aman-agnihotri/mankahi-frontend
-    newTag: 71d0ef0da381e4ddc46dac1bafa13bbda2a66435
+    newTag: e74f1731bcdcb97058878764a5eb97894ac9dbbd
 
 patches:
   - path: app-config.yaml
