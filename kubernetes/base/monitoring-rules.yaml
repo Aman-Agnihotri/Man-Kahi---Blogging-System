@@ -29,3 +29,14 @@ groups:
         annotations:
           summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas"
           description: "A desired replica of {{ $labels.deployment }} was unavailable within the last 5m (pod deleted, crashed, or failing readiness). Sticky 5m window so the 1m Grafana bridge catches short outages."
+      # cert-manager pods carry scrape annotations and appeared in Prometheus
+      # targets when SD came alive (verified live 2026-07-15, three :9402
+      # targets) - this rule was originally a documented follow-up.
+      - alert: CertificateExpiringSoon
+        expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 14 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Certificate {{ $labels.name }} expires soon"
+          description: "cert-manager certificate {{ $labels.namespace }}/{{ $labels.name }} expires in under 14 days."
