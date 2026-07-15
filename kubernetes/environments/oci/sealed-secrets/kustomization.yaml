@@ -2,13 +2,14 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # Sealed secrets live here - applied by the mankahi-secrets app (wave -1).
-# app-secrets.yaml, db-secrets.yaml, and grafana-secrets.yaml are strict-scope,
-# name-bound SealedSecrets for namespace `mankahi`; plaintext NEVER lives here.
+# db-secrets.yaml, grafana-secrets.yaml, backup-s3-secret.yaml,
+# secret-shared-core.yaml, secret-auth.yaml, secret-media.yaml, and
+# grafana-alerting.yaml are strict-scope, name-bound SealedSecrets for
+# namespace `mankahi`; plaintext NEVER lives here.
 # See ../../../../docs/gitops.md and ./README.md for the sealing procedure.
 # The commented entries below are templates awaiting HUMAN sealing before they
 # can be uncommented and applied.
 resources:
-  - app-secrets.yaml
   - db-secrets.yaml
   - grafana-secrets.yaml
   - backup-s3-secret.yaml
