@@ -1,0 +1,32 @@
+# Applied by: mankahi-network-policies (platform child app, wave 1).
+# Evidence: admin-service and blog-service make server-side HTTP calls to
+# analytics-service:3003 in-cluster - backend/admin-service/src/controllers/admin.controller.ts
+# (axios GET at ~L200/270/353/432/534, this.analyticsServiceUrl L107) and
+# backend/blog-service/src/utils/analytics.ts:9,55 (ANALYTICS_SERVICE_URL=http://analytics-service:3003,
+# config.yaml:55). Under default-deny-ingress, analytics-service would reject ingress from those
+# two pods without this rule.
+# Push order: 8/10.
+# Enforcement begins only when default-deny-ingress (10/10) lands; until then this allow is inert.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-analytics-internal
+  namespace: mankahi
+spec:
+  podSelector:
+    matchLabels:
+      app: analytics-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - admin-service
+                  - blog-service
+      ports:
+        - protocol: TCP
+          port: 3003

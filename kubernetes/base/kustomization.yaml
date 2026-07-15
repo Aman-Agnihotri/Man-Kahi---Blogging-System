@@ -14,6 +14,7 @@ resources:
   - ingress-rbac.yaml
   - monitoring.yaml
   - monitoring-rbac.yaml
+  - kube-state-metrics.yaml
 
 configMapGenerator:
   - name: grafana-dashboards
@@ -23,6 +24,10 @@ configMapGenerator:
       - dashboards/blog-dashboard.json
       - dashboards/admin-dashboard.json
       - dashboards/analytics-dashboard.json
+  - name: prometheus-config
+    files:
+      - prometheus/prometheus.yml
+      - monitoring-rules.yaml
 
 commonLabels:
   app.kubernetes.io/name: mankahi

@@ -8,9 +8,9 @@ import { requireProviderConfigured } from '@config/oauth';
 import type { RequestHandler } from 'express';
 import {
     trackAuthMetrics,
-    trackError,
-    updateActiveTokens
+    trackError
 } from '@middlewares/metrics.middleware';
+import { REFRESH_COOKIE_MAX_AGE_MS } from '@config/cookies';
 
 /**
  * @swagger
@@ -71,6 +71,7 @@ interface OAuthRequest extends Request {
     user?: AuthenticatedUser;
     authInfo?: {
         token?: string;
+        refreshToken?: string;
         oauthProfile?: OAuthUser;
     };
 }
@@ -140,43 +141,31 @@ router.get(
     ((async (req: OAuthRequest, res: Response) => {
         try {
             const oauthProfile = req.authInfo?.oauthProfile;
-            if (!oauthProfile) {
+            const refreshToken = req.authInfo?.refreshToken;
+            if (!oauthProfile || !req.user?.id || !refreshToken) {
                 throw new Error('Authentication failed');
             }
 
-            // Find or create user and store OAuth data
-            const user = await authService.findOrCreateOAuthUser(oauthProfile);
-            
+            // Strategy already found-or-created the user and minted the token
+            // pair (single mint owner - passport.controller.ts). The callback
+            // only persists the OAuthProvider record and updates last login.
             await authService.handleOAuthCallback(oauthProfile, {
                 accessToken: req.authInfo?.token,
                 expiresAt: new Date(Date.now() + 3600 * 1000), // 1 hour from now
                 tokenType: 'Bearer',
                 scope: 'profile email',
-            }, user.id);
+            }, req.user.id);
 
-            const userRoles = user.roles.map(role => role.name);
-            req.user = {
-                id: user.id,
-                email: user.email,
-                username: user.username,
-                roles: userRoles,
-                createdAt: user.createdAt,
-                updatedAt: user.updatedAt
-            };
-
-            const accessToken = await authService.generateToken(user.id);
-            const refreshToken = await authService.generateRefreshToken(user.id);
-            updateActiveTokens(2);
-
-            const linkToken = req.authInfo?.token;
-            const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
-            const params = new URLSearchParams({
-                accessToken,
-                refreshToken,
-                ...(linkToken && { linkToken }),
+            res.cookie('refresh_token', refreshToken, {
+                httpOnly: true,
+                secure: process.env['NODE_ENV'] === 'production',
+                sameSite: 'lax',
+                path: '/api/auth',
+                maxAge: REFRESH_COOKIE_MAX_AGE_MS,
             });
 
-            res.redirect(`${frontendURL}/auth/callback?${params.toString()}`);
+            const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
+            res.redirect(`${frontendURL}/auth/callback`);
         } catch (error) {
             logger.error({ err: error }, 'OAuth callback error');
             trackError('oauth', 'callback_failed', 'google');

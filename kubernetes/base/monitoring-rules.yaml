@@ -1,0 +1,31 @@
+# Prometheus alert rules. Loaded via the prometheus-config configMapGenerator
+# (kustomization.yaml) at /etc/prometheus/monitoring-rules.yaml; the generator
+# hash rolls the prometheus pod on every edit (no live-reload endpoint exists).
+# Phase 6 appends ESCircuitBreakerOpen as one more "- alert:" item below.
+groups:
+  - name: mankahi
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} down"
+          description: "{{ $labels.job }} target {{ $labels.instance }} has been unreachable (up == 0) for more than 5 minutes."
+      - alert: PodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total{namespace="mankahi"}[15m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} crash-looping"
+          description: "Container {{ $labels.container }} restarted more than 3 times in 15m."
+      - alert: DeploymentReplicasUnavailable
+        expr: max_over_time( (kube_deployment_spec_replicas{namespace="mankahi"} - kube_deployment_status_replicas_available{namespace="mankahi"})[5m:] ) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas"
+          description: "A desired replica of {{ $labels.deployment }} was unavailable within the last 5m (pod deleted, crashed, or failing readiness). Sticky 5m window so the 1m Grafana bridge catches short outages."

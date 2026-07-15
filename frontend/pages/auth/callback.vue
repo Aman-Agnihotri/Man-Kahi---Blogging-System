@@ -12,16 +12,13 @@ const router = useRouter();
 const route = useRoute();
 
 onMounted(async () => {
-  // The OAuth callback redirect delivers tokens as query params; seed the
-  // store's refreshToken and let refreshSession() exchange it server-side
-  // for a full session (tokens + user) via /api/auth/refresh.
+  // The OAuth callback redirect no longer carries tokens as query params -
+  // the backend sets an HttpOnly refresh_token cookie. refreshSession()
+  // exchanges that cookie server-side for a full session (tokens + user)
+  // via /api/auth/refresh.
   if (route.query.error) {
     router.replace('/auth/login');
     return;
-  }
-  const refreshToken = route.query.refreshToken;
-  if (typeof refreshToken === 'string' && refreshToken) {
-    auth.refreshToken = refreshToken;
   }
   const ok = await auth.refreshSession();
   router.replace(ok ? '/user/dashboard' : '/auth/login');

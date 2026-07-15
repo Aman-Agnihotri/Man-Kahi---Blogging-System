@@ -2,8 +2,8 @@
 # Evidence: frontend is served only via ingress-nginx (ingress-hosts.yaml host
 # mankahi.work.gd); SSR makes no in-cluster API calls (frontend/server/ has no routes;
 # useApi targets the public URL client-side) so no frontend-to-backend allow exists anywhere.
-# Push order: 4/8.
-# Enforcement begins only when default-deny-ingress (8/8) lands; until then this allow is inert.
+# Push order: 4/10.
+# Enforcement begins only when default-deny-ingress (10/10) lands; until then this allow is inert.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

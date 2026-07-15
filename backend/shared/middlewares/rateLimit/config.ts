@@ -23,6 +23,15 @@ export const SERVICE_CONFIGS: { [key: string]: RateLimitConfig } = {
         blockDuration: 60 * 30, // 30 minutes block
         keyPrefix: 'rl:auth',
     },
+    // OAuth login touches /google + /google/callback (2 points per attempt); the previous
+    // fallback to DEFAULT_CONFIGS.redis meant a 15-minute block on legitimate retries
+    // (live incident: retry-after 413).
+    'auth:oauth': {
+        points: 20,
+        duration: 60,
+        blockDuration: 60,
+        keyPrefix: 'rl:auth:oauth',
+    },
     'api': {
         points: 30, // Number of requests
         duration: 60, // Per minute

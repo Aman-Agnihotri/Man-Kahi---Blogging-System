@@ -77,15 +77,26 @@ h. Drill log:
 
 | Alert | Meaning | First response |
 |-------|---------|-----------------|
-| InstanceDown | A scraped backend target has been unreachable for 5m. | Check `kubectl get pods -n mankahi`, then the Argo CD app health, then node memory. |
+| `InstanceDown` | a scraped backend target remains in SD but fails scrapes for 5m (CrashLoop/unready; note: a deleted pod leaves SD entirely and does NOT trigger this) | kubectl get pods -n mankahi; Argo CD app health; node memory |
+| `PodCrashLooping` | A container in mankahi restarted more than 3 times in 15m (bad config, crash on boot, OOMKill) | kubectl -n mankahi logs POD --previous; check lastState.terminated.reason (OOMKilled = raise limits); check recent Argo CD sync |
+| `DeploymentReplicasUnavailable` | A Deployment's desired replica was unavailable within the last 5m - pod deleted, crashed, or failing readiness; fires on kubectl delete pod (the acceptance drill) | kubectl -n mankahi get pods -l app=DEPLOYMENT; kill drills self-clear about 5m after Ready |
 
-**Planned rules (pending metric sources):**
-- `PodCrashLooping` — needs `kube-state-metrics`.
+PodCrashLooping is restart-count based; kubectl delete pod creates a NEW pod
+whose restart counter starts at 0, so a pod kill raises
+DeploymentReplicasUnavailable (availability-based), not PodCrashLooping. The
+availability alert also fires briefly (about 5m) on the very first rollout of
+a Deployment (0 to 1 replicas); expected, self-clears. PVC-usage and
+node-memory alerts remain follow-ups - KSM exposes no volume/node usage
+bytes; both need a kubelet or node_exporter scrape.
+
+**Planned rules (pending metric sources or delivery):**
 - PVC above 80 percent — needs kubelet volume stats.
 - Node memory above 85 percent — needs `node-exporter`.
 - Cert expiry under 14d — needs a cert-manager metrics scrape.
 
 Delivery channel: Grafana unified alerting to a Discord webhook (sealed).
+
+Delivery: the bridge rule (any firing Prometheus alert) is provisioned from git; the Discord contact point and its routing policy arrive together via the sealed grafana-alerting secret; post-seal grafana restart required.
 
 ## 5. Incident log convention
 

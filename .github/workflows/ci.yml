@@ -281,6 +281,55 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   # ---------------------------------------------------------------------------
+  # Production-image smoke gates (non-PR only; PR builds are not pushed).
+  # Restricted to the four backend services (auth/blog/analytics/admin) via a
+  # per-step guard: the require.resolve walk and boot classifier assume the
+  # dist/shared node layout, which init-service and frontend do not share.
+  #   (a) shared module resolution walk - catches missing dist/shared files.
+  #   (b) boot classifier - runs the image with --network none; a connection
+  #       refused/timeout is the expected PASS signal, MODULE_NOT_FOUND or
+  #       "Cannot find module" is the FAIL signal.
+  # ---------------------------------------------------------------------------
+  smoke:
+    needs: [changes, build-push]
+    if: >-
+      ${{ !cancelled()
+          && needs.build-push.result == 'success'
+          && github.event_name != 'pull_request'
+          && needs.changes.outputs.components != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.components) }}
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull image
+        if: matrix.name != 'frontend' && matrix.name != 'init-service'
+        run: docker pull ghcr.io/aman-agnihotri/mankahi-${{ matrix.name }}:${{ github.sha }}
+
+      - name: Verify shared module resolution
+        if: matrix.name != 'frontend' && matrix.name != 'init-service'
+        run: |
+          # module list assumes the dist/shared layout; the boot classifier below is the authoritative gate
+          docker run --rm --entrypoint node -w /app/${{ matrix.name }} ghcr.io/aman-agnihotri/mankahi-${{ matrix.name }}:${{ github.sha }} -e "['./dist/shared/utils/logger.js','./dist/shared/utils/jwt.js','./dist/shared/utils/prismaClient.js','./dist/shared/middlewares/rateLimit/index.js'].forEach(m => require.resolve(m))"
+
+      - name: Boot classifier smoke test
+        if: matrix.name != 'frontend' && matrix.name != 'init-service'
+        run: |
+          set +e
+          out=$(timeout 30 docker run --rm --network none -e NODE_ENV=production -e DATABASE_URL=postgresql://x:x@127.0.0.1:5432/x -e REDIS_URL=redis://127.0.0.1:6379 -e JWT_SECRET=dummy-dummy-dummy-dummy-dummy-dummy -e SESSION_SECRET=dummy-dummy-dummy-dummy-dummy-dummy ghcr.io/aman-agnihotri/mankahi-${{ matrix.name }}:${{ github.sha }} 2>&1)
+          echo "$out"
+          echo "$out" | grep -Eq "MODULE_NOT_FOUND|Cannot find module" && { echo "FAIL: module resolution"; exit 1; }
+          exit 0
+
+  # ---------------------------------------------------------------------------
   # Trivy scan of each pushed image (non-PR only; PR builds are not pushed).
   # Report-only for now (exit-code 0); SARIF uploaded to the Security tab with
   # a per-component category to avoid overwrites. See docs/ci.md for the

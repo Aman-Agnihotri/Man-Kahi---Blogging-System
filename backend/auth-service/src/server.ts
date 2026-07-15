@@ -3,6 +3,7 @@ import cors from 'cors'
 import { buildCorsOptions } from '@shared/config/cors'
 import helmet from 'helmet'
 import dotenv from 'dotenv'
+import cookieParser from 'cookie-parser'
 import session from 'express-session'
 import { RedisStore } from 'connect-redis'
 import logger from '@shared/utils/logger'
@@ -77,6 +78,7 @@ const SESSION_SECRET = env.SESSION_SECRET
 app.use(helmet()) // Security headers
 app.use(cors(buildCorsOptions('auth-service'))) // CORS support
 app.use(express.json({ limit: '256kb' })) // Parse JSON bodies - explicit limit, was relying on Express's implicit 100kb default
+app.use(cookieParser()) // Parse the HttpOnly refresh_token cookie set by the OAuth callback / refresh handler
 
 // Enhanced request logging middleware
 app.use((req, res, next) => {
