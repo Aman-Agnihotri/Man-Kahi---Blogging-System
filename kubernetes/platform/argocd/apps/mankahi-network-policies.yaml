@@ -1,0 +1,25 @@
+# mankahi-network-policies: platform child app (wave 1) - ingress-scoped NetworkPolicies for ns mankahi.
+# Canary rollout: one policy per human push, functional gate after each; default-deny lands LAST.
+# Rollback = git revert the offending policy commit; Argo CD prunes it on sync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mankahi-network-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System.git
+    targetRevision: main
+    path: kubernetes/platform/network-policies
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mankahi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,25 @@
+# Applied by: mankahi-network-policies (platform child app, wave 1).
+# Evidence: frontend is served only via ingress-nginx (ingress-hosts.yaml host
+# mankahi.work.gd); SSR makes no in-cluster API calls (frontend/server/ has no routes;
+# useApi targets the public URL client-side) so no frontend-to-backend allow exists anywhere.
+# Push order: 4/8.
+# Enforcement begins only when default-deny-ingress (8/8) lands; until then this allow is inert.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-ingress
+  namespace: mankahi
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000

@@ -1,0 +1,24 @@
+# Applied by: mankahi-network-policies (platform child app, wave 1).
+# Evidence: Grafana datasource queries prometheus-service:9090 (monitoring.yaml datasource
+# url). Prometheus is intentionally NOT exposed via ingress.
+# Push order: 6/8.
+# Enforcement begins only when default-deny-ingress (8/8) lands; until then this allow is inert.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus
+  namespace: mankahi
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: grafana
+      ports:
+        - protocol: TCP
+          port: 9090
