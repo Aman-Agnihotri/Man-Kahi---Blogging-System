@@ -18,7 +18,7 @@ images:
   # frontend intentionally remains at e74f173 - not rebuilt (no frontend change); both SHAs carry the cookie contract.
   - name: mankahi/auth-service
     newName: ghcr.io/aman-agnihotri/mankahi-auth-service
-    newTag: f97190d2d3ca474f9277b39078ad3a5fcee01d07
+    newTag: e69f8a881ed65a089a25a250a841d4dff100b625
   - name: mankahi/blog-service
     newName: ghcr.io/aman-agnihotri/mankahi-blog-service
     newTag: f97190d2d3ca474f9277b39078ad3a5fcee01d07
