@@ -5,6 +5,9 @@ metadata:
   namespace: mankahi
 spec:
   replicas: 1
+  strategy:
+    # singleton on RWO local-path: old pod must fully stop before the new one starts (postmaster.pid overlap incident, 2026-07-15)
+    type: Recreate
   selector:
     matchLabels:
       app: postgres
@@ -84,6 +87,9 @@ metadata:
   namespace: mankahi
 spec:
   replicas: 1
+  strategy:
+    # singleton on RWO local-path (see postgres note)
+    type: Recreate
   selector:
     matchLabels:
       app: redis
@@ -97,6 +103,9 @@ spec:
         runAsNonRoot: true
         runAsUser: 999
         runAsGroup: 1000
+        # /data was root-owned by the legacy root-running pod; fsGroup chgrps the tree to redis gid once (OnRootMismatch)
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -161,6 +170,9 @@ metadata:
   namespace: mankahi
 spec:
   replicas: 1
+  strategy:
+    # singleton on RWO local-path: Lucene node.lock is held by the old pod under RollingUpdate (2026-07-15 incident)
+    type: Recreate
   selector:
     matchLabels:
       app: elasticsearch
