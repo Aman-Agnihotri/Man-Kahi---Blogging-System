@@ -41,6 +41,12 @@ const refreshTokenSchema = z.object({
   // (cookie ?? body) in the handler, not by this schema.
   refreshToken: z.string().min(1).optional(),
 })
+  // Cookie-only requests (browser sends refresh cookie, no request body at
+  // all) leave req.body undefined - the top-level object itself must
+  // tolerate that and validate to {}, so the cookie-first resolution below
+  // still runs instead of failing here on shape.
+  .optional()
+  .default({})
 
 const forgotPasswordSchema = z.object({
   email: z.string().email(),
