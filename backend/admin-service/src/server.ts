@@ -128,6 +128,9 @@ const adminHealthCheck = createHealthCheck({
 
 app.get('/health', adminHealthCheck);
 
+// liveness only - no dependency checks (readiness owns those via /health)
+app.get('/health/live', (_req, res) => { res.sendStatus(200); });
+
 // Metrics endpoint
 app.get('/metrics', metricsEnabled, metricsHandler);
 

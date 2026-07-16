@@ -176,6 +176,12 @@ blog-service's `/health` endpoint intentionally does not include
 Elasticsearch as a dependency check — breaker state is the authoritative
 signal for Elasticsearch's health, not the probe.
 
+Liveness (`/health/live`) is dependency-free across all backend services: it
+only confirms the process is up and answering requests. `/health` remains
+the readiness check, so a Postgres or Redis outage takes a pod out of the
+load-balancing rotation without ever tripping a liveness failure and
+restart-looping it.
+
 ## 8. Chaos drill 1 — local Compose
 
 This drill exercises the breaker against the local Docker Compose stack

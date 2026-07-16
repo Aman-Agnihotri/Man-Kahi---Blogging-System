@@ -117,6 +117,9 @@ const analyticsHealthCheck = createHealthCheck({
 
 app.get('/health', analyticsHealthCheck);
 
+// liveness only - no dependency checks (readiness owns those via /health)
+app.get('/health/live', (_req, res) => { res.sendStatus(200); });
+
 // Metrics endpoint
 // Track HTTP requests
 app.use(trackRequest());
