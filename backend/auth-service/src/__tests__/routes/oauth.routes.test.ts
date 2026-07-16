@@ -137,4 +137,44 @@ describe('oauth routes - /google/callback', () => {
     expect(refreshCookie).toContain('refresh_token=r-token');
     expect(refreshCookie).not.toContain('EVIL');
   });
+
+  it('signals a link success with ?linked=google when the OAuth state param was echoed back', async () => {
+    authenticateMiddlewareMock.mockImplementation((_req: any, _res: any, _next: any, callback: any) => {
+      callback(
+        null,
+        { id: 'user-1', email: 'user@example.com', username: 'user', roles: ['reader'] },
+        {
+          token: 'access-tok',
+          refreshToken: 'r-token',
+          oauthProfile: { id: 'google-1', email: 'user@example.com', profile: {}, provider: 'google' },
+        }
+      );
+    });
+
+    const res = await request(app).get('/api/auth/google/callback?state=some-link-token');
+
+    expect(res.status).toBe(302);
+    expect(res.headers['location']).toBe('http://localhost:3000/auth/callback?linked=google');
+  });
+
+  it('redirects to ?error=oauth_failed when the post-authentication body throws', async () => {
+    handleOAuthCallbackMock.mockRejectedValueOnce(new Error('db down'));
+    authenticateMiddlewareMock.mockImplementation((_req: any, _res: any, _next: any, callback: any) => {
+      callback(
+        null,
+        { id: 'user-1', email: 'user@example.com', username: 'user', roles: ['reader'] },
+        {
+          token: 'access-tok',
+          refreshToken: 'r-token',
+          oauthProfile: { id: 'google-1', email: 'user@example.com', profile: {}, provider: 'google' },
+        }
+      );
+    });
+
+    const res = await request(app).get('/api/auth/google/callback');
+
+    expect(res.status).toBe(302);
+    expect(res.headers['location']).toBe('http://localhost:3000/auth/callback?error=oauth_failed');
+    expect(res.headers['set-cookie']).toBeUndefined();
+  });
 });

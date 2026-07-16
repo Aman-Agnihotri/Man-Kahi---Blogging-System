@@ -213,13 +213,14 @@ router.get(
                         });
 
                         const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
-                        res.redirect(`${frontendURL}/auth/callback`);
+                        const isLink = Boolean(req.query['state']);
+                        res.redirect(`${frontendURL}/auth/callback${isLink ? '?linked=google' : ''}`);
                     } catch (error) {
                         logger.error({ err: error }, 'OAuth callback error');
                         trackError('oauth', 'callback_failed', 'google');
                         const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
                         res.redirect(
-                            `${frontendURL}/auth/callback?error=Authentication failed`
+                            `${frontendURL}/auth/callback?error=oauth_failed`
                         );
                     }
                 }) as unknown as (err: unknown, user?: unknown, info?: unknown) => void
@@ -354,7 +355,61 @@ router.delete(
             const { provider } = req.params;
             logger.error({ err: error }, 'Unlink provider error');
             trackError('oauth', 'unlink_failed', provider ?? 'unknown');
+            if (error instanceof Error && error.message === 'Cannot unlink the only authentication method') {
+                res.status(409).json({ message: 'Cannot unlink your only sign-in method. Set a password first.' });
+                return;
+            }
             res.status(500).json({ message: 'Failed to unlink provider' });
+        }
+    }) as unknown as RequestHandler
+);
+
+/**
+ * @swagger
+ * /oauth/providers:
+ *   get:
+ *     tags:
+ *       - OAuth
+ *     summary: List linked OAuth providers
+ *     description: Returns the list of OAuth providers linked to the authenticated user's account
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of linked providers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 providers:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Failed to list linked providers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get(
+    '/providers',
+    authenticate({ strategy: ['jwt'] }) as unknown as RequestHandler,
+    createEndpointRateLimit('auth:oauth') as unknown as RequestHandler,
+    (async (req: AuthenticatedRequest, res: Response) => {
+        try {
+            const providers = await authService.getLinkedProviders(req.user.id);
+            res.json({ providers });
+        } catch (error) {
+            logger.error({ err: error }, 'List providers error');
+            res.status(500).json({ message: 'Failed to list linked providers' });
         }
     }) as unknown as RequestHandler
 );

@@ -48,26 +48,41 @@ jest.mock('@middlewares/metrics.middleware', () => ({
 }));
 
 const handleOAuthCallbackMock = jest.fn().mockResolvedValue(undefined);
+const unlinkProviderMock = jest.fn().mockResolvedValue(undefined);
+const getLinkedProvidersMock = jest.fn().mockResolvedValue([]);
 
 jest.mock('@services/auth.service', () => ({
   __esModule: true,
   AuthService: jest.fn().mockImplementation(() => ({
     handleOAuthCallback: handleOAuthCallbackMock,
+    unlinkProvider: unlinkProviderMock,
+    getLinkedProviders: getLinkedProvidersMock,
   })),
 }));
 
-// Used for the POST /oauth/link/:provider coverage - same convention as
-// auth.refresh.routes.test.ts (pass-through authenticate mock). The route
-// wiring calls authenticate({ strategy: ['jwt'] }) once, at module load time
-// (before any beforeEach/clearAllMocks runs), so a jest.fn() call-count
-// assertion on the factory itself would always read zero - capture the
-// options into a plain closure variable instead, which survives clearAllMocks.
+// Used for the POST /oauth/link/:provider, DELETE /oauth/unlink/:provider and
+// GET /oauth/providers coverage - same convention as auth.refresh.routes.test.ts
+// (pass-through authenticate mock). The route wiring calls
+// authenticate({ strategy: ['jwt'] }) once, at module load time (before any
+// beforeEach/clearAllMocks runs), so a jest.fn() call-count assertion on the
+// factory itself would always read zero - capture the options into a plain
+// closure variable instead, which survives clearAllMocks.
+//
+// The inner middleware defaults to standing in for a successful JWT
+// verification (sets req.user) since /unlink and /providers read req.user.id;
+// individual tests override this once via mockImplementationOnce to simulate
+// an unauthenticated request (401), same as the real authenticate middleware
+// would produce for a missing/invalid token.
 let capturedAuthOptions: unknown;
+const authenticateMiddlewareForJwtMock = jest.fn((req: any, _res: any, next: any) => {
+  req.user = { id: 'user-1', email: 'user@example.com', username: 'user', roles: ['reader'] };
+  next();
+});
 jest.mock('@shared/middlewares/auth', () => ({
   __esModule: true,
   authenticate: (opts: unknown) => {
     capturedAuthOptions = opts;
-    return (_req: any, _res: any, next: any) => next();
+    return (req: any, res: any, next: any) => authenticateMiddlewareForJwtMock(req, res, next);
   },
 }));
 
@@ -195,5 +210,112 @@ describe('oauth routes - POST /oauth/link/:provider', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ message: 'Token is required' });
+  });
+});
+
+describe('oauth routes - DELETE /oauth/unlink/:provider', () => {
+  let app: Express;
+
+  beforeEach(() => {
+    app = express();
+    app.use(express.json());
+    app.use(cookieParser());
+    app.use('/api/auth', oauthRoutes);
+  });
+
+  it('unlinks successfully and returns 200', async () => {
+    unlinkProviderMock.mockResolvedValueOnce(undefined);
+
+    const res = await request(app).delete('/api/auth/unlink/google');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ message: 'Provider unlinked successfully' });
+    expect(unlinkProviderMock).toHaveBeenCalledWith('user-1', 'google');
+  });
+
+  it('returns 409 with the lockout message when the service guards the only auth method', async () => {
+    unlinkProviderMock.mockRejectedValueOnce(new Error('Cannot unlink the only authentication method'));
+
+    const res = await request(app).delete('/api/auth/unlink/google');
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ message: 'Cannot unlink your only sign-in method. Set a password first.' });
+  });
+
+  it('returns 500 for any other unlink error', async () => {
+    unlinkProviderMock.mockRejectedValueOnce(new Error('Unexpected failure'));
+
+    const res = await request(app).delete('/api/auth/unlink/google');
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: 'Failed to unlink provider' });
+  });
+
+  it('returns 401 when the request is not authenticated', async () => {
+    authenticateMiddlewareForJwtMock.mockImplementationOnce((_req: any, res: any) => {
+      res.status(401).json({ message: 'Unauthorized' });
+    });
+
+    const res = await request(app).delete('/api/auth/unlink/google');
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('oauth routes - GET /oauth/providers', () => {
+  let app: Express;
+
+  beforeEach(() => {
+    app = express();
+    app.use(express.json());
+    app.use(cookieParser());
+    app.use('/api/auth', oauthRoutes);
+  });
+
+  it('returns the linked providers for an authenticated user', async () => {
+    getLinkedProvidersMock.mockResolvedValueOnce(['google']);
+
+    const res = await request(app).get('/api/auth/providers');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ providers: ['google'] });
+    expect(getLinkedProvidersMock).toHaveBeenCalledWith('user-1');
+  });
+
+  it('returns an empty array when the user has no linked providers', async () => {
+    getLinkedProvidersMock.mockResolvedValueOnce([]);
+
+    const res = await request(app).get('/api/auth/providers');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ providers: [] });
+  });
+
+  it('collapses duplicate provider rows to a single entry', async () => {
+    getLinkedProvidersMock.mockResolvedValueOnce(['google']);
+
+    const res = await request(app).get('/api/auth/providers');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ providers: ['google'] });
+  });
+
+  it('returns 401 when the request is not authenticated', async () => {
+    authenticateMiddlewareForJwtMock.mockImplementationOnce((_req: any, res: any) => {
+      res.status(401).json({ message: 'Unauthorized' });
+    });
+
+    const res = await request(app).get('/api/auth/providers');
+
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 500 with a generic message when the service throws', async () => {
+    getLinkedProvidersMock.mockRejectedValueOnce(new Error('db down'));
+
+    const res = await request(app).get('/api/auth/providers');
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: 'Failed to list linked providers' });
   });
 });

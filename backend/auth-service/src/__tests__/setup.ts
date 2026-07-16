@@ -19,6 +19,7 @@ const prismaMock = {
   },
   oAuthProvider: {
     findFirst: jest.fn(),
+    findMany: jest.fn(),
     upsert: jest.fn(),
     deleteMany: jest.fn(),
   },
