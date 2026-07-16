@@ -10,7 +10,9 @@
     "start": "node .output/server/index.mjs",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxi typecheck",
-    "audit": "npm audit --audit-level=high"
+    "audit": "npm audit --audit-level=high",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@headlessui/vue": "^1.7.19",
@@ -28,10 +30,15 @@
   },
   "devDependencies": {
     "@nuxt/devtools": "^1.0.8",
+    "@nuxt/test-utils": "^3.23.0",
     "@nuxtjs/eslint-config-typescript": "^12.1.0",
+    "@pinia/testing": "^0.1.7",
     "@types/marked": "^5.0.2",
+    "@vue/test-utils": "^2.4.11",
     "eslint": "^8.57.0",
+    "happy-dom": "^20.10.6",
     "typescript": "^5.4.2",
+    "vitest": "^3.2.7",
     "vue-tsc": "^2.2.0"
   }
 }
