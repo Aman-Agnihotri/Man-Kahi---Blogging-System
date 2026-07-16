@@ -65,8 +65,8 @@ SealedSecret.
 
 ## What happened to kubernetes/scripts/?
 
-Retired in Phase 4 (GitOps). deploy.sh → Argo auto-sync; health-check.sh →
-Argo health + readiness/liveness probes; backup.sh → Phase 5 CronJob;
+Retired at the GitOps cutover. deploy.sh → Argo auto-sync; health-check.sh →
+Argo health + readiness/liveness probes; backup.sh → the nightly backup CronJob;
 monitor.sh → Prometheus/Grafana + Argo UI; cleanup.sh / setup-local-cluster.sh
 / setup-permissions.sh / common helpers → obsolete (local dev is Compose; the
 cluster is Terraform-provisioned; no sudo wrappers needed). See the deletion
