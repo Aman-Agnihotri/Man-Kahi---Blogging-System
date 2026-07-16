@@ -8,7 +8,7 @@
 - sha256 of vendored `deploy.yaml`: `502fddca66b09c20dd48b6d0a792a9671cd663a3a0d2a8bda5ae990d13b6c5b2`
 - Controller image pin (verified present in the vendored file):
   `registry.k8s.io/ingress-nginx/controller:v1.15.1@sha256:594ceea76b01c592858f803f9ff4d2cb40542cae2060410b2c95f75907d659e1`
-- arm64 support: confirmed via the registry manifest list for the pinned image (architect-verified this session).
+- arm64 support: confirmed via the registry manifest list for the pinned image.
 
 ## Why the `cloud` provider manifest
 

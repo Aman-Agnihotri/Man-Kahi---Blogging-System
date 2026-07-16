@@ -1,7 +1,7 @@
 # ManKahi Kubernetes Manifests
 
 Production runs on a 2-node arm64 k3s cluster (OCI Always Free) at
-`mankahi.work.gd`, deployed via **GitOps**: Argo CD continuously syncs
+`mankahi.xyz`, deployed via **GitOps**: Argo CD continuously syncs
 `kubernetes/environments/oci` from `main`. There is no imperative deploy
 script — merging to `main` IS the deployment.
 

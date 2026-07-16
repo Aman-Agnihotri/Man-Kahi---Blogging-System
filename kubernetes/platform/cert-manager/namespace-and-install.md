@@ -2,18 +2,13 @@
 
 ## Version
 
-Pinned version: `v1.21.0` (architect-verified latest, released 2026-07-08).
+Pinned version: `v1.21.0` (latest, released 2026-07-08).
 
 ## arm64 support
 
-Verified this session by an anonymous manifest-list query against quay.io for
-`quay.io/jetstack/cert-manager-controller:v1.21.0`
-(`GET https://quay.io/v2/jetstack/cert-manager-controller/manifests/v1.21.0`,
-`Accept: application/vnd.docker.distribution.manifest.list.v2+json`, using an
-anonymous pull token from
-`https://quay.io/v2/auth?service=quay.io&scope=repository:jetstack/cert-manager-controller:pull`).
-The returned manifest list includes a platform entry with
-`architecture: arm64`, `variant: v8`, `os: linux` — arm64 is supported.
+Confirmed via the quay.io manifest list for the pinned
+`quay.io/jetstack/cert-manager-controller:v1.21.0` image (multi-arch, includes
+`linux/arm64`).
 
 ## Install (HUMAN, post-cluster)
 
@@ -30,7 +25,7 @@ The returned manifest list includes a platform entry with
    ```
 
 All of the above is a **human** step, performed post-cluster-bring-up. Nothing
-here is applied automatically by any CI/CD pipeline in this phase.
+here is applied automatically by any CI/CD pipeline.
 
 ## Staging-first bring-up
 
@@ -57,7 +52,8 @@ kubectl annotate ingress mankahi-ingress -n mankahi \
   cert-manager.io/cluster-issuer=letsencrypt-prod --overwrite
 ```
 
-## Phase 4
+## Ongoing management
 
-Argo CD takes over management of cert-manager and the ClusterIssuers (and the
-staging/prod annotation state) in Phase 4.
+Argo CD manages cert-manager, the ClusterIssuers, and the staging/prod
+annotation state; these install steps are the one-time bootstrap before Argo
+adoption.

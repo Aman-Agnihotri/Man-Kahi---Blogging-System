@@ -13,8 +13,8 @@ can decrypt; the sealing is done by the human with `kubeseal` (see
 - sha256 of vendored `controller.yaml`: `8334764279b7dc3c758ce954c5e08cbf6d959bd977db49b872b2b722a123b202`
 - Controller image pin (present verbatim in the vendored file):
   `docker.io/bitnami/sealed-secrets-controller:0.38.4`
-- arm64 support: confirmed for `0.38.4` (architect-verified, prior batch — Bitnami
-  publishes a multi-arch manifest list incl. linux/arm64 for this tag).
+- arm64 support: confirmed for `0.38.4` (Bitnami publishes a multi-arch
+  manifest list incl. linux/arm64 for this tag).
 
 ## Namespace relocation
 
