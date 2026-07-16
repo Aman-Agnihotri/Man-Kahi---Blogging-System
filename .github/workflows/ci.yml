@@ -38,6 +38,7 @@ jobs:
       services: ${{ steps.compute.outputs.services }}
       components: ${{ steps.compute.outputs.components }}
       frontend: ${{ steps.compute.outputs.frontend }}
+      shared: ${{ steps.compute.outputs.shared }}
     steps:
       - uses: actions/checkout@v7
 
@@ -149,6 +150,7 @@ jobs:
           echo "services=$services" >> "$GITHUB_OUTPUT"
           echo "components=$components" >> "$GITHUB_OUTPUT"
           echo "frontend=$want_frontend" >> "$GITHUB_OUTPUT"
+          echo "shared=$backend_all" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Test: matrix over affected backend services. Tests are fully mocked
@@ -190,8 +192,32 @@ jobs:
         working-directory: backend/${{ matrix.service }}
 
   # ---------------------------------------------------------------------------
-  # Frontend build check (Nuxt build as a smoke test). No test/lint scripts
-  # exist in frontend/package.json.
+  # Shared package test suite. Gates all-backend image pushes: a shared/ci
+  # change (or force-all trigger) rebuilds every backend component, so shared
+  # must be tested too.
+  # ---------------------------------------------------------------------------
+  shared-test:
+    needs: changes
+    if: ${{ needs.changes.outputs.shared == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/shared/package-lock.json
+
+      - name: Install shared dependencies
+        run: npm ci
+        working-directory: backend/shared
+
+      - name: Run shared tests
+        run: npm test
+        working-directory: backend/shared
+
+  # ---------------------------------------------------------------------------
+  # Frontend build check (Nuxt build as a smoke test) and test suite.
   # ---------------------------------------------------------------------------
   frontend-check:
     needs: changes
@@ -212,6 +238,10 @@ jobs:
         run: npm ci
         working-directory: frontend
 
+      - name: Run tests
+        run: npm test
+        working-directory: frontend
+
       - name: Build
         run: npm run build
         working-directory: frontend
@@ -223,10 +253,11 @@ jobs:
   # it through, while a real test failure blocks the push.
   # ---------------------------------------------------------------------------
   build-push:
-    needs: [changes, test, frontend-check]
+    needs: [changes, test, shared-test, frontend-check]
     if: >-
       ${{ !cancelled()
           && needs.test.result != 'failure'
+          && needs.shared-test.result != 'failure'
           && needs.frontend-check.result != 'failure'
           && needs.changes.outputs.components != '[]' }}
     runs-on: ubuntu-latest
