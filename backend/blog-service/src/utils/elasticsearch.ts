@@ -21,7 +21,6 @@ export const elasticClient = new Client({
     logger.info(info, 'Successfully connected to Elasticsearch');
   } catch (error) {
     logger.error({ err: error }, 'Failed to connect to Elasticsearch');
-    throw error;
   }
 })();
 
