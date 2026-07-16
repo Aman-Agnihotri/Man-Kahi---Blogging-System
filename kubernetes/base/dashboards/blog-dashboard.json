@@ -254,6 +254,97 @@
         "defaults": {},
         "overrides": []
       }
+    },
+    {
+      "id": 7,
+      "title": "ES Circuit Breaker State",
+      "type": "stat",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "mankahi_es_breaker_state",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "Closed", "color": "green" },
+                "1": { "text": "Half-open", "color": "yellow" },
+                "2": { "text": "Open", "color": "red" }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "ES Breaker Short-circuits",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "rate(mankahi_es_breaker_short_circuits_total[5m])",
+          "refId": "A",
+          "legendFormat": "short-circuits/s"
+        },
+        {
+          "expr": "sum by (to_state) (increase(mankahi_es_breaker_transitions_total[5m]))",
+          "refId": "B",
+          "legendFormat": "transitions to {{to_state}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
     }
   ],
   "tags": [

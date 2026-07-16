@@ -2,8 +2,8 @@
 
 ## Version
 
-Pinned: **v3.4.5**, non-HA install, namespace `argocd`. arm64 verified by the
-prior architect batch (binding). Do NOT bump without re-verifying arm64.
+Pinned: **v3.4.5**, non-HA install, namespace `argocd`. arm64 support confirmed
+(binding). Do NOT bump without re-verifying arm64.
 
 > ALL commands below are **HUMAN-executed** against the live cluster. No CI/CD
 > pipeline runs any of these. The agent prepares; the human runs each one.
@@ -59,8 +59,8 @@ narrative also lives in `docs/gitops.md`.
 
 ## 5. DNS (HUMAN)
 
-Create one A/CNAME record: `argocd.mankahi.work.gd` → the ingress-nginx
-LoadBalancer address (same target as `mankahi.work.gd`). cert-manager issues
+Create one A/CNAME record: `argocd.mankahi.xyz` → the ingress-nginx
+LoadBalancer address (same target as `mankahi.xyz`). cert-manager issues
 `argocd-server-tls` via `letsencrypt-prod` once the record resolves.
 
 ## 6. LIVE-ADOPTION PREFLIGHT (run BEFORE the platform apps sync anything)
@@ -87,5 +87,5 @@ argocd app sync platform-ingress-nginx
 # by uncommenting the `automated:` block in each manifest and committing.
 ```
 mankahi.yaml ships automated (spec-mandated) — it was deployed from this same
-oci overlay in Phase 3, so its adoption diff is expected clean; still diff it
-before the first controller sync completes.
+oci overlay during the GitOps cutover, so its adoption diff is expected clean;
+still diff it before the first controller sync completes.

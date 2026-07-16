@@ -221,11 +221,11 @@ included in the backup script above.
 No snapshot repository is configured. This is acceptable because the
 search index is fully rebuildable from Postgres: blog-service's
 `syncBlogsToElasticsearch()` (`backend/blog-service/src/utils/elasticsearch.ts`)
-re-indexes every blog from the database in batches. If the `es-data`
-volume is ever lost, recreate the index and re-run that function (there is
-currently no CLI entrypoint wired up for it - it needs to be invoked from
-a one-off script or a temporary route; a small `npm run reindex` script is
-a reasonable follow-up).
+re-indexes every blog from the database in batches. If the `es-data` volume
+is ever lost, bring Elasticsearch back up and trigger a rebuild with the
+admin endpoint `POST /api/blogs/search/reindex` (admin auth; responds `202`
+and rebuilds in the background, `409` if a rebuild is already running,
+`503` if Elasticsearch is unreachable).
 
 ### MinIO / uploaded cover images
 

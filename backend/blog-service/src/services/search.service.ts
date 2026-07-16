@@ -1,7 +1,16 @@
 import { prisma } from '@shared/utils/prismaClient'
-import { searchBlogsElastic } from '@utils/elasticsearch'
+import { searchBlogsElastic, SearchResult } from '@utils/elasticsearch'
 import { searchCache } from '@shared/config/redis'
 import logger from '@shared/utils/logger'
+
+export interface DegradedSearchResult {
+  blogs: []
+  total: 0
+  page: number
+  totalPages: 0
+  degraded: true
+  reason: 'search_unavailable'
+}
 
 export class SearchService {
   async searchBlogs(params: {
@@ -12,7 +21,7 @@ export class SearchService {
     tags?: string[]
     sortBy?: 'recent' | 'popular' | 'relevant'
     authorId?: string
-  }) {
+  }): Promise<SearchResult | DegradedSearchResult> {
     const startTime = Date.now();
     logger.debug(params, 'Starting blog search with params');
 
@@ -25,7 +34,20 @@ export class SearchService {
     }
 
     logger.debug('Cache miss, executing Elasticsearch query');
-    const results = await searchBlogsElastic(params)
+    let results: SearchResult | DegradedSearchResult
+    try {
+      results = await searchBlogsElastic(params)
+    } catch (err) {
+      logger.warn({ err }, 'Search degraded: Elasticsearch unavailable');
+      return {
+        blogs: [],
+        total: 0,
+        page: params.page ?? 1,
+        totalPages: 0,
+        degraded: true,
+        reason: 'search_unavailable',
+      }
+    }
 
     // Cache results
     await searchCache.set(cacheKey, JSON.stringify(results))

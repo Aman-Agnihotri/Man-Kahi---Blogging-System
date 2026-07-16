@@ -631,4 +631,9 @@ export class AuthService {
             throw error
         }
     }
+
+    async getLinkedProviders(userId: string): Promise<string[]> {
+        const rows = await prisma.oAuthProvider.findMany({ where: { userId }, select: { provider: true } });
+        return [...new Set(rows.map((r) => r.provider))];
+    }
 }

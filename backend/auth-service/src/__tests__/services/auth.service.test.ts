@@ -309,4 +309,39 @@ describe('AuthService', () => {
       );
     });
   });
+
+  describe('getLinkedProviders', () => {
+    it('returns the distinct list of providers linked to the user', async () => {
+      (prismaMock.oAuthProvider.findMany as jest.Mock).mockResolvedValue([
+        { provider: 'google' },
+      ]);
+
+      const providers = await authService.getLinkedProviders(baseUser.id);
+
+      expect(providers).toEqual(['google']);
+      expect(prismaMock.oAuthProvider.findMany).toHaveBeenCalledWith({
+        where: { userId: baseUser.id },
+        select: { provider: true },
+      });
+    });
+
+    it('returns an empty array when the user has no linked providers', async () => {
+      (prismaMock.oAuthProvider.findMany as jest.Mock).mockResolvedValue([]);
+
+      const providers = await authService.getLinkedProviders(baseUser.id);
+
+      expect(providers).toEqual([]);
+    });
+
+    it('collapses duplicate provider rows to a single entry', async () => {
+      (prismaMock.oAuthProvider.findMany as jest.Mock).mockResolvedValue([
+        { provider: 'google' },
+        { provider: 'google' },
+      ]);
+
+      const providers = await authService.getLinkedProviders(baseUser.id);
+
+      expect(providers).toEqual(['google']);
+    });
+  });
 });

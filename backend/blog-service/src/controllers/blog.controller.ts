@@ -4,6 +4,7 @@ import logger from '@shared/utils/logger'
 import { BlogService } from '@services/blog.service'
 import { SearchService } from '@services/search.service'
 import { getImageObjectUrl } from '@utils/minio'
+import { guardedEs, syncBlogsToElasticsearch } from '@utils/elasticsearch'
 import { 
   trackDbOperation,
   trackSearchOperation,
@@ -63,6 +64,10 @@ const searchQuerySchema = z.object({
   tags: z.string().transform(tags => tags.split(',')).optional(),
   sortBy: z.enum(['recent', 'popular', 'relevant']).optional(),
 })
+
+// Guards against overlapping fire-and-forget reindex runs - see
+// BlogController.reindex.
+let reindexInProgress = false;
 
 export class BlogController {
   private readonly blogService: BlogService
@@ -478,6 +483,32 @@ export class BlogController {
         details: 'Failed to perform search due to an unexpected error'
       })
     }
+  }
+
+  // Trigger a full search index rebuild (admin only) - fire-and-forget,
+  // single pass, no job queue. Guards against overlapping runs and refuses
+  // to start if Elasticsearch is unreachable.
+  async reindex(req: Request, res: Response): Promise<Response> {
+    if (reindexInProgress) {
+      return res.status(409).json({ status: 'reindex_in_progress' });
+    }
+
+    try {
+      await guardedEs((c) => c.ping());
+    } catch (error) {
+      logger.error({ err: error }, 'Reindex precheck failed: Elasticsearch unavailable');
+      return res.status(503).json({ status: 'search_unavailable' });
+    }
+
+    reindexInProgress = true;
+    syncBlogsToElasticsearch()
+      .then(() => logger.info('reindex complete'))
+      .catch((err) => logger.error({ err }, 'reindex failed'))
+      .finally(() => {
+        reindexInProgress = false;
+      });
+
+    return res.status(202).json({ status: 'reindex_started' });
   }
 
   // Get popular tags

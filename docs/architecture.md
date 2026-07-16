@@ -97,7 +97,7 @@ Browser
 
 Design note:
 
-Blog writes currently mix database writes, search indexing, cache work, and upload handling synchronously. That is acceptable for the single-server stage, but the code should be shaped so indexing and analytics can move to workers later.
+Blog writes currently mix database writes, search indexing, cache work, and upload handling synchronously. That is acceptable for the single-server stage, but the code should be shaped so indexing and analytics can move to workers later. (Search indexing on this path is already isolated behind a circuit breaker, so an Elasticsearch outage degrades search rather than failing the write — see [resilience.md](resilience.md).)
 
 ### Admin Flow
 
@@ -109,6 +109,18 @@ Browser
   -> PostgreSQL
   -> Analytics service
 ```
+
+## Resilience
+
+blog-service's Elasticsearch access is funneled through a single circuit
+breaker. When Elasticsearch is unavailable, search returns an empty,
+explicitly-degraded result (HTTP 200) and blog reads/writes
+(Postgres/Redis-backed) are unaffected; indexing during an outage is
+best-effort. Liveness probes are dependency-free across all four backend
+services, so a backing-store outage removes a pod from rotation without
+restart-looping it.
+
+Full design, metrics, and chaos drills in [docs/resilience.md](resilience.md).
 
 ## Deployment Architecture
 

@@ -72,6 +72,18 @@ router.get(
   }) as RequestHandler
 );
 
+// Trigger a full search index rebuild (admin only) - fire-and-forget, see
+// BlogController.reindex
+router.post(
+  '/search/reindex',
+  authenticate({ roles: ['admin'] }) as RequestHandler,
+  createServiceRateLimit('admin') as RequestHandler,
+  trackBlogOperation('reindex') as RequestHandler,
+  ((req: Request, res: Response, next: NextFunction) => {
+    blogController.reindex(req, res).catch(next);
+  }) as RequestHandler
+);
+
 // Get popular tags
 router.get(
   '/tags/popular',

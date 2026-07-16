@@ -83,9 +83,11 @@ jest.mock('@utils/elasticsearch', () => ({
   elasticClient: {
     close: jest.fn(),
   },
+  guardedEs: jest.fn(),
   indexBlog: jest.fn(),
   searchBlogsElastic: jest.fn(),
   setupElasticsearch: jest.fn(),
+  syncBlogsToElasticsearch: jest.fn(),
   updateBlogIndex: jest.fn(),
 }));
 

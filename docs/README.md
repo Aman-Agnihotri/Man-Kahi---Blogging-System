@@ -6,6 +6,7 @@
 - [gitops.md](./gitops.md) - Argo CD + SealedSecrets workflow.
 - [operations.md](./operations.md) - runbook: backups, alerts, incidents.
 - [rollback-contingencies.md](./rollback-contingencies.md) - break-glass procedures.
+- [resilience.md](./resilience.md) - Elasticsearch circuit breaker, degraded search contract, chaos drills.
 - [ci.md](./ci.md) - pipeline.
 
 ## Local development

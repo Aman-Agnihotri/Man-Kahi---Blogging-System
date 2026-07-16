@@ -16,7 +16,7 @@ Markdown-based posts with title, slug, content, cover image, tags, categories, e
 
 ### Discovery
 
-Full-text search backed by Elasticsearch, filterable by category and tags, with a trending-posts feed, related-post suggestions, and pagination. Redis caches hot reads.
+Full-text search backed by Elasticsearch, filterable by category and tags, with a trending-posts feed, related-post suggestions, and pagination — and a circuit breaker that keeps search endpoints answering (as an empty result) rather than failing when Elasticsearch is down. Redis caches hot reads.
 
 ### Reader Engagement
 
@@ -24,7 +24,7 @@ Likes, bookmarks, threaded (one level) comments, reading-progress tracking, and 
 
 ### Accounts and Social
 
-Local login plus an optional Google OAuth path, password reset, avatar upload, bio and social links, following other authors, notification preferences, and self-service account deletion.
+Local login plus an optional Google OAuth path — connect or disconnect Google from account settings (with lockout protection so you can never remove your only sign-in method) — password reset, avatar upload, bio and social links, following other authors, notification preferences, and self-service account deletion.
 
 ### Analytics
 
@@ -112,6 +112,7 @@ Local setup and environment configuration live in [docs/local-development.md](do
 - [Local development](docs/local-development.md)
 - [OCI Production Deployment](docs/oci-deployment.md)
 - [CI Pipeline](docs/ci.md)
+- [Resilience](docs/resilience.md)
 - [Scaling](docs/scaling.md)
 - [Alerting](docs/alerting.md)
 - [Compose operations](docs/local-operations.md)
