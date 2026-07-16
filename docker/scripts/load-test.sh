@@ -3,7 +3,7 @@
 # running stack's public read paths (through nginx, the only path that
 # should be considered a real deployment target). Answers "does this
 # server fall over under N concurrent requests," not a substitute for a
-# real load-testing tool - see docs/SCALING.md's Load Testing section for
+# real load-testing tool - see docs/scaling.md's Load Testing section for
 # when to reach for k6/JMeter instead.
 #
 # Usage: from docker/compose, after `docker compose up -d --build`:

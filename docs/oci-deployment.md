@@ -1,11 +1,10 @@
-# OCI Deployment (Phase 3 overlay)
+# OCI Deployment
 
 ## 1. Overview
 
 `kubernetes/environments/oci` is the live Kustomize overlay for the OCI Always
-Free k3s cluster provisioned in Phase 2 (2x Ampere A1.Flex arm64 nodes, one
-VCN, one Object Storage bucket set — see the Phase 2 Terraform under
-`terraform/`). It layers image pins, resource/replica trims, storage class,
+Free k3s cluster provisioned via Terraform (2x Ampere A1.Flex arm64 nodes, one
+VCN, one Object Storage bucket set — see terraform/). It layers image pins, resource/replica trims, storage class,
 Elasticsearch single-node tuning, ingress hostnames, and object-storage config
 on top of `kubernetes/base`.
 
@@ -41,7 +40,7 @@ SealedSecrets (`kubernetes/environments/oci/sealed-secrets/`, see
 
 **`POSTGRES_USER` constraint:** the value sealed for `POSTGRES_USER` in
 `db-secrets` (`kubernetes/environments/oci/sealed-secrets/`, see
-`docs/gitops.md`) **must be `postgres`**. `app-secrets`' `DATABASE_URL` hardcodes the user as `postgres`
+`docs/gitops.md`) **must be `postgres`**. `secret-shared-core`'s `DATABASE_URL` hardcodes the user as `postgres`
 (`postgresql://postgres:${POSTGRES_PASSWORD}@postgres-service:5432/mankahi`),
 and `db-secrets`' `POSTGRES_USER` overrides the `postgres-config` ConfigMap's
 default (also `postgres`) for the Postgres container itself. Substituting any
@@ -74,7 +73,7 @@ can fall back to the other.
 
 ## 4. First-deploy order
 
-**Superseded by GitOps (Phase 4).** The deployment path is now: install Argo
+**Superseded by GitOps.** The deployment path is now: install Argo
 CD → apply the root app → everything converges with zero further `kubectl
 apply` commands. Follow `docs/gitops.md` §3 (fresh-cluster bootstrap) — it
 covers the Argo CD install, the SealedSecret health-check patch, DNS, the
@@ -97,7 +96,7 @@ kubectl annotate ingress -n mankahi mankahi-ingress monitoring-ingress \
 
 ### Historical / break-glass note (pre-GitOps manual apply)
 
-The pre-Phase-4 flow (envsubst-rendered Secrets + `kubectl apply -k`) is
+The pre-GitOps flow (envsubst-rendered Secrets + `kubectl apply -k`) is
 retired: the `${VAR}` placeholder files it depended on are deleted, and a
 plain apply of placeholder Secrets over live ones is exactly the incident
 that motivated SealedSecrets. If Argo CD is ever unavailable and a manual
@@ -159,22 +158,23 @@ consume via `envFrom`. The base `app-config` ConfigMap
 
 Values:
 
-- `MINIO_ENDPOINT`: `bmknimruc4dp.compat.objectstorage.ap-mumbai-1.oraclecloud.com`
-  (host only — the MinIO client takes port 443/SSL as separate settings,
-  `MINIO_PORT: "443"` and `MINIO_USE_SSL: "true"`).
+- `MINIO_ENDPOINT`: the S3-compatible endpoint host (terraform output
+  `object_storage_s3_endpoint`, host portion only — the MinIO client takes
+  port 443/SSL as separate settings, `MINIO_PORT: "443"` and
+  `MINIO_USE_SSL: "true"`).
 - `MINIO_REGION`: `ap-mumbai-1`.
-- `MINIO_PUBLIC_URL`: `https://bmknimruc4dp.compat.objectstorage.ap-mumbai-1.oraclecloud.com`
-  (the application code appends `/<bucket>/<file>` to build the final public
-  URL).
+- `MINIO_PUBLIC_URL`: the same endpoint as an `https://` URL (terraform output
+  `object_storage_s3_endpoint`; the application code appends
+  `/<bucket>/<file>` to build the final public URL).
 
-**Application behavior (Phase 3.5: private buckets, presigned reads):**
+**Application behavior (private buckets, presigned reads):**
 
 The app now has two modes, gated by `MINIO_SKIP_BUCKET_SETUP`
 (`backend/blog-service/src/utils/minio.ts`,
 `backend/auth-service/src/utils/minio.ts`, both services' `config/env.ts`):
 
-- **Unset / not `"true"` (local dev/compose — unchanged from before Phase
-  3.5):** on first use, the service checks `bucketExists()`; if the bucket
+- **Unset / not `"true"` (local dev/compose — unchanged from before this
+  change):** on first use, the service checks `bucketExists()`; if the bucket
   does not exist it calls `makeBucket()` then `setBucketPolicy(public-read)`,
   and stores an **absolute** `MINIO_PUBLIC_URL`-based URL in the database
   (`Blog.coverImage` / `User.profileImage`).
@@ -200,9 +200,10 @@ production data exists yet, so no data migration is needed.
 **REQUIRED HUMAN STEP before first upload:** pre-create the two buckets
 (named per `MINIO_BUCKET_BLOG` / `MINIO_BUCKET_AVATARS` or their defaults,
 `blog-images` and `avatars`) in the tenancy's Object Storage namespace as
-**private** (`NoPublicAccess`) — matching the Phase 2 Terraform intent for
-`mankahi-uploads` / `mankahi-backups` — or manage them via Terraform instead
-of pre-creating manually. With `MINIO_SKIP_BUCKET_SETUP=true`, the services
+**private** (`NoPublicAccess`) — matching the Terraform provisioning intent for
+the uploads bucket (terraform output `uploads_bucket_name`) and the backups
+bucket (terraform output `backups_bucket_name`) — or manage them via Terraform
+instead of pre-creating manually. With `MINIO_SKIP_BUCKET_SETUP=true`, the services
 never call `bucketExists()`/`makeBucket()`/`setBucketPolicy()`, so the
 buckets must already exist.
 
@@ -215,10 +216,12 @@ S3-compatible endpoint. What remains unverified is the in-app redirect path
 first deploy:
 
 1. Upload an image via the blog UI.
-2. Confirm the object appears:
+2. Confirm the object appears (endpoint from terraform output
+   `object_storage_s3_endpoint`):
 
    ```
-   aws s3 ls --endpoint-url https://bmknimruc4dp.compat.objectstorage.ap-mumbai-1.oraclecloud.com \
+   EP=$(terraform -chdir=terraform output -raw object_storage_s3_endpoint)
+   aws s3 ls --endpoint-url "$EP" \
      s3://blog-images/
    ```
 
@@ -283,8 +286,7 @@ Grafana is served on its own host, `grafana.mankahi.xyz`, at the root
 path (`monitoring-ingress`, §8), rather than a subpath of the primary domain.
 The `oci` overlay's `patches/grafana-auth.yaml` disables anonymous access
 (`GF_AUTH_ANONYMOUS_ENABLED=false`), sources the admin password from
-`grafana-secrets` (`GF_SECURITY_ADMIN_PASSWORD`, the `${GRAFANA_ADMIN_PASSWORD}`
-placeholder — see §2), and sets
+`grafana-secrets` (`GF_SECURITY_ADMIN_PASSWORD`, sealed — see §2), and sets
 `GF_SERVER_ROOT_URL=https://grafana.mankahi.xyz` so Grafana generates
 correct absolute links behind the ingress.
 
@@ -306,8 +308,8 @@ The `oci` overlay's Elasticsearch patch
 - `xpack.security.enabled=false` (matches the base-mounted `elasticsearch.yml`;
   security stays off as currently configured)
 
-Dependency: `vm.max_map_count=262144` is already set by the Phase 2
-Terraform cloud-init on both nodes. If a node is ever rebuilt outside of
+Dependency: `vm.max_map_count=262144` is already set by the Terraform
+cloud-init on both nodes. If a node is ever rebuilt outside of
 Terraform (manual reimage, etc.), this sysctl must be re-set manually or
 Elasticsearch will fail to start.
 
@@ -325,8 +327,9 @@ Trade-off, stated honestly: `local-path` volumes are node-local, which pins
 each pod to the specific node holding its volume. With one replica each for
 these stateful workloads, this is acceptable and is standard practice for
 small k3s clusters. It also means node loss equals data loss for that volume
-— there is no replication. Backups are a later phase (see `mankahi-backups`
-bucket in §7).
+— there is no replication. Backups are implemented (nightly CronJob; see
+the backups bucket (terraform output `backups_bucket_name`) in §7, and
+operations.md section 2).
 
 ## 13. Resource budget verification
 
@@ -339,7 +342,7 @@ kubectl kustomize kubernetes/environments/oci | python kubernetes/environments/o
 ```
 
 This script (stdlib + PyYAML) sums each Deployment's memory request x its
-replica count. Budget: 6144Mi. Current total: 5120Mi.
+replica count. Budget: 6144Mi. Current total: 5280Mi.
 
 ## 14. Known issues / scan exceptions
 
@@ -349,18 +352,18 @@ a. `${HOSTNAME}` appears in the `elasticsearch-config` ConfigMap. This is
    placeholder. It is expected to appear as-is in the rendered manifest.
 
 b. `${VAR}`-style placeholders no longer appear in `Secret` resources (see
-   §2). Done in Phase 4: they are removed by SealedSecrets — see
+   §2). Done during the GitOps migration: they are removed by SealedSecrets — see
    `docs/gitops.md`.
 
 c. The `development/` and `production/` overlays now build cleanly with
-   `kustomize build`. Phase 3.5 (commit `a1ea385`) deleted the broken
+   `kustomize build`. The kustomize-build fix (commit `a1ea385`) deleted the broken
    `app-config` `configMapGenerator` `behavior: merge` block and the
    corresponding `secretGenerator` merge blocks that previously caused a
    build failure (kustomize v5 requires a generator-produced target for a
    `merge` behavior to apply against, and the base `app-config` was a plain
    `resource`, not a generator output). The `oci` overlay was already
-   unaffected (see §7). Overlay-level secret overrides for `development`/
-   `production` return with Phase 4's SealedSecrets work.
+   unaffected (see §7). The development overlay generates its secrets from
+   committed fake env files (kustomize secretGenerator).
 
 d. The base's hand-rolled nginx ingress controller manifests
    (`ingress-config.yaml`, `ingress-rbac.yaml`) are excluded from the `oci`

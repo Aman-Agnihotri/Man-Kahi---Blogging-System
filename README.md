@@ -36,7 +36,7 @@ Admins can hide/unhide or hard-delete posts, suspend/unsuspend users (enforced a
 
 ### Observability and Ops
 
-Structured, service-tagged, secret-redacted logging with request IDs; Prometheus metrics with auto-provisioned Grafana dashboards; documented alert recommendations and an operational runbook (backups, restores, log locations, troubleshooting).
+Structured, service-tagged, secret-redacted logging with request IDs; Prometheus metrics with auto-provisioned Grafana dashboards; Prometheus alert rules delivered to Discord via Grafana alerting, and an operational runbook (backups, restore drills, incident convention).
 
 ## Architecture
 
@@ -50,7 +50,7 @@ Browser
   -> PostgreSQL, Redis, Elasticsearch, and object storage
 ```
 
-In development, an Nginx gateway fronts everything; in production, ingress-nginx terminates TLS (cert-manager + Let's Encrypt) and routes `/api/*` prefixes to the backend services and `/` to the frontend. Only the ingress is public; every backing service stays private. Read the full architecture notes in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+In development, an Nginx gateway fronts everything; in production, ingress-nginx terminates TLS (cert-manager + Let's Encrypt) and routes `/api/*` prefixes to the backend services and `/` to the frontend. Only the ingress is public; every backing service stays private. Read the full architecture notes in [docs/architecture.md](docs/architecture.md).
 
 ## Repository layout
 
@@ -62,7 +62,7 @@ In development, an Nginx gateway fronts everything; in production, ingress-nginx
 | `docker/` | Docker Compose stack — the local dev environment (dev + production variants) |
 | `kubernetes/base/` | Kustomize base app manifests |
 | `kubernetes/environments/` | Kustomize overlays: development/, production/, and oci/ — the live production overlay (SHA-pinned images, resource budget, TLS ingress) |
-| `kubernetes/platform/` | Cluster platform components: ingress-nginx (vendored, pinned), cert-manager issuers; Argo CD + sealed-secrets arrive with the GitOps phase |
+| `kubernetes/platform/` | Cluster platform components: ingress-nginx (vendored, pinned), cert-manager issuers, Argo CD app-of-apps, sealed-secrets, NetworkPolicies, backups |
 | `terraform/` | OCI infrastructure (VCN, two A1.Flex nodes, object storage) — applied and live |
 | `.github/workflows/` | CI: tests + multi-arch images to GHCR + Trivy scans |
 | `docs/` | Project documentation |
@@ -104,15 +104,17 @@ Cloudflare prints a public `https://*.trycloudflare.com` URL that proxies straig
 
 The production deployment runs on a two-node k3s cluster on OCI's Always Free tier, deployed from the `kubernetes/environments/oci` overlay. The full story — infrastructure provisioning, image pinning, first-deploy order, TLS, and object storage — lives in [docs/oci-deployment.md](docs/oci-deployment.md). Deployments run on GitOps (Argo CD) — see [docs/gitops.md](docs/gitops.md).
 
-Full setup, environment configuration, and production deployment steps live in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Local setup and environment configuration live in [docs/local-development.md](docs/local-development.md).
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Deployment](docs/DEPLOYMENT.md)
+- [Architecture](docs/architecture.md)
+- [Local development](docs/local-development.md)
 - [OCI Production Deployment](docs/oci-deployment.md)
 - [CI Pipeline](docs/ci.md)
-- [Scaling Guidance](docs/SCALING.md)
-- [Alerting Recommendations](docs/ALERTING.md)
-- [Operational Runbook](docs/RUNBOOK.md)
-- [Action Plan](docs/ACTION_PLAN.md) (product vision, roadmap, and known gaps)
+- [Scaling](docs/scaling.md)
+- [Alerting](docs/alerting.md)
+- [Compose operations](docs/local-operations.md)
+- [Operations runbook](docs/operations.md)
+- [GitOps](docs/gitops.md)
+- [Docs index](docs/README.md)

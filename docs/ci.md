@@ -2,7 +2,7 @@
 
 The pipeline (`.github/workflows/ci.yml`) builds, tests, scans, and publishes
 SHA-tagged multi-arch container images for **only the components affected by a
-change**. It replaces the old `registry.mankahi.local`.
+change**.
 
 ## Triggers
 
@@ -25,7 +25,7 @@ Components: `auth-service`, `blog-service`, `analytics-service`,
 suites; `init-service` is build-only and `frontend` runs a Nuxt build as a
 smoke test.
 
-## Image naming & tagging (spec §0.1.2)
+## Image naming & tagging
 
 Images: `ghcr.io/aman-agnihotri/mankahi-<component>` (all lowercase).
 
@@ -50,7 +50,7 @@ docker manifest inspect ghcr.io/aman-agnihotri/mankahi-auth-service:<full-sha>
 # -> should list both linux/amd64 and linux/arm64 entries.
 ```
 
-## One-time HUMAN setup (cannot be automated)
+## One-time manual setup (cannot be automated)
 
 After the first successful `main` run, each GHCR package must be linked to the
 repository and made public so the k3s cluster can pull without an image pull
@@ -76,7 +76,7 @@ private and the cluster cannot pull them.
   (shared in-process test state). **Do not** parallelize tests in CI or add
   `--maxWorkers`.
 
-## Production-image smoke gates (Phase 5)
+## Production-image smoke gates
 
 The `smoke` job (`.github/workflows/ci.yml` ~L293) runs non-PR, after
 `build-push`, restricted to the four backend services
@@ -95,7 +95,7 @@ gates per image:
 
 **Honest caveat:** the classifier only exercises the FIRST process the image's
 `CMD` runs. Later chained steps (e.g. the init Job's seed step) are a known
-blind spot — this is not simulated by the smoke job (2026-07-15 incident).
+blind spot — this is not simulated by the smoke job (found via a live incident).
 
 ## Future toggle: fail on CRITICAL vulnerabilities
 
@@ -111,4 +111,4 @@ change the scan step in `ci.yml`:
 ```
 
 (Consider limiting the failing severity to `CRITICAL` to avoid blocking on
-HIGH-only findings.) Not enabled in the first merge.
+HIGH-only findings.) Currently report-only.

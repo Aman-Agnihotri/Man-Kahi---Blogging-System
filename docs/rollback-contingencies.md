@@ -1,24 +1,23 @@
-# Phase 4 Rollback Contingencies — GitOps Cutover (Argo CD + Sealed Secrets)
+# Break-Glass and Rollback Contingencies — GitOps (Argo CD + Sealed Secrets)
 
-Historical record of the Phase-4 GitOps cutover. The app-secrets model
+Record of the GitOps cutover. The app-secrets model
 described here was split into secret-shared-core/secret-auth/secret-media on
 2026-07-15 (see gitops.md section 4); mechanics remain valid break-glass
 procedure by name substitution.
 
-> Written before the Phase 4 cutover against the LIVE production cluster
-> (mankahi.work.gd, real users). Every cluster command in this document is
-> **HUMAN-executed**. Agents never touch the cluster.
+> Written before the GitOps cutover against the LIVE production cluster
+> (mankahi.work.gd, real users) (the production host has since moved to
+> mankahi.xyz). Every cluster command in this document is
+> **HUMAN-executed**.
 >
 > Status note: the secret-scope decision (seal 3 consumed secrets:
 > `app-secrets`, `db-secrets`, `grafana-secrets`; retire the 3 unconsumed:
-> `redis-secrets`, `minio-secrets`, `elasticsearch-secrets`) is backed by an
-> 8-agent full-codebase sweep (below) and pending final human ratification.
+> `redis-secrets`, `minio-secrets`, `elasticsearch-secrets`) is backed by a
+> full-codebase consumption audit (below).
 
-## Sweep evidence (why the retirement is safe)
+## Consumption-audit evidence (why the retirement is safe)
 
-Eight independent read-only scans (one per service, plus init+shared,
-frontend, all kubernetes overlays + compose, terraform) returned a
-**unanimous SAFE** verdict:
+A full codebase consumption audit returned a unanimous SAFE verdict:
 
 | Scope | Verdict | Decisive evidence |
 |---|---|---|
@@ -68,7 +67,7 @@ kubectl exec -n mankahi deploy/postgres -- \
 ```
 
 Keep ALL old secret values in the password manager until the rollback drill
-(acceptance criterion 4) has passed.
+has passed.
 
 ## C1 — Rollback step zero: pause Argo self-heal
 
@@ -94,7 +93,7 @@ failures after the SealedSecrets sync.
 3. `kubectl rollout restart deployment -n mankahi`.
 4. Diagnose offline; fix the SealedSecret; re-enable sync.
 
-Silent-failure watchpoint (from the sweep): blog-service falls back to
+Silent-failure watchpoint (from the audit): blog-service falls back to
 `minioadmin` credentials with **no startup error** if MinIO keys go missing —
 presigned image URLs break silently. Therefore the cutover gate (C7) includes
 an image-presign smoke test, not just pod health.
@@ -173,11 +172,11 @@ the C0 snapshot is safe in the password manager:
 kubectl delete secret -n mankahi redis-secrets minio-secrets elasticsearch-secrets
 ```
 
-Nothing consumes them (sweep table above); this is cleanup, not migration.
+Nothing consumes them (audit table above); this is cleanup, not migration.
 
 ## C9 — Git-level rollback (the standing mechanism)
 
-Every Phase 4 change is one coherent commit. `git revert <sha>` on `main`
+Every cutover change is one coherent commit. `git revert <sha>` on `main`
 converges the cluster backward via Argo — exactly what the rollback drill
-(acceptance criterion 4: revert an image-tag bump, watch the previous SHA
-redeploy) rehearses before this mechanism is relied upon.
+(revert an image-tag bump, watch the previous SHA redeploy) rehearses
+before this mechanism is relied upon.

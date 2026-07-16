@@ -17,31 +17,40 @@ namespace `mankahi` (manifest:
 Argo CD child app `mankahi-backups`). An init container runs `pg_dump -Fc`
 against the live `postgres-service` and writes a custom-format dump to a
 shared `emptyDir`. The main container then streams that dump to the
-`mankahi-backups` OCI Object Storage bucket over the S3-compatible endpoint
-(path-style addressing, matching how the application's own MinIO SDK already
-talks to this endpoint), and prunes older dumps down to the newest 14 in the
-same run.
+backups bucket (terraform output backups_bucket_name) over the S3-compatible
+endpoint (path-style addressing, matching how the application's own MinIO SDK
+already talks to this endpoint), and prunes older dumps down to the newest 14
+in the same run.
 
 **Where to check:**
-- Bucket prefix: `postgres/` in the `mankahi-backups` bucket.
+- Bucket prefix: `postgres/` in the backups bucket (terraform output backups_bucket_name).
 - Argo CD: application `mankahi-backups` (sync-wave 1).
 - Cluster: `kubectl get cronjob -n mankahi` and `kubectl get jobs -n mankahi`.
 
 **Least-privilege caveat.** The S3 credential used by the upload step is the
 tenancy user's customer secret key — it is user-scoped, not bucket-scoped, so
 it carries more reach than this job needs. Follow-up: create a dedicated IAM
-user and policy scoped to the `mankahi-backups` bucket only.
+user and policy scoped to the backups bucket (terraform output backups_bucket_name)
+only.
 
 ## 3. Restore drill (perform quarterly; an unrestored backup is a hope, not a backup)
 
+Run from the repo root in git-bash (values come from terraform outputs; nothing is hardcoded):
+```
+export AWS_ACCESS_KEY_ID=$(terraform -chdir=terraform output -raw object_storage_access_key)
+export AWS_SECRET_ACCESS_KEY=$(terraform -chdir=terraform output -raw object_storage_secret_key)
+EP=$(terraform -chdir=terraform output -raw object_storage_s3_endpoint)
+BUCKET=$(terraform -chdir=terraform output -raw backups_bucket_name)
+```
+
 a. List dumps:
    ```
-   aws --endpoint-url https://bmknimruc4dp.compat.objectstorage.ap-mumbai-1.oraclecloud.com s3 ls s3://mankahi-backups/postgres/
+   aws --endpoint-url "$EP" s3 ls "s3://$BUCKET/postgres/"
    ```
 
 b. Download newest:
    ```
-   aws --endpoint-url https://bmknimruc4dp.compat.objectstorage.ap-mumbai-1.oraclecloud.com s3 cp s3://mankahi-backups/postgres/DUMPFILE /tmp/restore.dump
+   aws --endpoint-url "$EP" s3 cp "s3://$BUCKET/postgres/DUMPFILE" /tmp/restore.dump
    ```
 
 c. Copy into the postgres pod:
@@ -82,7 +91,7 @@ h. Drill log:
 |-------|---------|-----------------|
 | `InstanceDown` | a scraped backend target remains in SD but fails scrapes for 5m (CrashLoop/unready; note: a deleted pod leaves SD entirely and does NOT trigger this) | kubectl get pods -n mankahi; Argo CD app health; node memory |
 | `PodCrashLooping` | A container in mankahi restarted more than 3 times in 15m (bad config, crash on boot, OOMKill) | kubectl -n mankahi logs POD --previous; check lastState.terminated.reason (OOMKilled = raise limits); check recent Argo CD sync |
-| `DeploymentReplicasUnavailable` | A Deployment's desired replica was unavailable within the last 5m - pod deleted, crashed, or failing readiness; fires on kubectl delete pod (the acceptance drill) | kubectl -n mankahi get pods -l app=DEPLOYMENT; kill drills self-clear about 5m after Ready |
+| `DeploymentReplicasUnavailable` | A Deployment's desired replica was unavailable within the last 5m - pod deleted, crashed, or failing readiness; fires on kubectl delete pod (a deliberate kill-pod test) | kubectl -n mankahi get pods -l app=DEPLOYMENT; kill drills self-clear about 5m after Ready |
 | `CertificateExpiringSoon` | a cert-manager certificate expires in under 14 days | check cert-manager logs + the certificate resource; renew/reissue |
 
 PodCrashLooping is restart-count based; kubectl delete pod creates a NEW pod
@@ -97,9 +106,7 @@ bytes; both need a kubelet or node_exporter scrape.
 - PVC above 80 percent — needs kubelet volume stats.
 - Node memory above 85 percent — needs `node-exporter`.
 
-Delivery channel: Grafana unified alerting to a Discord webhook (sealed).
-
-Delivery: the bridge rule (any firing Prometheus alert) is provisioned from git; the Discord contact point and its routing policy arrive together via the sealed grafana-alerting secret; post-seal grafana restart required.
+Delivery: Grafana unified alerting to a Discord webhook. The bridge rule (any firing Prometheus alert) is provisioned from git; the contact point and routing policy arrive via the sealed grafana-alerting secret (post-seal grafana restart required - provisioning is read at startup).
 
 ## 5. Incident log convention
 
@@ -126,13 +133,9 @@ Post-mortem template:
 (what changed so it cannot recur)
 ```
 
-Two Phase-4 incidents (a placeholder `ALTER USER` lockout, and a
+Two earlier GitOps-migration incidents (a placeholder `ALTER USER` lockout, and a
 whitespace-corrupted seal) are documented in `docs/gitops.md` and predate this
 convention.
-
-Two worked examples of the convention: `internal-docs/incidents/2026-07-15-stateful-rollout-overlap.md`
-and `internal-docs/incidents/2026-07-15-init-hook-deadlock.md` — internal working documents, not
-tracked in this repo.
 
 ## 6. Standing cautions
 

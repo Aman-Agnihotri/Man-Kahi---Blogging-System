@@ -1,14 +1,11 @@
 # ManKahi Scaling Guidance
 
-Last updated: 2026-07-04
-
 ## Purpose
 
-This document is Phase 8 of `docs/ACTION_PLAN.md`: "Future Scale
-Readiness." It does not describe changes made to the running system - it
+This document covers future scale readiness. It does not describe changes made to the running system - it
 describes concrete, measurable triggers for *when* to make each change,
 so scaling decisions are made in response to real evidence rather than
-speculatively. The current system (Docker Compose, one Postgres instance,
+speculatively. The local stack (Docker Compose, one Postgres instance,
 one Redis instance, one Elasticsearch node) is intentionally sized for a
 laptop-to-single-server deployment; none of the migrations below should
 be started before their trigger condition is actually observed.
@@ -20,8 +17,8 @@ stateless: no in-memory session state, no local file storage for
 anything that must survive a restart (uploads go to MinIO, not local
 disk), and horizontal scaling today is just "run more container
 replicas behind the same nginx upstream block." This is why Docker
-Compose's `deploy.replicas` (development) and the equivalent in the
-production compose file can be increased directly with no code changes,
+Compose's `deploy.replicas` (development) and the compose file can be
+increased directly with no code changes,
 and why the Kubernetes manifests in `kubernetes/` (scaffolding, see
 `kubernetes/README.md`) already model each service as a `Deployment`
 with a `HorizontalPodAutoscaler` rather than a `StatefulSet`.
@@ -96,7 +93,7 @@ changes needed beyond the connection string.
 
 **Current state:** MinIO (S3-compatible) already backs both blog cover
 images (`backend/blog-service/src/config/upload.ts`) and user avatars
-(`backend/auth-service`'s equivalent, added in the Phase 7 feature
+(`backend/auth-service`'s equivalent, added in a later feature
 batch) - uploads are not stored on local disk anywhere in the running
 services. This means the "move to cloud object storage" migration is
 already architecturally cheap: it's a matter of pointing the existing
@@ -120,7 +117,9 @@ changes required as long as the provider is S3-API-compatible (all of
 the above are). Migrate existing objects with any S3-to-S3 sync tool
 (e.g. `rclone`) before cutting over.
 
-## When To Move From Compose To Kubernetes
+## When the local Compose stack stops being enough
+
+(Production already runs on Kubernetes - this concerns the local/dev stack.)
 
 **Not yet.** Docker Compose on a single server remains the right choice
 until at least one of these is true:
@@ -137,16 +136,17 @@ until at least one of these is true:
 - Multiple engineers need to deploy independently without stepping on
   a single shared server.
 
-None of these apply at the project's current scale. When one does,
-`kubernetes/` has a head start (see `kubernetes/README.md` for its exact
-current state and known remaining issues) rather than starting from
-nothing - but expect real setup work before a first deploy: fixing the
-one remaining `kubernetes/environments/` build issue documented there,
-provisioning real secrets, and - most importantly - deciding on managed
-vs. self-hosted Postgres/Elasticsearch, since running stateful clusters
-well inside Kubernetes is a significant operational commitment in its
-own right that a managed cloud database service often sidesteps
-entirely.
+None of these apply to the local Compose stack at the project's current
+scale. The platform already runs in production on Kubernetes (k3s on OCI,
+managed via GitOps) - see [oci-deployment.md](./oci-deployment.md) for the
+cluster and infrastructure, and [gitops.md](./gitops.md) for the Argo CD +
+SealedSecrets workflow. What follows are larger-scale reconsiderations
+beyond the current 2-node cluster, not "first deploy" work: most notably,
+deciding on managed vs. self-hosted Postgres/Elasticsearch as a genuinely
+managed multi-node cluster with automatic failover becomes warranted, since
+running stateful clusters well inside Kubernetes is a significant
+operational commitment in its own right that a managed cloud database
+service often sidesteps entirely.
 
 ## When To Move Search Indexing Behind A Queue
 
@@ -176,7 +176,7 @@ worker process (can start as an in-process consumer inside blog-service
 itself, doesn't need a new deployable) drains the queue. The existing
 `syncBlogsToElasticsearch()` re-sync path (already relied on for full
 Elasticsearch rebuilds, see the Backups And Restore section of
-`docs/ACTION_PLAN.md`) doubles as the recovery path if a job is ever lost.
+`docs/local-development.md`) doubles as the recovery path if a job is ever lost.
 
 ## When To Move Analytics Ingestion Behind A Queue
 

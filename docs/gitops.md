@@ -53,8 +53,7 @@ BeforeHookCreation` (no more manual delete of the immutable Job).
    the object exists and wave 0 races ahead of actual decryption.)
 4. Rotate the admin password immediately: `install.md` §4. Store it in the
    password manager.
-5. DNS: `argocd.mankahi.xyz` A records to both node IPs
-   (both reserved node public IPs - terraform outputs server_public_ip / agent_public_ip) — same failover pattern as the apex.
+5. DNS: `argocd.mankahi.xyz` A records to both reserved node public IPs (terraform outputs server_public_ip / agent_public_ip) — same failover pattern as the apex.
 6. Apply the root app — **the last manual kubectl apply**:
 
        kubectl apply -n argocd -f kubernetes/platform/argocd/apps/app-of-apps.yaml
@@ -88,8 +87,8 @@ immediately. It is never committed, never `git add`ed, never in history.
      and routing)
 
    (the raw POSTGRES_PASSWORD / MINIO_ROOT_PASSWORD / ELASTICSEARCH_PASSWORD
-   keys of the legacy layout are dropped — zero code readers, verified by an
-   8-agent consumption sweep)
+   keys of the legacy layout are dropped — zero code readers, verified by a
+   full codebase consumption audit)
 2. **Lint the staging file before sealing** — two incident classes died here:
    whitespace inside values, and base64-encoded values pasted without decoding
    (`kubectl get secret -o yaml` backups store values base64-encoded under
@@ -136,11 +135,11 @@ copy. Restore into a rebuilt cluster:
     kubectl apply -f sealed-secrets-key-backup.yaml
     kubectl -n sealed-secrets delete pod -l name=sealed-secrets-controller
 
-## 6. LIVE CUTOVER RUNBOOK (one-time: legacy envsubst Secrets → SealedSecrets)
+## 6. Legacy-to-SealedSecrets takeover (one-time)
 
-Historical record of the Phase-4 cutover (3-secret app-secrets model).
-`app-secrets` was split into `secret-shared-core`/`secret-auth`/`secret-media`
-on 2026-07-15 - substitute names accordingly if ever reused as break-glass.
+Record of the one-time legacy-Secret takeover. app-secrets was split into
+secret-shared-core/secret-auth/secret-media - substitute names if ever
+reused as break-glass.
 
 The live cluster already holds plaintext Secrets with the same names, applied
 manually via envsubst. The controller REFUSES to overwrite a Secret it does
@@ -207,7 +206,7 @@ exactly:
     post renders; image presigned URL loads (catches blog's silent
     `minioadmin` fallback); Grafana login with the new password.
 11. **Only now** delete the three dead legacy Secrets (nothing consumes them
-    — 8-agent sweep):
+    — full codebase consumption audit):
 
         kubectl delete secret redis-secrets minio-secrets elasticsearch-secrets -n mankahi
 
@@ -241,7 +240,7 @@ Reseal = section 4 steps 1-4 for the affected secret only.
   `object_storage_secret_key` → reseal `secret-media` → merge → restart
   blog-service + auth-service → presign smoke test.
 - **ELASTICSEARCH / REDIS credentials**: moot — security disabled / no auth;
-  the legacy secrets were retired in Phase 4.
+  the legacy secrets were retired during the GitOps migration.
 - **Argo CD admin password**: `kubernetes/platform/argocd/install.md` §4.
 - After ANY key rotation of the sealed-secrets controller itself: re-run the
   key backup (section 5).
@@ -257,12 +256,9 @@ login fails with "Default role not found" until it exists. Idempotent seed
        VALUES ('seed-reader-role', 'reader', 'reader', 'Default reader role', true, 0, now(), now()) \
        ON CONFLICT (name) DO NOTHING;"
 
-(The proper fix — seeding inside init-service with tests — is deferred to a
-dedicated backend PR; tracked in `internal-docs/phase-carryovers.md`.)
-
 This manual SQL unblock is now superseded by the automated seed (`backend/shared/prisma/seed.ts`, `seedRoles`) that runs on every init-service PreSync run; the SQL above remains documented as a break-glass reference only.
 
-## 9. Drift test and rollback drill (acceptance criteria 3-4)
+## 9. Drift test and rollback drill
 
 Drift test: `kubectl scale deploy/auth-service -n mankahi --replicas=5` —
 selfHeal must revert to the git-declared replica count within ~5 minutes.

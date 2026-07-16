@@ -1,10 +1,13 @@
-# ManKahi Alerting Recommendations
+# ManKahi Alerting
 
-Last updated: 2026-07-04
+Scope: the local Docker Compose stack. Production alerting (Prometheus rules,
+Grafana unified alerting, Discord delivery) is live and documented in
+[operations.md](./operations.md) section 4.
 
-This document lists concrete alert conditions for ManKahi. There is no
-Alertmanager (or any alert-firing system) wired up yet - Prometheus and
-Grafana are deployed for scraping and visualization only. The queries below
+This document lists concrete alert conditions for the local Compose stack.
+There is no Alertmanager (or any alert-firing system) wired up in the local
+Compose stack yet - Prometheus and Grafana are deployed there for scraping
+and visualization only. The queries below
 are meant to be pasted into Grafana Alerting rules (Grafana can alert
 directly off its own Prometheus datasource without Alertmanager) or into a
 Prometheus `rule_files` entry plus Alertmanager if one is added later.
@@ -45,10 +48,12 @@ rather than presented as covered.
   `postgres_exporter`, `redis_exporter`, or Elasticsearch metrics beat.
   Only the Docker healthcheck's up/down state is visible, not connection
   counts, replication lag, slow queries, disk usage inside the DB, etc.
-- **Alertmanager** - nothing currently sends a notification anywhere. The
-  rules below are conditions to alert *on*, not alerts that fire today.
+- **Alertmanager** - nothing in the local Compose stack currently sends a
+  notification anywhere (production delivers via Grafana alerting to
+  Discord - see operations.md). The rules below are conditions to alert
+  *on* locally, not alerts that fire today in Compose.
 
-Recommended follow-up (not done in this pass): add `node-exporter` (host
+Recommended follow-up: add `node-exporter` (host
 metrics), `cadvisor` (per-container CPU/mem/disk), `postgres_exporter`, and
 `redis_exporter` to `docker-compose.yml`/`docker-compose.prod.yml`, point
 Prometheus at them, then either wire Grafana Alerting or add an Alertmanager

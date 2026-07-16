@@ -1,12 +1,10 @@
-# ManKahi Operational Runbook
-
-Last updated: 2026-07-04
+# Compose Operations (local stack)
 
 Day-to-day operational commands for a running ManKahi Docker Compose stack.
 All commands below assume you're in `docker/compose/` and use the
 development stack (`docker-compose.yml`); swap in `-f docker-compose.prod.yml`
-for production. See [DEPLOYMENT.md](./DEPLOYMENT.md) for first-time setup
-and [ALERTING.md](./ALERTING.md) for what to watch and when to act.
+for production. See [local-development.md](./local-development.md) for first-time setup
+and [alerting.md](./alerting.md) for what to watch and when to act.
 
 ## Check what's up
 

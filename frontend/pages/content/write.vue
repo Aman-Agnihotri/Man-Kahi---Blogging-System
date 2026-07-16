@@ -278,7 +278,7 @@ const existingBlogPublished = ref(false);
 // --- Cover image ------------------------------------------------------
 // `useBlogApi().create/update` already build multipart FormData with an
 // `image` field (see toFormData in useBlogApi.ts) - this was previously
-// never wired to a file input (see docs/ACTION_PLAN.md's Phase 3 notes).
+// never wired to a file input.
 const coverImageInputEl = ref<HTMLInputElement | null>(null);
 const coverImageFile = ref<File | null>(null);
 const existingCoverImageUrl = ref<string | null>(null);
