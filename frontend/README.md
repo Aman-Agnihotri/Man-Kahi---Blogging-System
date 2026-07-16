@@ -1,75 +1,50 @@
-# Nuxt Minimal Starter
+# ManKahi Frontend
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Nuxt 3 SPA frontend for the ManKahi blogging platform — live at [mankahi.xyz](https://mankahi.xyz/).
+
+## Stack
+
+Nuxt 3, Pinia, and a vitest + happy-dom + `@vue/test-utils` test harness.
 
 ## Setup
 
-Make sure to install dependencies:
-
 ```bash
-# npm
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
 ```
 
-## Development Server
-
-Start the development server on `http://localhost:3000`:
+## Development
 
 ```bash
-# npm
 npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
 
-## Production
+Serves at `localhost:3000`.
 
-Build the application for production:
+## Build
 
 ```bash
-# npm
 npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
 ```
 
-Locally preview production build:
+Preview the production build locally:
 
 ```bash
-# npm
 npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
 ```
 
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+## Tests
+
+```bash
+npm test
+npm run test:watch
+```
+
+The suite runs on vitest with a happy-dom harness: 28 tests covering OAuth
+callback routing, the auth store, settings account-linking, and degraded-
+search rendering. It's CI-gated — the suite runs before the frontend image
+is built and pushed.
+
+## Learn more
+
+See the [Nuxt documentation](https://nuxt.com/docs) for framework-level
+reference.
