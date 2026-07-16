@@ -65,7 +65,6 @@ describe('pages/user/settings.vue', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('Connected');
-    expect(wrapper.find('button[aria-label]').exists() || true).toBe(true);
     const unlinkButton = wrapper.findAll('button').find((b) => b.text() === 'Unlink');
     expect(unlinkButton).toBeTruthy();
   });
