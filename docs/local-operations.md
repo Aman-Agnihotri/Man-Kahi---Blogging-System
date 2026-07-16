@@ -108,7 +108,8 @@ risky migration, restore test, or manual data surgery.
 Redis and Elasticsearch are intentionally not backed up: Redis holds
 reconstructable/expendable cache data (AOF persistence is on for crash
 recovery only, not disaster recovery), and the Elasticsearch index is fully
-rebuildable from Postgres via `syncBlogsToElasticsearch()`. Uploaded files
+rebuildable from Postgres via `syncBlogsToElasticsearch()` (trigger it with
+the admin endpoint `POST /api/blogs/search/reindex`). Uploaded files
 (cover images) live in the `blog-uploads` named volume / MinIO bucket -
 back that up separately if it holds content you can't regenerate.
 

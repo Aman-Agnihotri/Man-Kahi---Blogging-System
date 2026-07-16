@@ -157,6 +157,15 @@ A restart-policy-driven container flapping (repeated Restarting/unhealthy
 in `docker compose ps`) is itself a usable manual-check signal until
 `postgres_exporter` exists.
 
+### Search circuit breaker
+
+```promql
+# blog-service ES breaker OPEN — search serving degraded results
+mankahi_es_breaker_state == 2
+```
+Severity: warning. This mirrors the production `ESCircuitBreakerOpen` rule
+(operations.md section 4).
+
 ### Rate limiting / abuse signals
 
 ```promql

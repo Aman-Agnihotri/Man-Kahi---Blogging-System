@@ -93,6 +93,7 @@ h. Drill log:
 | `PodCrashLooping` | A container in mankahi restarted more than 3 times in 15m (bad config, crash on boot, OOMKill) | kubectl -n mankahi logs POD --previous; check lastState.terminated.reason (OOMKilled = raise limits); check recent Argo CD sync |
 | `DeploymentReplicasUnavailable` | A Deployment's desired replica was unavailable within the last 5m - pod deleted, crashed, or failing readiness; fires on kubectl delete pod (a deliberate kill-pod test) | kubectl -n mankahi get pods -l app=DEPLOYMENT; kill drills self-clear about 5m after Ready |
 | `CertificateExpiringSoon` | a cert-manager certificate expires in under 14 days | check cert-manager logs + the certificate resource; renew/reissue |
+| `ESCircuitBreakerOpen` | blog-service's Elasticsearch circuit breaker has been OPEN >5m (search serving the degraded contract; likely Elasticsearch down or unreachable) | kubectl get pods -n mankahi -l app=elasticsearch; check ES pod logs/boot; breaker self-closes on a successful probe once ES is healthy |
 
 PodCrashLooping is restart-count based; kubectl delete pod creates a NEW pod
 whose restart counter starts at 0, so a pod kill raises
@@ -102,13 +103,26 @@ a Deployment (0 to 1 replicas); expected, self-clears. PVC-usage and
 node-memory alerts remain follow-ups - KSM exposes no volume/node usage
 bytes; both need a kubelet or node_exporter scrape.
 
+Liveness is dependency-free (`/health/live`) on all four backends while
+readiness stays `/health`, so a Postgres/Redis outage pulls a pod from
+rotation without restart-looping it (see resilience.md section 7).
+
 **Planned rules (pending metric sources or delivery):**
 - PVC above 80 percent — needs kubelet volume stats.
 - Node memory above 85 percent — needs `node-exporter`.
 
 Delivery: Grafana unified alerting to a Discord webhook. The bridge rule (any firing Prometheus alert) is provisioned from git; the contact point and routing policy arrive via the sealed grafana-alerting secret (post-seal grafana restart required - provisioning is read at startup).
 
-## 5. Incident log convention
+## 5. Search index recovery
+
+Blogs created, edited, or deleted while Elasticsearch was down are missing or
+stale in search until the index is resynced. Once Elasticsearch is healthy
+again, an admin triggers a rebuild with `POST /api/blogs/search/reindex`
+(admin authentication required): `202` rebuilds the index in the background,
+`409` if a rebuild is already running, `503` if Elasticsearch is still
+unreachable. See `docs/resilience.md` section 6.
+
+## 6. Incident log convention
 
 Incidents live in `internal-docs/incidents/` (internal working documents, not
 tracked in this repo) as `YYYY-MM-DD-short-slug.md`, one file per incident,
@@ -137,7 +151,7 @@ Two earlier GitOps-migration incidents (a placeholder `ALTER USER` lockout, and 
 whitespace-corrupted seal) are documented in `docs/gitops.md` and predate this
 convention.
 
-## 6. Standing cautions
+## 7. Standing cautions
 
 - Run `terraform plan` before any apply (node-replacement pending).
 - `POSTGRES_USER` must stay `postgres`.

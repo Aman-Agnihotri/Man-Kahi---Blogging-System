@@ -158,14 +158,17 @@ scattered ad hoc through the controller), which is what makes it cheap
 to move behind a queue later without touching call sites' business logic:
 only `blog.service.ts`'s awaited calls become "enqueue a job" calls.
 
-**When this becomes a problem:** Elasticsearch indexing latency starts
-being visible in the write-path's own response time (check
+**When this becomes a problem:** Elasticsearch indexing latency starts being
+visible in the write-path's own response time (check
 `blog_database_operation_seconds`-adjacent request duration for
-create/update/delete routes specifically), or a temporary Elasticsearch
-outage/slowdown should not be able to fail or stall a blog save. Neither
-is true at current traffic - a single-node Elasticsearch instance indexes
-a single document fast enough that it doesn't materially affect request
-latency.
+create/update/delete routes specifically). Outage-safety is already
+handled: the indexing call is guarded by a circuit breaker (best-effort,
+non-blocking on failure, capped by a per-call timeout), so an Elasticsearch
+outage degrades search rather than failing or stalling a blog save (see
+[resilience.md](resilience.md)). Latency under load is the remaining reason
+to queue, and it isn't a factor at current traffic - a single-node
+Elasticsearch instance indexes a single document fast enough that it
+doesn't materially affect request latency.
 
 **What it would look like:** since Redis is already a running dependency
 for every service, the lowest-new-infrastructure path is a Redis-backed
@@ -176,7 +179,9 @@ worker process (can start as an in-process consumer inside blog-service
 itself, doesn't need a new deployable) drains the queue. The existing
 `syncBlogsToElasticsearch()` re-sync path (already relied on for full
 Elasticsearch rebuilds, see the Backups And Restore section of
-`docs/local-development.md`) doubles as the recovery path if a job is ever lost.
+`docs/local-development.md`) doubles as the recovery path if a job is ever
+lost (now reachable via the admin `POST /api/blogs/search/reindex` endpoint
+— see [resilience.md](resilience.md) section 6).
 
 ## When To Move Analytics Ingestion Behind A Queue
 

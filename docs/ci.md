@@ -21,9 +21,18 @@ rules:
 - A tag push (`v*`) or a manual `workflow_dispatch` builds **everything**.
 
 Components: `auth-service`, `blog-service`, `analytics-service`,
-`admin-service`, `init-service`, `frontend`. Only the four services have test
-suites; `init-service` is build-only and `frontend` runs a Nuxt build as a
-smoke test.
+`admin-service`, `init-service`, `frontend`. The four backend services and
+`backend/shared` each have a test suite (the shared suite runs in its own
+`shared-test` job); `frontend` runs its vitest suite before its Nuxt build;
+`init-service` is build-only.
+
+## Test gating
+
+Image build-and-push is blocked if the backend service tests, the
+shared-library tests, or the frontend tests fail; a skipped suite (a diff
+that touched only one side) does not block. A change under
+`backend/shared/**` runs the shared suite and, because all backend images
+compile against it, gates all of them.
 
 ## Image naming & tagging
 
