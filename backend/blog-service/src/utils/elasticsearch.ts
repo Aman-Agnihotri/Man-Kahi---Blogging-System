@@ -36,10 +36,23 @@ const stateToGauge = (state: CircuitState): number => {
   }
 }
 
+const parseIntEnv = (name: string, defaultValue: number): number => {
+  const raw = process.env[name]
+  if (raw === undefined) {
+    return defaultValue
+  }
+  const parsed = Number(raw)
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.warn(`Invalid value for ${name}=${raw}; falling back to default ${defaultValue}`)
+    return defaultValue
+  }
+  return parsed
+}
+
 const esBreaker = new CircuitBreaker({
-  failureThreshold: Number(process.env['ES_BREAKER_FAILURE_THRESHOLD'] ?? 5),
-  resetTimeoutMs: Number(process.env['ES_BREAKER_RESET_TIMEOUT_MS'] ?? 30000),
-  callTimeoutMs: Number(process.env['ES_BREAKER_CALL_TIMEOUT_MS'] ?? 2500),
+  failureThreshold: parseIntEnv('ES_BREAKER_FAILURE_THRESHOLD', 5),
+  resetTimeoutMs: parseIntEnv('ES_BREAKER_RESET_TIMEOUT_MS', 30000),
+  callTimeoutMs: parseIntEnv('ES_BREAKER_CALL_TIMEOUT_MS', 2500),
   name: 'elasticsearch',
   onStateChange: (_from, to) => {
     esBreakerMetrics.state.set(stateToGauge(to))
