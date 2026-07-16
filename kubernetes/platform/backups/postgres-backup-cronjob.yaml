@@ -56,7 +56,7 @@ spec:
                     secretKeyRef:
                       name: db-secrets
                       key: POSTGRES_PASSWORD
-              command: ["sh", "-c", "set -eu; pg_dump -Fc -f /backup/mankahi.dump; ls -l /backup"]
+              command: ["sh", "-c", "set -eu; for i in $(seq 1 30); do pg_isready -h \"$PGHOST\" -p \"$PGPORT\" -U \"$PGUSER\" && break; echo \"waiting for postgres ($i)\"; sleep 10; done; pg_dump -Fc -f /backup/mankahi.dump; ls -l /backup"]
               volumeMounts:
                 - name: backup
                   mountPath: /backup
