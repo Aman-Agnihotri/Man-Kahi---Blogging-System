@@ -40,3 +40,11 @@ groups:
         annotations:
           summary: "Certificate {{ $labels.name }} expires soon"
           description: "cert-manager certificate {{ $labels.namespace }}/{{ $labels.name }} expires in under 14 days."
+      - alert: ESCircuitBreakerOpen
+        expr: mankahi_es_breaker_state == 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "blog-service Elasticsearch circuit breaker OPEN"
+          description: "ES circuit breaker in blog-service OPEN (state==2) >5m; search serving degraded contract. Check elasticsearch pod."
