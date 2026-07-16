@@ -122,9 +122,11 @@ setupResourceMonitoring();
 app.use(trackRequest());
 
 // Standardized health check endpoint
-app.get('/health', createHealthCheck({ 
-  serviceName: 'blog-service',
-  elasticsearchClient: elasticClient
+// Elasticsearch is deliberately excluded from health: an ES outage degrades
+// search via the circuit breaker instead of failing probes; ES state is
+// observable via the mankahi_es_breaker_state metric.
+app.get('/health', createHealthCheck({
+  serviceName: 'blog-service'
 }));
 
 // Metrics endpoint (protected by metrics enabled check)
@@ -151,10 +153,37 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
+// Background retry for Elasticsearch index setup. setupElasticsearch() is
+// non-fatal at boot: if it fails, the service keeps serving non-search
+// traffic while this retries with capped exponential backoff and jitter.
+let esRetryTimer: NodeJS.Timeout | null = null;
+
+const scheduleEsSetupRetry = (delayMs = 5000) => {
+  const jitter = delayMs * (Math.random() * 0.4 - 0.2); // +/-20%
+  const delayWithJitter = Math.max(0, Math.round(delayMs + jitter));
+
+  esRetryTimer = setTimeout(async () => {
+    try {
+      await setupElasticsearch();
+      logger.info('Elasticsearch setup complete');
+      esRetryTimer = null;
+    } catch (error) {
+      const nextDelay = Math.min(delayMs * 2, 60000);
+      logger.warn({ err: error, nextDelayMs: nextDelay }, 'Elasticsearch setup retry failed, will retry');
+      scheduleEsSetupRetry(nextDelay);
+    }
+  }, delayWithJitter);
+};
+
 // Graceful shutdown
 const shutdown = async () => {
   logger.info('Received shutdown signal')
-  
+
+  if (esRetryTimer) {
+    clearTimeout(esRetryTimer)
+    esRetryTimer = null
+  }
+
   try {
     // Close database connection
     await prisma.$disconnect()
@@ -197,11 +226,17 @@ const startServer = async () => {
     cacheTimer.end();
     logger.info('Redis connection established');
 
-    // Setup Elasticsearch
+    // Setup Elasticsearch (non-fatal: retried in the background on failure)
     const esTimer = trackElasticsearchOperation('setup');
-    await setupElasticsearch();
-    esTimer.end('success');
-    logger.info('Elasticsearch setup complete');
+    try {
+      await setupElasticsearch();
+      esTimer.end('success');
+      logger.info('Elasticsearch setup complete');
+    } catch (esError) {
+      esTimer.end('failure');
+      logger.warn({ err: esError, nextDelayMs: 5000 }, 'Elasticsearch setup failed at startup, will retry in background');
+      scheduleEsSetupRetry();
+    }
 
     // Create uploads directory if it doesn't exist
     const uploadsDir = path.join(__dirname, '../uploads/images')

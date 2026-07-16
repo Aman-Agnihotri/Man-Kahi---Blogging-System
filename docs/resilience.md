@@ -172,6 +172,10 @@ The Prometheus rule `ESCircuitBreakerOpen`
 delivered through the same alert webhook channel as the rest of the
 `mankahi` alert group (see `docs/operations.md` section 4).
 
+blog-service's `/health` endpoint intentionally does not include
+Elasticsearch as a dependency check — breaker state is the authoritative
+signal for Elasticsearch's health, not the probe.
+
 ## 8. Chaos drill 1 — local Compose
 
 This drill exercises the breaker against the local Docker Compose stack
@@ -259,12 +263,12 @@ Gateway: `http://localhost:8080` (nginx, per the Compose file's port mapping).
 4. If Elasticsearch is held down for more than 5 minutes, the
    `ESCircuitBreakerOpen` warning fires to the alert webhook (see section 7).
 
-**Caution:** do not restart blog-service pods while Elasticsearch is down.
-blog-service performs an unguarded Elasticsearch connectivity check at
-startup (outside `guardedEs`, before the breaker is in the loop) — a pod
-that boots while Elasticsearch is unavailable can crash-loop until
-Elasticsearch returns, rather than starting up in a degraded-but-serving
-state.
+Restarting blog-service pods during an Elasticsearch outage is safe.
+blog-service now starts in a degraded-but-serving state when Elasticsearch
+is unavailable: it serves all non-search traffic immediately, search
+degrades through the circuit breaker exactly as during a runtime outage, and
+index setup retries in the background with capped exponential backoff until
+Elasticsearch returns.
 
 ## 10. Documented follow-up
 
