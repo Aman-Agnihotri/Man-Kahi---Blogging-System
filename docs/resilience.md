@@ -140,12 +140,15 @@ read from Postgres directly.
 `backend/blog-service/src/utils/elasticsearch.ts`) rebuilds the `blogs`
 index from Postgres in batches of 100, using a plain `bulk` call (not
 routed through the breaker, since it is meant to run once Elasticsearch is
-confirmed healthy again). As of this writing it is not exposed via any HTTP
-route or CLI command — there is no "reindex" button or script to invoke it.
-The honest recovery procedure today is to invoke it directly (for example
-from a one-off Node REPL or script inside the blog-service container that
-imports and calls `syncBlogsToElasticsearch()`) once Elasticsearch is back
-up, to close the staleness window left by the outage.
+confirmed healthy again). An administrator can trigger this rebuild with
+`POST /api/blogs/search/reindex` (admin authentication required). The
+endpoint responds `202 Accepted` and runs the rebuild in the background —
+there is no job queue behind it, just a single fire-and-forget pass, with
+completion logged when it finishes. A second call while one is already
+running returns `409` instead of starting a duplicate pass. If
+Elasticsearch is unreachable at the time of the call, it returns `503` and
+nothing starts. Run it once Elasticsearch is healthy again to close the
+staleness window left by the outage.
 
 ## 7. Observability
 
