@@ -4,17 +4,26 @@ import request from 'supertest';
 
 // The router calls passport.authenticate(...) at module load time to build
 // the middleware chain, so the mock has to return a real middleware
-// function synchronously. authenticateMiddlewareMock is reconfigured per
-// test to stand in for what passport would have put on req.user/req.authInfo.
-const authenticateMiddlewareMock = jest.fn((req: any, _res: any, next: any) => next());
-
-const passportAuthenticateMock = jest.fn((strategy: string, options?: { session?: boolean }) => {
-  if (strategy === 'google' && options?.session === false) {
-    return authenticateMiddlewareMock;
+// function synchronously. The route now uses the custom-callback form of
+// passport.authenticate(strategy, options, callback) - the strategy itself
+// invokes `callback(err, user, info)` rather than setting req.user/req.authInfo
+// and calling next(). authenticateMiddlewareMock is reconfigured per test to
+// stand in for what the real strategy would have passed to that callback.
+const authenticateMiddlewareMock = jest.fn(
+  (_req: any, _res: any, _next: any, callback: (err: unknown, user?: any, info?: any) => void) => {
+    callback(null, undefined, undefined);
   }
-  // /google (initiate) path - not under test here, just needs to not blow up
-  return (_req: any, _res: any, next: any) => next();
-});
+);
+
+const passportAuthenticateMock = jest.fn(
+  (strategy: string, options?: { session?: boolean }, callback?: (err: unknown, user?: any, info?: any) => void) => {
+    if (strategy === 'google' && options?.session === false && callback) {
+      return (req: any, res: any, next: any) => authenticateMiddlewareMock(req, res, next, callback);
+    }
+    // /google (initiate) path - not under test here, just needs to not blow up
+    return (_req: any, _res: any, next: any) => next();
+  }
+);
 
 jest.mock('@controllers/passport.controller', () => ({
   __esModule: true,
@@ -64,14 +73,16 @@ describe('oauth routes - /google/callback', () => {
   });
 
   it('sets the HttpOnly refresh cookie and redirects with no tokens in the URL', async () => {
-    authenticateMiddlewareMock.mockImplementation((req: any, _res: any, next: any) => {
-      req.user = { id: 'user-1', email: 'user@example.com', username: 'user', roles: ['reader'] };
-      req.authInfo = {
-        token: 'access-tok',
-        refreshToken: 'r-token',
-        oauthProfile: { id: 'google-1', email: 'user@example.com', profile: {}, provider: 'google' },
-      };
-      next();
+    authenticateMiddlewareMock.mockImplementation((_req: any, _res: any, _next: any, callback: any) => {
+      callback(
+        null,
+        { id: 'user-1', email: 'user@example.com', username: 'user', roles: ['reader'] },
+        {
+          token: 'access-tok',
+          refreshToken: 'r-token',
+          oauthProfile: { id: 'google-1', email: 'user@example.com', profile: {}, provider: 'google' },
+        }
+      );
     });
 
     const res = await request(app).get('/api/auth/google/callback');
@@ -91,27 +102,29 @@ describe('oauth routes - /google/callback', () => {
     expect(handleOAuthCallbackMock).toHaveBeenCalled();
   });
 
-  it('redirects with an error and sets no cookie when the strategy did not produce auth info', async () => {
-    authenticateMiddlewareMock.mockImplementation((_req: any, _res: any, next: any) => {
-      next();
+  it('redirects with error=oauth_failed and sets no cookie when the strategy did not produce a user', async () => {
+    authenticateMiddlewareMock.mockImplementation((_req: any, _res: any, _next: any, callback: any) => {
+      callback(null, undefined, undefined);
     });
 
     const res = await request(app).get('/api/auth/google/callback');
 
     expect(res.status).toBe(302);
-    expect(res.headers['location']).toBe('http://localhost:3000/auth/callback?error=Authentication%20failed');
+    expect(res.headers['location']).toBe('http://localhost:3000/auth/callback?error=oauth_failed');
     expect(res.headers['set-cookie']).toBeUndefined();
   });
 
   it('ignores a crafted refreshToken query param and sets only the server-minted cookie', async () => {
-    authenticateMiddlewareMock.mockImplementation((req: any, _res: any, next: any) => {
-      req.user = { id: 'user-1', email: 'user@example.com', username: 'user', roles: ['reader'] };
-      req.authInfo = {
-        token: 'access-tok',
-        refreshToken: 'r-token',
-        oauthProfile: { id: 'google-1', email: 'user@example.com', profile: {}, provider: 'google' },
-      };
-      next();
+    authenticateMiddlewareMock.mockImplementation((_req: any, _res: any, _next: any, callback: any) => {
+      callback(
+        null,
+        { id: 'user-1', email: 'user@example.com', username: 'user', roles: ['reader'] },
+        {
+          token: 'access-tok',
+          refreshToken: 'r-token',
+          oauthProfile: { id: 'google-1', email: 'user@example.com', profile: {}, provider: 'google' },
+        }
+      );
     });
 
     const res = await request(app).get('/api/auth/google/callback?refreshToken=EVIL');

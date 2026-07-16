@@ -76,6 +76,31 @@ interface OAuthRequest extends Request {
     };
 }
 
+/**
+ * Maps a strategy-thrown error (see passport.controller.ts) to a stable,
+ * frontend-facing error code. Unknown/unmapped messages fall back to
+ * 'oauth_failed' so the frontend never has to render a raw error string.
+ */
+function mapOAuthErrorToCode(err: unknown): string {
+    const message = err instanceof Error ? err.message : undefined;
+    switch (message) {
+        case 'Account exists with different credentials':
+            return 'email_exists';
+        case 'Email mismatch between accounts':
+            return 'email_mismatch';
+        case 'Provider already linked to this account':
+            return 'provider_already_linked';
+        case 'Invalid token':
+            return 'invalid_link_token';
+        case 'User not found':
+            return 'user_not_found';
+        case 'Email not provided by OAuth provider':
+            return 'email_missing';
+        default:
+            return 'oauth_failed';
+    }
+}
+
 const router = Router();
 const authService = new AuthService();
 
@@ -137,44 +162,61 @@ router.get(
     '/google/callback',
     requireProviderConfigured('google'),
     createEndpointRateLimit('auth:oauth') as unknown as RequestHandler,
-    passport.authenticate('google', { session: false }) as RequestHandler,
-    ((async (req: OAuthRequest, res: Response) => {
-        try {
-            const oauthProfile = req.authInfo?.oauthProfile;
-            const refreshToken = req.authInfo?.refreshToken;
-            if (!oauthProfile || !req.user?.id || !refreshToken) {
-                throw new Error('Authentication failed');
-            }
+    (req: Request, res: Response, next: NextFunction) =>
+        (
+            passport.authenticate(
+                'google',
+                { session: false },
+                (async (err: unknown, user: any, info: OAuthRequest['authInfo']) => {
+                    if (err) {
+                        logger.error({ err }, 'OAuth strategy error');
+                        trackError('oauth', 'callback_failed', 'google');
+                        const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
+                        res.redirect(`${frontendURL}/auth/callback?error=${mapOAuthErrorToCode(err)}`);
+                        return;
+                    }
 
-            // Strategy already found-or-created the user and minted the token
-            // pair (single mint owner - passport.controller.ts). The callback
-            // only persists the OAuthProvider record and updates last login.
-            await authService.handleOAuthCallback(oauthProfile, {
-                accessToken: req.authInfo?.token,
-                expiresAt: new Date(Date.now() + 3600 * 1000), // 1 hour from now
-                tokenType: 'Bearer',
-                scope: 'profile email',
-            }, req.user.id);
+                    if (!user) {
+                        const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
+                        res.redirect(`${frontendURL}/auth/callback?error=oauth_failed`);
+                        return;
+                    }
 
-            res.cookie('refresh_token', refreshToken, {
-                httpOnly: true,
-                secure: process.env['NODE_ENV'] === 'production',
-                sameSite: 'lax',
-                path: '/api/auth',
-                maxAge: REFRESH_COOKIE_MAX_AGE_MS,
-            });
+                    try {
+                        const oauthProfile = info?.oauthProfile;
+                        const refreshToken = info?.refreshToken;
 
-            const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
-            res.redirect(`${frontendURL}/auth/callback`);
-        } catch (error) {
-            logger.error({ err: error }, 'OAuth callback error');
-            trackError('oauth', 'callback_failed', 'google');
-            const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
-            res.redirect(
-                `${frontendURL}/auth/callback?error=Authentication failed`
-            );
-        }
-    }) as unknown) as RequestHandler
+                        // Strategy already found-or-created the user and minted the token
+                        // pair (single mint owner - passport.controller.ts). The callback
+                        // only persists the OAuthProvider record and updates last login.
+                        await authService.handleOAuthCallback(oauthProfile, {
+                            accessToken: info?.token,
+                            expiresAt: new Date(Date.now() + 3600 * 1000), // 1 hour from now
+                            tokenType: 'Bearer',
+                            scope: 'profile email',
+                        }, user.id);
+
+                        res.cookie('refresh_token', refreshToken, {
+                            httpOnly: true,
+                            secure: process.env['NODE_ENV'] === 'production',
+                            sameSite: 'lax',
+                            path: '/api/auth',
+                            maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+                        });
+
+                        const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
+                        res.redirect(`${frontendURL}/auth/callback`);
+                    } catch (error) {
+                        logger.error({ err: error }, 'OAuth callback error');
+                        trackError('oauth', 'callback_failed', 'google');
+                        const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
+                        res.redirect(
+                            `${frontendURL}/auth/callback?error=Authentication failed`
+                        );
+                    }
+                }) as unknown as (err: unknown, user?: unknown, info?: unknown) => void
+            ) as unknown as (req: Request, res: Response, next: NextFunction) => void
+        )(req, res, next)
 );
 
 /**
@@ -309,4 +351,4 @@ router.delete(
     }) as unknown as RequestHandler
 );
 
-export { router as oauthRoutes };
+export { router as oauthRoutes, mapOAuthErrorToCode };
