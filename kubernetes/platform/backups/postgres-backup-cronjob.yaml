@@ -75,6 +75,8 @@ spec:
             - name: upload
               image: amazon/aws-cli:2.15.0
               env:
+                - name: HOME
+                  value: /tmp
                 - name: AWS_DEFAULT_REGION
                   value: ap-mumbai-1
               envFrom:
