@@ -120,6 +120,19 @@ describe('oauth routes - /google/callback strategy failure surfacing', () => {
     expect(res.headers['location']).toBe('http://localhost:3000/auth/callback?error=oauth_failed');
     expect(res.headers['set-cookie']).toBeUndefined();
   });
+
+  it('redirects to ?error=oauth_failed and sets no cookie when the strategy calls back with a user but incomplete info', async () => {
+    authenticateMiddlewareMock.mockImplementation((_req: any, _res: any, _next: any, callback: any) => {
+      callback(null, { id: 'user-1' }, {});
+    });
+
+    const res = await request(app).get('/api/auth/google/callback');
+
+    expect(res.status).toBe(302);
+    expect(res.headers['location']).toBe('http://localhost:3000/auth/callback?error=oauth_failed');
+    expect(res.headers['set-cookie']).toBeUndefined();
+    expect(handleOAuthCallbackMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('mapOAuthErrorToCode', () => {

@@ -186,6 +186,14 @@ router.get(
                         const oauthProfile = info?.oauthProfile;
                         const refreshToken = info?.refreshToken;
 
+                        if (!oauthProfile || !user.id || !refreshToken) {
+                            logger.error('OAuth callback missing profile or token');
+                            trackError('oauth', 'callback_failed', 'google');
+                            const frontendURL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
+                            res.redirect(`${frontendURL}/auth/callback?error=oauth_failed`);
+                            return;
+                        }
+
                         // Strategy already found-or-created the user and minted the token
                         // pair (single mint owner - passport.controller.ts). The callback
                         // only persists the OAuthProvider record and updates last login.
