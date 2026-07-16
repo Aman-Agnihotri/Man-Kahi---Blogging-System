@@ -70,7 +70,7 @@ spec:
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: http
           initialDelaySeconds: 15
           periodSeconds: 20
@@ -195,7 +195,7 @@ spec:
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: http
           initialDelaySeconds: 15
           periodSeconds: 20
@@ -330,7 +330,7 @@ spec:
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: http
           initialDelaySeconds: 15
           periodSeconds: 20
@@ -451,7 +451,7 @@ spec:
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: http
           initialDelaySeconds: 15
           periodSeconds: 20
