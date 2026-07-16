@@ -217,6 +217,18 @@
       </div>
 
       <div class="mt-8 bg-white rounded-xl shadow-sm p-8">
+        <h2 class="text-xl font-bold text-primary-900 mb-6">Connected Accounts</h2>
+        <button
+          type="button"
+          @click="handleLinkGoogle"
+          class="w-full flex justify-center items-center space-x-2 py-2 px-4 border border-primary-300 text-sm font-medium rounded-md text-primary-700 bg-white hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+        >
+          <i class="ri-google-fill text-lg"></i>
+          <span>Link Google</span>
+        </button>
+      </div>
+
+      <div class="mt-8 bg-white rounded-xl shadow-sm p-8">
         <h2 class="text-xl font-bold text-red-600 mb-6">Danger Zone</h2>
         <button
           @click="handleSignOut"
@@ -285,6 +297,7 @@ definePageMeta({ requiresAuth: true });
 
 const auth = useAuthStore();
 const profileApi = useProfileApi();
+const route = useRoute();
 
 // --- Profile form --------------------------------------------------------
 
@@ -450,8 +463,19 @@ const handleSignOut = async () => {
   await navigateTo('/');
 };
 
+// --- Connected accounts ----------------------------------------------------
+
+async function handleLinkGoogle() {
+  try {
+    await auth.linkWithGoogle();
+  } catch (err) {
+    error.value = (err as ApiError)?.message ?? 'Failed to link Google account.';
+  }
+}
+
 onMounted(() => {
   loadProfile();
   loadNotificationPrefs();
+  if (route.query.linkError) error.value = String(route.query.linkError);
 });
 </script>
