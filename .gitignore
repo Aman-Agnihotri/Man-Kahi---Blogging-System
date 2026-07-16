@@ -53,4 +53,4 @@ coverage/
 # Terraform
 *.tfstate*
 .terraform/
-terraform.tfvars
+terraform.tfvars*
