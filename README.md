@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System/actions/workflows/ci.yml/badge.svg)](https://github.com/Aman-Agnihotri/Man-Kahi---Blogging-System/actions/workflows/ci.yml)
 
-**Live at [mankahi.work.gd](https://mankahi.work.gd/)** — a production two-node arm64 k3s cluster engineered to fit entirely within Oracle Cloud's Always Free tier: twelve services memory-budgeted into 6 GiB, multi-arch images, TLS, and private object storage. (Domain is temporary and moving to a permanent one soon.)
+**Live at [mankahi.xyz](https://mankahi.xyz/)** — a production two-node arm64 k3s cluster engineered to fit entirely within Oracle Cloud's Always Free tier: twelve services memory-budgeted into 6 GiB, multi-arch images, TLS, and private object storage. (mankahi.work.gd redirects here.)
 
 ManKahi is a blogging platform for writers who want a clean publishing space: markdown posts, searchable stories, author profiles, reader engagement, analytics, and moderation tools.
 

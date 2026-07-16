@@ -76,6 +76,27 @@ private and the cluster cannot pull them.
   (shared in-process test state). **Do not** parallelize tests in CI or add
   `--maxWorkers`.
 
+## Production-image smoke gates (Phase 5)
+
+The `smoke` job (`.github/workflows/ci.yml` ~L293) runs non-PR, after
+`build-push`, restricted to the four backend services
+(auth/blog/analytics/admin) — `frontend` and `init-service` are step-skipped
+because they don't share the `dist/shared` node layout the gates assume. Two
+gates per image:
+
+- **(a) shared module resolution walk** — a `require.resolve` walk of the
+  `dist/shared` modules inside the pushed production image, catching missing
+  files before the boot classifier runs.
+- **(b) boot classifier** — the image is run under `--network none` with a
+  30s timeout; a connection-refused/timeout error is the expected **PASS**
+  signal (the process is trying and failing to reach a real DB/Redis, proving
+  it booted), while `MODULE_NOT_FOUND` or "Cannot find module" is the **FAIL**
+  signal.
+
+**Honest caveat:** the classifier only exercises the FIRST process the image's
+`CMD` runs. Later chained steps (e.g. the init Job's seed step) are a known
+blind spot — this is not simulated by the smoke job (2026-07-15 incident).
+
 ## Future toggle: fail on CRITICAL vulnerabilities
 
 The Trivy scan is currently **report-only**: `exit-code: 0`, results uploaded

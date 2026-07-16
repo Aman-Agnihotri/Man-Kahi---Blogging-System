@@ -30,7 +30,7 @@ apply. None of them may be left as-is in a live cluster.
 | `GRAFANA_ADMIN_PASSWORD` | `kubernetes/environments/oci/sealed-secrets/` | Now supplied via SealedSecrets (see `docs/gitops.md`), consumed as `GF_SECURITY_ADMIN_PASSWORD`. |
 
 The three former fill-in-before-deploy placeholders are now resolved: the domain is
-`mankahi.work.gd` (with a `grafana.` subdomain) in
+`mankahi.xyz` (with a `grafana.` subdomain) in
 `kubernetes/environments/oci/patches/ingress-hosts.yaml`, the ACME contact
 email is set in `kubernetes/platform/cert-manager/cluster-issuer.yaml` (both
 issuers), and the frontend image SHA is pinned in
@@ -50,31 +50,21 @@ the one the backends connect as.
 
 ## 3. DNS
 
-The domain is `mankahi.work.gd`, a free domain from freedomain.one. Two
-caveats worth knowing:
-
-- Renewal is only possible within the 30 days before expiry (expires
-  2027-07-11) — if that window is missed, the domain lapses and is not
-  recoverable.
-- It is a third-level name under the shared `work.gd` domain, so Let's
-  Encrypt's per-registered-domain rate limit may be shared with other
-  work.gd users. The staging-issuer-first flow in §4 step 4 mitigates the
-  discovery cost of hitting that limit; if it ever becomes a real blocker,
-  the fallback is to swap in another domain, which is a one-commit change
-  (`patches/ingress-hosts.yaml` + `cluster-issuer.yaml` email if desired).
+The primary domain is `mankahi.xyz`, registered apex via Dynadot, with its own
+Let's Encrypt per-domain rate-limit quota (the shared `work.gd` quota caveat
+that applied to the old third-level name no longer applies). `mankahi.work.gd`
+is retained as a 301 redirect only:
 
 Create A records for:
 
-- `mankahi.work.gd`
-- `grafana.mankahi.work.gd`
+- `mankahi.xyz`
+- `www.mankahi.xyz`
+- `grafana.mankahi.xyz`
+- `argocd.mankahi.xyz`
 
-Both records must point at **both** reserved node public IPs (Terraform
-outputs from Phase 2) — four A records total:
-
-- `mankahi.work.gd` -> node 1 public IP
-- `mankahi.work.gd` -> node 2 public IP
-- `grafana.mankahi.work.gd` -> node 1 public IP
-- `grafana.mankahi.work.gd` -> node 2 public IP
+Each of the above must point at the two reserved node public IPs (terraform
+outputs server_public_ip and agent_public_ip) — eight A
+records total. `mankahi.work.gd` A records remain in place for the redirect.
 
 Why both IPs: k3s ServiceLB (Klipper) fulfills the ingress-nginx `Service`
 of `type: LoadBalancer` by binding ports 80/443 on **every** node, so both
@@ -131,27 +121,32 @@ To deploy a newer build of a component:
    `kubernetes/environments/oci/kustomization.yaml`.
 3. Commit the change.
 
-Current pins — all four backend services, the init Job's image, and the
-frontend image are all pinned to the same SHA:
+Current pins — three distinct SHAs, not one shared SHA:
 
 ```
-mankahi/auth-service        -> ee0128de70760300bbb5a4a023ecbf64114b892a
-mankahi/blog-service        -> ee0128de70760300bbb5a4a023ecbf64114b892a
-mankahi/analytics-service   -> ee0128de70760300bbb5a4a023ecbf64114b892a
-mankahi/admin-service       -> ee0128de70760300bbb5a4a023ecbf64114b892a
-mankahi/init-service        -> ee0128de70760300bbb5a4a023ecbf64114b892a
-frontend                    -> ee0128de70760300bbb5a4a023ecbf64114b892a
+mankahi/auth-service        -> e69f8a881ed65a089a25a250a841d4dff100b625
+mankahi/blog-service        -> f97190d2d3ca474f9277b39078ad3a5fcee01d07
+mankahi/analytics-service   -> f97190d2d3ca474f9277b39078ad3a5fcee01d07
+mankahi/admin-service       -> f97190d2d3ca474f9277b39078ad3a5fcee01d07
+mankahi/init-service        -> f97190d2d3ca474f9277b39078ad3a5fcee01d07
+frontend                    -> e74f1731bcdcb97058878764a5eb97894ac9dbbd
 ```
+
+**auth+frontend atomic-contract rule:** auth-service and frontend must be
+bumped together — they share the cookie flow contract (auth sets the cookie,
+frontend reads it), so pinning them to mismatched SHAs risks a broken login
+path. Treat their `newTag:` updates as a single change.
 
 ## 6. Frontend image
 
 The frontend image was built via a `workflow_dispatch` CI run on `main`
 (2026-07-11) and is now pinned in
 `kubernetes/environments/oci/kustomization.yaml` alongside the backend
-services and the init Job's image — see §5 for the current SHA.
+services and the init Job's image, at its own distinct SHA
+(`e74f1731bcdcb97058878764a5eb97894ac9dbbd` — see §5).
 
 The `oci` overlay's `patches/frontend-env.yaml` sets
-`NUXT_PUBLIC_API_URL=https://mankahi.work.gd`, so the browser's API calls are
+`NUXT_PUBLIC_API_URL=https://mankahi.xyz`, so the browser's API calls are
 same-origin through the ingress rather than pointing at a separate API host.
 
 ## 7. Object storage (MinIO client -> OCI S3-compatible endpoint)
@@ -249,7 +244,7 @@ aws configure set response_checksum_validation when_required
 
 `kubernetes/base/ingress.yaml`, patched by
 `kubernetes/environments/oci/patches/ingress-hosts.yaml`, routes on the
-primary host (`mankahi.work.gd`):
+primary host (`mankahi.xyz`):
 
 | Path | Backend service | Port |
 |---|---|---|
@@ -264,7 +259,7 @@ every incoming URI and broke backend routing, is not carried into the `oci`
 overlay's ingress — backends receive the full incoming URI as-is, which is
 what their own path-prefixed route handlers expect.
 
-`monitoring-ingress`, on the separate `grafana.mankahi.work.gd` host, routes
+`monitoring-ingress`, on the separate `grafana.mankahi.xyz` host, routes
 `/` to `grafana-service:3000` only. Prometheus is deliberately not exposed via
 either ingress — see §10.
 
@@ -273,7 +268,7 @@ either ingress — see §10.
 `kubernetes/base/init-job.yaml` defines a one-shot Job, `mankahi-init-db`,
 running the `init-service` image (SHA-pinned in the `oci` overlay — see §5),
 whose container `CMD` runs `prisma migrate deploy` / `db push`. It takes
-`envFrom` both `services-config` and `app-secrets`. Nothing else creates the
+`envFrom` both `services-config` and `secret-shared-core`. Nothing else creates the
 Prisma schema in-cluster, so this Job must reach `Complete` before backend
 services can work — see the first-deploy steps in §4.
 
@@ -284,13 +279,13 @@ step is needed.
 
 ## 10. Monitoring / Grafana hardening
 
-Grafana is served on its own host, `grafana.mankahi.work.gd`, at the root
+Grafana is served on its own host, `grafana.mankahi.xyz`, at the root
 path (`monitoring-ingress`, §8), rather than a subpath of the primary domain.
 The `oci` overlay's `patches/grafana-auth.yaml` disables anonymous access
 (`GF_AUTH_ANONYMOUS_ENABLED=false`), sources the admin password from
 `grafana-secrets` (`GF_SECURITY_ADMIN_PASSWORD`, the `${GRAFANA_ADMIN_PASSWORD}`
 placeholder — see §2), and sets
-`GF_SERVER_ROOT_URL=https://grafana.mankahi.work.gd` so Grafana generates
+`GF_SERVER_ROOT_URL=https://grafana.mankahi.xyz` so Grafana generates
 correct absolute links behind the ingress.
 
 Prometheus is deliberately **not** exposed via ingress — it has no

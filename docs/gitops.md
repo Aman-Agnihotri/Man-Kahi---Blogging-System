@@ -4,7 +4,7 @@
 `argocd`) continuously syncs this repository; every secret in git is a
 SealedSecret (controller v0.38.4, namespace `sealed-secrets`). All commands
 in this document are **HUMAN-executed** against the live cluster
-(`mankahi.work.gd` — real users; see `docs/rollback-contingencies.md` before
+(`mankahi.xyz` — real users; see `docs/rollback-contingencies.md` before
 any destructive step).
 
 ## 1. Architecture
@@ -18,8 +18,11 @@ Application manifests:
 | -2 | platform-cert-manager | kubernetes/platform/cert-manager | manual at first (live-adoption gate), then automated, prune:false |
 | -2 | platform-ingress-nginx | kubernetes/platform/ingress-nginx | manual at first, then automated, prune:false |
 | -2 | platform-sealed-secrets | kubernetes/platform/sealed-secrets | manual at first, then automated, prune:false |
+| -1 | platform-argocd-ingress | kubernetes/platform/argocd/ingress | automated, prune+selfHeal |
 | -1 | mankahi-secrets | kubernetes/environments/oci/sealed-secrets | automated, prune+selfHeal |
 | 0 | mankahi | kubernetes/environments/oci | automated, prune+selfHeal, CreateNamespace |
+| 1 | mankahi-backups | kubernetes/platform/backups | automated, prune+selfHeal |
+| 1 | mankahi-network-policies | kubernetes/platform/network-policies | automated, prune+selfHeal |
 
 Wave ordering is correctness, not style: SealedSecrets (wave -1) are gated on
 REAL decryption by a custom health check (`argocd-cm-sealedsecret-health.patch.yaml`
@@ -50,8 +53,8 @@ BeforeHookCreation` (no more manual delete of the immutable Job).
    the object exists and wave 0 races ahead of actual decryption.)
 4. Rotate the admin password immediately: `install.md` §4. Store it in the
    password manager.
-5. DNS: `argocd.mankahi.work.gd` A records to both node IPs
-   (`129.154.228.139`, `130.210.11.86`) — same failover pattern as the apex.
+5. DNS: `argocd.mankahi.xyz` A records to both node IPs
+   (both reserved node public IPs - terraform outputs server_public_ip / agent_public_ip) — same failover pattern as the apex.
 6. Apply the root app — **the last manual kubectl apply**:
 
        kubectl apply -n argocd -f kubernetes/platform/argocd/apps/app-of-apps.yaml
@@ -71,15 +74,22 @@ immediately. It is never committed, never `git add`ed, never in history.
 
 1. Write the plaintext Secret manifest in the staging dir. It MUST carry the
    exact `metadata.name` and `metadata.namespace: mankahi` (strict scope binds
-   both). Keys per secret:
-   - `app-secrets`: DATABASE_URL, JWT_SECRET, JWT_ACCESS_EXPIRES_IN,
-     JWT_REFRESH_EXPIRES_IN, SESSION_SECRET, GOOGLE_CLIENT_ID,
-     GOOGLE_CLIENT_SECRET, MINIO_ACCESS_KEY, MINIO_SECRET_KEY
-     (the raw POSTGRES_PASSWORD / MINIO_ROOT_PASSWORD / ELASTICSEARCH_PASSWORD
-     keys of the legacy layout are dropped — zero code readers, verified by an
-     8-agent consumption sweep)
+   both). Keys per secret (seven-secret split, retired `app-secrets` split
+   2026-07-15):
+   - `secret-shared-core`: DATABASE_URL, JWT_SECRET (consumers:
+     auth/blog/analytics/admin + init)
+   - `secret-auth`: SESSION_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+     JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN (auth only)
+   - `secret-media`: MINIO_ACCESS_KEY, MINIO_SECRET_KEY (auth + blog)
    - `db-secrets`: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_MULTIPLE_DATABASES
    - `grafana-secrets`: GF_SECURITY_ADMIN_PASSWORD
+   - `backup-s3-secret`: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+   - `grafana-alerting`: contactpoints.yaml + policies.yaml (Discord webhook
+     and routing)
+
+   (the raw POSTGRES_PASSWORD / MINIO_ROOT_PASSWORD / ELASTICSEARCH_PASSWORD
+   keys of the legacy layout are dropped — zero code readers, verified by an
+   8-agent consumption sweep)
 2. **Lint the staging file before sealing** — two incident classes died here:
    whitespace inside values, and base64-encoded values pasted without decoding
    (`kubectl get secret -o yaml` backups store values base64-encoded under
@@ -88,7 +98,7 @@ immediately. It is never committed, never `git add`ed, never in history.
 
        grep -n " @" <staging-file>          # no space before the DATABASE_URL host — must print nothing
        grep -n "[[:space:]]\"$" <staging-file>   # no trailing whitespace inside quoted values — must print nothing
-       grep -n "apps.googleusercontent.com" app-secrets.plain.yaml   # GOOGLE_CLIENT_ID decoded correctly — exactly one hit
+       grep -n "apps.googleusercontent.com" secret-auth.plain.yaml   # GOOGLE_CLIENT_ID decoded correctly — exactly one hit
 
    Sanity-read every value: does it LOOK like the thing it claims to be
    (a URL, a client id, a key), not like base64 of it?
@@ -99,17 +109,18 @@ immediately. It is never committed, never `git add`ed, never in history.
          --controller-name sealed-secrets-controller \
          --scope strict \
          --format yaml \
-         < %TEMP%\secrets-staging\app-secrets.plain.yaml \
-         > kubernetes/environments/oci/sealed-secrets/app-secrets.yaml
+         < %TEMP%\secrets-staging\secret-shared-core.plain.yaml \
+         > kubernetes/environments/oci/sealed-secrets/secret-shared-core.yaml
 
-   (repeat for `db-secrets`, `grafana-secrets`). Offline variant: fetch the
+   (repeat for `secret-auth`, `secret-media`, `db-secrets`, `grafana-secrets`,
+   `backup-s3-secret`, `grafana-alerting`). Offline variant: fetch the
    cert once with `kubeseal --controller-namespace sealed-secrets
    --controller-name sealed-secrets-controller --fetch-cert` and seal with
    `--cert`.
 4. Delete the staging files.
-5. Uncomment the three resource lines in
-   `kubernetes/environments/oci/sealed-secrets/kustomization.yaml`, commit,
-   merge to main. Argo does the rest.
+5. The `kubernetes/environments/oci/sealed-secrets/kustomization.yaml`
+   already lists all seven resource lines — commit, merge to main. Argo does
+   the rest.
 
 ## 5. Controller key backup (MANDATORY — do immediately after first install)
 
@@ -126,6 +137,10 @@ copy. Restore into a rebuilt cluster:
     kubectl -n sealed-secrets delete pod -l name=sealed-secrets-controller
 
 ## 6. LIVE CUTOVER RUNBOOK (one-time: legacy envsubst Secrets → SealedSecrets)
+
+Historical record of the Phase-4 cutover (3-secret app-secrets model).
+`app-secrets` was split into `secret-shared-core`/`secret-auth`/`secret-media`
+on 2026-07-15 - substitute names accordingly if ever reused as break-glass.
 
 The live cluster already holds plaintext Secrets with the same names, applied
 manually via envsubst. The controller REFUSES to overwrite a Secret it does
@@ -203,14 +218,16 @@ Reseal = section 4 steps 1-4 for the affected secret only.
 
 - **POSTGRES_PASSWORD**: follow section 6 steps 3-8 (ALTER USER order is the
   whole point). Update BOTH `db-secrets.POSTGRES_PASSWORD` and
-  `app-secrets.DATABASE_URL` (use the interactive psql form from section 6
-  step 7 — never a pasted one-liner).
-- **JWT_SECRET / SESSION_SECRET**: reseal app-secrets → merge → rolling
-  restart all four backends. Global logout by design; low-traffic window.
+  `secret-shared-core.DATABASE_URL` (use the interactive psql form from
+  section 6 step 7 — never a pasted one-liner).
+- **JWT_SECRET**: reseal `secret-shared-core` → merge → rolling restart all
+  four backends. Global logout by design; low-traffic window.
+- **SESSION_SECRET**: reseal `secret-auth` → merge → restart auth-service.
+  Global logout by design; low-traffic window.
 - **GRAFANA_ADMIN_PASSWORD**: reseal grafana-secrets → merge → restart
   grafana (storage is emptyDir; the env password applies on every boot).
 - **GOOGLE_CLIENT_SECRET**: create a NEW secret in the Google Cloud console
-  (old+new stay valid together) → reseal app-secrets → merge → restart
+  (old+new stay valid together) → reseal `secret-auth` → merge → restart
   auth-service → verify OAuth login → delete the OLD secret in the console.
 - **MINIO_ACCESS_KEY / MINIO_SECRET_KEY** (terraform-managed customer secret
   key; OCI allows 2 concurrent keys — create-before-delete): HUMAN-only.
@@ -221,7 +238,7 @@ Reseal = section 4 steps 1-4 for the affected secret only.
       terraform apply -target=oci_identity_customer_secret_key.s3 -replace=oci_identity_customer_secret_key.s3
 
   Extract: `terraform output -raw object_storage_access_key` /
-  `object_storage_secret_key` → reseal app-secrets → merge → restart
+  `object_storage_secret_key` → reseal `secret-media` → merge → restart
   blog-service + auth-service → presign smoke test.
 - **ELASTICSEARCH / REDIS credentials**: moot — security disabled / no auth;
   the legacy secrets were retired in Phase 4.

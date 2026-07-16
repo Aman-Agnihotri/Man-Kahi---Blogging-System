@@ -1,5 +1,10 @@
 # Phase 4 Rollback Contingencies — GitOps Cutover (Argo CD + Sealed Secrets)
 
+Historical record of the Phase-4 GitOps cutover. The app-secrets model
+described here was split into secret-shared-core/secret-auth/secret-media on
+2026-07-15 (see gitops.md section 4); mechanics remain valid break-glass
+procedure by name substitution.
+
 > Written before the Phase 4 cutover against the LIVE production cluster
 > (mankahi.work.gd, real users). Every cluster command in this document is
 > **HUMAN-executed**. Agents never touch the cluster.

@@ -2,7 +2,7 @@
 
 ## 1. What this document is
 
-This is the operational runbook for `mankahi.work.gd`: a 2-node arm64 k3s
+This is the operational runbook for `mankahi.xyz`: a 2-node arm64 k3s
 cluster on OCI Always Free, deployed via GitOps through Argo CD — every merge
 to `main` reaches the cluster in roughly 3 minutes, with no manual `kubectl
 apply` in the steady state. It covers backups, restore drills, alerting, and
@@ -67,6 +67,9 @@ f. Row-count sanity:
 
 g. Cleanup: `DROP DATABASE restore_drill;` and `rm` the dump copies.
 
+   Expected fresh-DB roles baseline is 3 (admin/author/reader, seeded
+   automatically by init).
+
 h. Drill log:
 
 | date | dump file | rows expected | rows restored | operator |
@@ -80,6 +83,7 @@ h. Drill log:
 | `InstanceDown` | a scraped backend target remains in SD but fails scrapes for 5m (CrashLoop/unready; note: a deleted pod leaves SD entirely and does NOT trigger this) | kubectl get pods -n mankahi; Argo CD app health; node memory |
 | `PodCrashLooping` | A container in mankahi restarted more than 3 times in 15m (bad config, crash on boot, OOMKill) | kubectl -n mankahi logs POD --previous; check lastState.terminated.reason (OOMKilled = raise limits); check recent Argo CD sync |
 | `DeploymentReplicasUnavailable` | A Deployment's desired replica was unavailable within the last 5m - pod deleted, crashed, or failing readiness; fires on kubectl delete pod (the acceptance drill) | kubectl -n mankahi get pods -l app=DEPLOYMENT; kill drills self-clear about 5m after Ready |
+| `CertificateExpiringSoon` | a cert-manager certificate expires in under 14 days | check cert-manager logs + the certificate resource; renew/reissue |
 
 PodCrashLooping is restart-count based; kubectl delete pod creates a NEW pod
 whose restart counter starts at 0, so a pod kill raises
@@ -92,7 +96,6 @@ bytes; both need a kubelet or node_exporter scrape.
 **Planned rules (pending metric sources or delivery):**
 - PVC above 80 percent — needs kubelet volume stats.
 - Node memory above 85 percent — needs `node-exporter`.
-- Cert expiry under 14d — needs a cert-manager metrics scrape.
 
 Delivery channel: Grafana unified alerting to a Discord webhook (sealed).
 
@@ -100,8 +103,9 @@ Delivery: the bridge rule (any firing Prometheus alert) is provisioned from git;
 
 ## 5. Incident log convention
 
-Incidents live in `docs/incidents/` as `YYYY-MM-DD-short-slug.md`, one file
-per incident, written within 48h of resolution.
+Incidents live in `internal-docs/incidents/` (internal working documents, not
+tracked in this repo) as `YYYY-MM-DD-short-slug.md`, one file per incident,
+written within 48h of resolution.
 
 Post-mortem template:
 
@@ -126,10 +130,13 @@ Two Phase-4 incidents (a placeholder `ALTER USER` lockout, and a
 whitespace-corrupted seal) are documented in `docs/gitops.md` and predate this
 convention.
 
+Two worked examples of the convention: `internal-docs/incidents/2026-07-15-stateful-rollout-overlap.md`
+and `internal-docs/incidents/2026-07-15-init-hook-deadlock.md` — internal working documents, not
+tracked in this repo.
+
 ## 6. Standing cautions
 
 - Run `terraform plan` before any apply (node-replacement pending).
 - `POSTGRES_USER` must stay `postgres`.
 - Generated secrets must be URL-safe only.
-- `work.gd` renewal window: 30 days before 2027-07-11.
 - Prometheus is intentionally unexposed.
