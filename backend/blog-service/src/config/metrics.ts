@@ -71,5 +71,27 @@ export const blogMetrics = {
   })
 };
 
+// Elasticsearch circuit breaker metrics
+export const esBreakerMetrics = {
+  state: new Gauge({
+    name: 'mankahi_es_breaker_state',
+    help: 'ES breaker state 0=closed 1=half_open 2=open',
+    registers: [register]
+  }),
+
+  transitions: new Counter({
+    name: 'mankahi_es_breaker_transitions_total',
+    help: 'ES breaker state transitions',
+    labelNames: ['to_state'],
+    registers: [register]
+  }),
+
+  shortCircuits: new Counter({
+    name: 'mankahi_es_breaker_short_circuits_total',
+    help: 'ES breaker short-circuited calls',
+    registers: [register]
+  }),
+};
+
 // Re-export metrics endpoint handlers from shared config
 export { register, metricsHandler, metricsEnabled } from '@shared/config/metrics';

@@ -2,6 +2,8 @@ import { Client, estypes } from '@elastic/elasticsearch'
 import logger from '@shared/utils/logger'
 import { prisma } from '@shared/utils/prismaClient'
 import { env } from '@config/env'
+import { CircuitBreaker, CircuitOpenError, CircuitState } from '@shared/utils/circuitBreaker'
+import { esBreakerMetrics } from '@config/metrics'
 
 // Add debug logging
 logger.info(`Attempting to connect to Elasticsearch at ${env.ELASTICSEARCH_URL}`);
@@ -22,6 +24,42 @@ export const elasticClient = new Client({
     throw error;
   }
 })();
+
+const stateToGauge = (state: CircuitState): number => {
+  switch (state) {
+    case 'CLOSED':
+      return 0
+    case 'HALF_OPEN':
+      return 1
+    case 'OPEN':
+      return 2
+  }
+}
+
+const esBreaker = new CircuitBreaker({
+  failureThreshold: Number(process.env['ES_BREAKER_FAILURE_THRESHOLD'] ?? 5),
+  resetTimeoutMs: Number(process.env['ES_BREAKER_RESET_TIMEOUT_MS'] ?? 30000),
+  callTimeoutMs: Number(process.env['ES_BREAKER_CALL_TIMEOUT_MS'] ?? 2500),
+  name: 'elasticsearch',
+  onStateChange: (_from, to) => {
+    esBreakerMetrics.state.set(stateToGauge(to))
+    esBreakerMetrics.transitions.inc({ to_state: to.toLowerCase() })
+  },
+})
+
+// Seed the gauge with the breaker's initial state.
+esBreakerMetrics.state.set(stateToGauge(esBreaker.state))
+
+export const guardedEs = async <T>(fn: (client: Client) => Promise<T>): Promise<T> => {
+  try {
+    return await esBreaker.execute(() => fn(elasticClient))
+  } catch (err) {
+    if (err instanceof CircuitOpenError) {
+      esBreakerMetrics.shortCircuits.inc()
+    }
+    throw err
+  }
+}
 
 const BLOG_INDEX = 'blogs'
 
@@ -134,41 +172,44 @@ export const setupElasticsearch = async (): Promise<void> => {
 
 export const indexBlog = async (blog: BlogDocument): Promise<void> => {
   try {
-    await elasticClient.index<BlogDocument>({
-      index: BLOG_INDEX,
-      id: blog.id,
-      document: blog,
-      refresh: true, // Make the document immediately searchable
-    })
+    await guardedEs(client =>
+      client.index<BlogDocument>({
+        index: BLOG_INDEX,
+        id: blog.id,
+        document: blog,
+        refresh: true, // Make the document immediately searchable
+      })
+    )
   } catch (error) {
-    logger.error({ err: error }, 'Error indexing blog')
-    throw error
+    logger.warn({ err: error, blogId: blog.id }, 'ES index operation skipped')
   }
 }
 
 export const updateBlogIndex = async (id: string, blog: Partial<BlogDocument>): Promise<void> => {
   try {
-    await elasticClient.update<BlogDocument>({
-      index: BLOG_INDEX,
-      id,
-      doc: blog,
-      refresh: true,
-    })
+    await guardedEs(client =>
+      client.update<BlogDocument>({
+        index: BLOG_INDEX,
+        id,
+        doc: blog,
+        refresh: true,
+      })
+    )
   } catch (error) {
-    logger.error({ err: error }, 'Error updating blog index')
-    throw error
+    logger.warn({ err: error, blogId: id }, 'ES index operation skipped')
   }
 }
 
 export const removeBlogFromIndex = async (id: string): Promise<void> => {
   try {
-    await elasticClient.delete({
-      index: BLOG_INDEX,
-      id,
-    })
+    await guardedEs(client =>
+      client.delete({
+        index: BLOG_INDEX,
+        id,
+      })
+    )
   } catch (error) {
-    logger.error({ err: error }, 'Error removing blog from index')
-    throw error
+    logger.warn({ err: error, blogId: id }, 'ES index operation skipped')
   }
 }
 
@@ -245,21 +286,23 @@ export const searchBlogsElastic = async (options: SearchOptions): Promise<Search
       }
     })() as estypes.Sort
 
-    const response = await elasticClient.search<estypes.SearchResponse<BlogDocument>>({
-      index: BLOG_INDEX,
-      body: {
-        query: {
-          // deleteBlog() soft-deletes (sets deletedAt) and updates the ES
-          // doc accordingly, but this query never excluded it - a "deleted"
-          // post kept appearing in search/browse results indefinitely.
-          bool: { must, must_not: [{ exists: { field: 'deletedAt' } }] },
+    const response = await guardedEs(client =>
+      client.search<estypes.SearchResponse<BlogDocument>>({
+        index: BLOG_INDEX,
+        body: {
+          query: {
+            // deleteBlog() soft-deletes (sets deletedAt) and updates the ES
+            // doc accordingly, but this query never excluded it - a "deleted"
+            // post kept appearing in search/browse results indefinitely.
+            bool: { must, must_not: [{ exists: { field: 'deletedAt' } }] },
+          },
+          sort,
+          from: (page - 1) * limit,
+          size: limit,
+          track_total_hits: true,
         },
-        sort,
-        from: (page - 1) * limit,
-        size: limit,
-        track_total_hits: true,
-      },
-    })
+      })
+    )
 
     if (!response) {
       return {
