@@ -16,25 +16,26 @@ images:
   # auth-service and frontend move together: the OAuth refresh-cookie
   # contract (33a94c2 backend, 6620a45 frontend) is atomic - both must be
   # pinned to the same SHA on every bump.
-  # frontend intentionally remains at e74f173 - not rebuilt (no frontend change); both SHAs carry the cookie contract.
+  # All six images pin to the same build SHA (3260b4ac...) - the shared
+  # rebuild moves every backend service and the frontend together.
   - name: mankahi/auth-service
     newName: ghcr.io/aman-agnihotri/mankahi-auth-service
-    newTag: e69f8a881ed65a089a25a250a841d4dff100b625
+    newTag: 3260b4ac8e1af337283f8077be6600b620376333
   - name: mankahi/blog-service
     newName: ghcr.io/aman-agnihotri/mankahi-blog-service
-    newTag: f97190d2d3ca474f9277b39078ad3a5fcee01d07
+    newTag: 3260b4ac8e1af337283f8077be6600b620376333
   - name: mankahi/analytics-service
     newName: ghcr.io/aman-agnihotri/mankahi-analytics-service
-    newTag: f97190d2d3ca474f9277b39078ad3a5fcee01d07
+    newTag: 3260b4ac8e1af337283f8077be6600b620376333
   - name: mankahi/admin-service
     newName: ghcr.io/aman-agnihotri/mankahi-admin-service
-    newTag: f97190d2d3ca474f9277b39078ad3a5fcee01d07
+    newTag: 3260b4ac8e1af337283f8077be6600b620376333
   - name: mankahi/init-service
     newName: ghcr.io/aman-agnihotri/mankahi-init-service
-    newTag: f97190d2d3ca474f9277b39078ad3a5fcee01d07
+    newTag: 3260b4ac8e1af337283f8077be6600b620376333
   - name: frontend
     newName: ghcr.io/aman-agnihotri/mankahi-frontend
-    newTag: e74f1731bcdcb97058878764a5eb97894ac9dbbd
+    newTag: 3260b4ac8e1af337283f8077be6600b620376333
 
 patches:
   - path: app-config.yaml
