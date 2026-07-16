@@ -218,14 +218,63 @@
 
       <div class="mt-8 bg-white rounded-xl shadow-sm p-8">
         <h2 class="text-xl font-bold text-primary-900 mb-6">Connected Accounts</h2>
-        <button
-          type="button"
-          @click="handleLinkGoogle"
-          class="w-full flex justify-center items-center space-x-2 py-2 px-4 border border-primary-300 text-sm font-medium rounded-md text-primary-700 bg-white hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
-        >
-          <i class="ri-google-fill text-lg"></i>
-          <span>Link Google</span>
-        </button>
+
+        <p v-if="linkSuccess" class="bg-primary-50 text-primary-700 p-3 rounded-lg text-sm mb-4">
+          {{ linkSuccess }}
+        </p>
+
+        <div v-if="providersLoading" class="space-y-4">
+          <div class="h-6 w-full bg-primary-100 animate-pulse rounded"></div>
+        </div>
+
+        <div v-else class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <i class="ri-google-fill text-lg text-primary-700"></i>
+            <span class="text-primary-700">{{ googleLinked ? 'Connected' : 'Not connected' }}</span>
+          </div>
+
+          <button
+            v-if="!googleLinked"
+            type="button"
+            @click="handleLinkGoogle"
+            :disabled="linking"
+            class="flex justify-center items-center space-x-2 py-2 px-4 border border-primary-300 text-sm font-medium rounded-md text-primary-700 bg-white hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+          >
+            <span>Link Google</span>
+          </button>
+
+          <button
+            v-else-if="!showUnlinkConfirm"
+            type="button"
+            @click="revealUnlinkConfirm"
+            class="py-2 px-4 border border-red-300 text-sm font-medium rounded-md text-red-600 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+          >
+            Unlink
+          </button>
+        </div>
+
+        <div v-if="googleLinked && showUnlinkConfirm" class="mt-4 space-y-4 max-w-sm">
+          <p class="text-sm text-primary-700">Remove Google sign-in?</p>
+
+          <p v-if="unlinkError" class="text-sm text-red-600">{{ unlinkError }}</p>
+
+          <div class="flex items-center space-x-3">
+            <button
+              :disabled="unlinking"
+              class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              @click="confirmUnlinkGoogle"
+            >
+              {{ unlinking ? 'Removing...' : 'Confirm' }}
+            </button>
+            <button
+              :disabled="unlinking"
+              class="px-6 py-2 border-2 border-primary-200 text-primary-600 rounded-lg hover:bg-primary-50 disabled:opacity-50"
+              @click="cancelUnlink"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="mt-8 bg-white rounded-xl shadow-sm p-8">
@@ -297,6 +346,7 @@ definePageMeta({ requiresAuth: true });
 
 const auth = useAuthStore();
 const profileApi = useProfileApi();
+const api = useApi();
 const route = useRoute();
 
 // --- Profile form --------------------------------------------------------
@@ -465,17 +515,67 @@ const handleSignOut = async () => {
 
 // --- Connected accounts ----------------------------------------------------
 
+const providersLoading = ref(true);
+const googleLinked = ref(false);
+const linking = ref(false);
+const showUnlinkConfirm = ref(false);
+const unlinking = ref(false);
+const unlinkError = ref<string | null>(null);
+const linkSuccess = ref<string | null>(null);
+
+async function loadProviders() {
+  providersLoading.value = true;
+  try {
+    const data = await api.get<{ providers: string[] }>('/api/auth/providers');
+    googleLinked.value = data.providers.includes('google');
+  } catch (err) {
+    error.value = (err as ApiError)?.message ?? 'Failed to load connected accounts.';
+  } finally {
+    providersLoading.value = false;
+  }
+}
+
 async function handleLinkGoogle() {
+  linking.value = true;
   try {
     await auth.linkWithGoogle();
   } catch (err) {
     error.value = (err as ApiError)?.message ?? 'Failed to link Google account.';
+  } finally {
+    linking.value = false;
+  }
+}
+
+function revealUnlinkConfirm() {
+  showUnlinkConfirm.value = true;
+  unlinkError.value = null;
+}
+
+function cancelUnlink() {
+  showUnlinkConfirm.value = false;
+  unlinkError.value = null;
+}
+
+async function confirmUnlinkGoogle() {
+  unlinking.value = true;
+  unlinkError.value = null;
+  try {
+    await api.del('/api/auth/unlink/google');
+    showUnlinkConfirm.value = false;
+    googleLinked.value = false;
+    linkSuccess.value = 'Google account unlinked.';
+  } catch (err) {
+    unlinkError.value = (err as ApiError)?.message ?? 'Failed to unlink Google account.';
+  } finally {
+    unlinking.value = false;
   }
 }
 
 onMounted(() => {
   loadProfile();
   loadNotificationPrefs();
+  loadProviders();
   if (route.query.linkError) error.value = String(route.query.linkError);
+  if (route.query.linked) linkSuccess.value = 'Google account connected.';
 });
 </script>

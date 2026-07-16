@@ -115,4 +115,8 @@ async function handleGoogleLogin() {
     // Error is handled by the store
   }
 }
+
+onUnmounted(() => {
+  auth.error = null;
+});
 </script>

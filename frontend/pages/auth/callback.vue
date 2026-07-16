@@ -43,6 +43,10 @@ onMounted(async () => {
     return;
   }
   const ok = await auth.refreshSession();
+  if (ok && route.query.linked) {
+    router.replace('/user/settings?linked=' + encodeURIComponent(String(route.query.linked)));
+    return;
+  }
   router.replace(ok ? '/user/dashboard' : '/auth/login');
 });
 </script>
