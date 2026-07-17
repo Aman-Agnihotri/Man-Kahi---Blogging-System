@@ -541,17 +541,61 @@
     },
     {
       "id": 10,
-      "title": "Elasticsearch health - follow-up",
-      "type": "text",
+      "title": "Elasticsearch cluster health",
+      "type": "stat",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
         "y": 20
       },
+      "targets": [
+        {
+          "expr": "sum(elasticsearch_cluster_health_status{color=\"green\"})*0 + sum(elasticsearch_cluster_health_status{color=\"yellow\"})*1 + sum(elasticsearch_cluster_health_status{color=\"red\"})*2",
+          "refId": "A"
+        }
+      ],
       "options": {
-        "mode": "markdown",
-        "content": "### Elasticsearch health - follow-up\n\nElasticsearch is not scraped by Prometheus (no exporter deployed). Cluster health is currently only visible via the Kubernetes readiness/liveness probes on the Elasticsearch pods.\n\nFollow-up: deploy prometheus-elasticsearch-exporter, then add elasticsearch_cluster_health_status panels to this dashboard."
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "unknown",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "GREEN"
+                },
+                "1": {
+                  "text": "YELLOW"
+                },
+                "2": {
+                  "text": "RED"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
       }
     },
     {

@@ -48,3 +48,11 @@ groups:
         annotations:
           summary: "blog-service Elasticsearch circuit breaker OPEN"
           description: "ES circuit breaker in blog-service OPEN (state==2) >5m; search serving degraded contract. Check elasticsearch pod."
+      - alert: ElasticsearchClusterRed
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Elasticsearch cluster health RED"
+          description: "Elasticsearch cluster health status is red (>5m); server-side truth, distinct from ESCircuitBreakerOpen (client breaker view). Check elasticsearch pod."
