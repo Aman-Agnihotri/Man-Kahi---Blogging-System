@@ -72,6 +72,32 @@
         </div>
       </div>
 
+      <!-- Search -->
+      <h2 class="text-2xl font-bold text-primary-900 mb-6">Search</h2>
+
+      <div class="bg-white p-6 rounded-xl shadow-sm mb-10">
+        <h3 class="text-lg font-semibold text-primary-900 mb-2">Rebuild search index</h3>
+        <p class="text-sm text-primary-600 mb-4">Reindex all blogs into Elasticsearch. Runs in the background.</p>
+        <button
+          class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="reindexing"
+          @click="handleReindex"
+        >
+          {{ reindexing ? 'Rebuilding…' : 'Rebuild search index' }}
+        </button>
+        <p
+          v-if="reindexNotice"
+          :class="{
+            'p-3 rounded-lg text-sm mt-4': true,
+            'bg-green-50 text-green-700': reindexNotice.tone === 'success',
+            'bg-amber-50 text-amber-700': reindexNotice.tone === 'warn',
+            'bg-red-50 text-red-700': reindexNotice.tone === 'error'
+          }"
+        >
+          {{ reindexNotice.text }}
+        </p>
+      </div>
+
       <!-- Moderation -->
       <h2 class="text-2xl font-bold text-primary-900 mb-6">Blog Moderation</h2>
 
@@ -173,6 +199,7 @@ import type { DashboardStats } from '~/types/admin';
 definePageMeta({ requiresAuth: true, requiresAdmin: true });
 
 const adminApi = useAdminApi();
+const api = useApi();
 
 const stats = ref<DashboardStats | null>(null);
 const statsLoading = ref(true);
@@ -243,4 +270,26 @@ onMounted(() => {
   loadStats();
   loadBlogs();
 });
+
+const reindexing = ref(false);
+const reindexNotice = ref<{ tone: 'success' | 'warn' | 'error'; text: string } | null>(null);
+
+async function handleReindex() {
+  reindexing.value = true;
+  reindexNotice.value = null;
+  try {
+    await api.post('/api/blogs/search/reindex');
+    reindexNotice.value = { tone: 'success', text: 'Search index rebuild started — runs in the background.' };
+  } catch (e: any) {
+    if (e?.status === 409) {
+      reindexNotice.value = { tone: 'warn', text: 'A rebuild is already running.' };
+    } else if (e?.status === 503) {
+      reindexNotice.value = { tone: 'error', text: 'Search is unavailable right now — is Elasticsearch up?' };
+    } else {
+      reindexNotice.value = { tone: 'error', text: 'Could not start the rebuild. Please try again.' };
+    }
+  } finally {
+    reindexing.value = false;
+  }
+}
 </script>
