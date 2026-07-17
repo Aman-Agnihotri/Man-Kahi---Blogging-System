@@ -15,6 +15,7 @@ resources:
   - monitoring.yaml
   - monitoring-rbac.yaml
   - kube-state-metrics.yaml
+  - elasticsearch-exporter.yaml
 
 configMapGenerator:
   - name: grafana-dashboards

@@ -1,0 +1,49 @@
+# elasticsearch-exporter: server-side ES cluster health for Prometheus (the
+# system-overview "Elasticsearch health" follow-up). Scraped via the same
+# annotation-SD job as every other pod; no prometheus.yml change needed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch-exporter
+  namespace: mankahi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch-exporter
+  template:
+    metadata:
+      labels:
+        app: elasticsearch-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9114"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: elasticsearch-exporter
+          # HUMAN verify before push: docker manifest inspect prometheuscommunity/elasticsearch-exporter:v1.11.0 - expect linux/arm64
+          image: prometheuscommunity/elasticsearch-exporter:v1.11.0
+          args:
+            - --es.uri=http://elasticsearch-service:9200
+          ports:
+            - containerPort: 9114
+              name: http-metrics
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

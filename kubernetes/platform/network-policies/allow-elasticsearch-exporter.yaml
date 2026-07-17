@@ -1,27 +1,24 @@
 # Applied by: mankahi-network-policies (platform child app, wave 1).
-# Evidence: ES client exists only in blog-service/src/utils/elasticsearch.ts; admin.controller
-# ES mentions are comments; analytics has zero ES references.
-# Push order: 3/10.
+# Push order: 9/10 - BEFORE default-deny-ingress which becomes 10/10.
+# Evidence: prometheus annotation-scrape of elasticsearch-exporter:9114
+# (elasticsearch-exporter.yaml pod annotations).
 # Enforcement begins only when default-deny-ingress (10/10) lands; until then this allow is inert.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-elasticsearch
+  name: allow-elasticsearch-exporter
   namespace: mankahi
 spec:
   podSelector:
     matchLabels:
-      app: elasticsearch
+      app: elasticsearch-exporter
   policyTypes:
     - Ingress
   ingress:
     - from:
         - podSelector:
             matchLabels:
-              app: blog-service
-        - podSelector:
-            matchLabels:
-              app: elasticsearch-exporter
+              app: prometheus
       ports:
         - protocol: TCP
-          port: 9200
+          port: 9114
