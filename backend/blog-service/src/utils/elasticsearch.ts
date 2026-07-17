@@ -130,9 +130,11 @@ export const setupElasticsearch = async (): Promise<void> => {
                 },
               },
             },
-            // Optimize for search performance
+            // Single-node cluster: a replica can never be assigned (same-node
+            // replicas are disallowed), which parks cluster health at yellow
+            // permanently. Bump to 1 only if a second Elasticsearch node ever exists.
             number_of_shards: 3,
-            number_of_replicas: 1,
+            number_of_replicas: 0,
             refresh_interval: '1s',
           },
           mappings: {
