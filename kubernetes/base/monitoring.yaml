@@ -237,11 +237,9 @@ data:
             for: 0m
             noDataState: OK
             execErrState: Error
-            labels:
-              severity: critical
             annotations:
-              summary: "A Prometheus alert is firing"
-              description: "One or more Prometheus alert rules are in the firing state."
+              summary: "{{ $labels.source_alert }} firing"
+              description: "{{ $labels.source_alert }} firing ({{ $labels.severity }}) - instance={{ $labels.instance }} ns={{ $labels.namespace }} deployment={{ $labels.deployment }}"
             data:
               - refId: A
                 relativeTimeRange:
@@ -252,7 +250,7 @@ data:
                   refId: A
                   instant: true
                   editorMode: code
-                  expr: ALERTS{alertstate="firing"}
+                  expr: label_replace(ALERTS{alertstate="firing"}, "source_alert", "$1", "alertname", "(.+)")
               - refId: B
                 datasourceUid: __expr__
                 model:
