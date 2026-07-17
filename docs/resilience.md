@@ -250,24 +250,79 @@ Gateway: `http://localhost:8080` (nginx, per the Compose file's port mapping).
 
 ## 9. Chaos drill 2 — cluster
 
-1. Delete the Elasticsearch pod:
+This drill exercises the breaker against the live cluster deployment (GitOps
+managed via Argo CD). A deterministic outage — scaling Elasticsearch to zero
+— is used instead of deleting the pod, because a deleted pod is recreated
+almost immediately (see the boot-time note below) and GitOps auto-sync will
+otherwise fight a manual scale change by restoring the declared replica
+count before the drill has a chance to observe an open breaker.
+
+1. Temporarily disable Argo CD auto-sync for the app so a manual replica
+   change isn't immediately reverted:
    ```bash
-   kubectl delete pod -l app=elasticsearch -n mankahi
+   argocd app set mankahi --sync-policy none
    ```
 
-2. The Elasticsearch Deployment uses `strategy: Recreate`
+2. Scale Elasticsearch to zero for a clean, deterministic outage:
+   ```bash
+   kubectl scale deployment elasticsearch -n mankahi --replicas=0
+   ```
+
+3. Drive search traffic with **unique query strings per request** — for
+   example a timestamp token:
+   ```bash
+   for i in $(seq 1 20); do
+     curl -s -o /dev/null -w "%{http_code}\n" \
+       "https://mankahi.xyz/api/blogs/search?query=probe-$(date +%s%N)"
+     sleep 1
+   done
+   ```
+   This matters because the search results cache serves repeated query
+   strings for 30 minutes without ever reaching Elasticsearch or the breaker
+   — the cache-first search path is a feature (cached queries keep working
+   even during an outage), but that same behavior hides the breaker from a
+   drill that repeats queries. Each request also load-balances across
+   whichever blog-service pod is up, and each pod owns its own breaker
+   instance, so sustained unique-query traffic is needed to drive both pods'
+   consecutive-failure counts past the threshold rather than splitting
+   failures thinly across them.
+
+4. Watch the blog Grafana dashboard's "ES Circuit Breaker State" panel: both
+   blog-service pods' breakers should move from `0` (Closed) to `2` (Open) as
+   unique-query traffic keeps hitting the unreachable backend. Degraded
+   bodies (see section 5) are served throughout.
+
+5. Scale Elasticsearch back to one:
+   ```bash
+   kubectl scale deployment elasticsearch -n mankahi --replicas=1
+   ```
+   The Elasticsearch Deployment uses `strategy: Recreate`
    (`kubernetes/environments/oci/patches/elasticsearch.yaml` and the base
-   Deployment), so the old pod is fully torn down before a new one starts.
-   Elasticsearch takes roughly 2 minutes to boot cold. This window is
-   expected — not a failure to chase.
+   Deployment); a cold boot takes roughly 2 minutes. This window is expected
+   — not a failure to chase.
 
-3. Watch the blog Grafana dashboard's "ES Circuit Breaker State" panel: it
-   should show the breaker moving from `0` (Closed) to `2` (Open) once
-   search traffic hits the deleted pod's absence, and back to `0` (Closed)
-   once the new pod is ready and a probe succeeds.
+6. Keep sending unique-query traffic. Within one reset window
+   (`ES_BREAKER_RESET_TIMEOUT_MS`, default 30s) of Elasticsearch being ready
+   again, watch both pods' breakers close in the same dashboard panel — the
+   short-circuit spike and the transition series in the panel history are the
+   record of the drill.
 
-4. If Elasticsearch is held down for more than 5 minutes, the
-   `ESCircuitBreakerOpen` warning fires to the alert webhook (see section 7).
+7. If Elasticsearch was held down for more than 5 minutes, the
+   `ESCircuitBreakerOpen` warning fires to the alert webhook (see section 7),
+   with a corresponding resolved notification once the breaker closes.
+
+8. Re-enable Argo CD auto-sync once the drill is complete:
+   ```bash
+   argocd app set mankahi --sync-policy automated
+   ```
+
+**Epilogue: exercise the reindex endpoint.** With Elasticsearch back and the
+breaker closed, call `POST /api/blogs/search/reindex` (section 6) to close
+any staleness window opened during the outage. Its precheck — the endpoint
+returns `503` if Elasticsearch is unreachable at call time — doubles as a
+cache-free breaker probe, since a reindex call is never served from the
+search cache: it's a useful way to directly confirm Elasticsearch's
+reachability without waiting on unique-query drill traffic.
 
 Restarting blog-service pods during an Elasticsearch outage is safe.
 blog-service now starts in a degraded-but-serving state when Elasticsearch
