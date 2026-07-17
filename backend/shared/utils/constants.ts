@@ -31,6 +31,7 @@ export const DATABASE_URL = getEnvVar('DATABASE_URL');
 export const JWT_SECRET = getEnvVar('JWT_SECRET');
 export const JWT_ACCESS_EXPIRES_IN = getEnvVar('JWT_ACCESS_EXPIRES_IN', '1h');
 export const JWT_REFRESH_EXPIRES_IN = getEnvVar('JWT_REFRESH_EXPIRES_IN', '7d');
+export const JWT_LINK_EXPIRES_IN = getEnvVar('JWT_LINK_EXPIRES_IN', '5m');
 
 export const LOG_LEVEL = getEnvVar('LOG_LEVEL', 'info');
 

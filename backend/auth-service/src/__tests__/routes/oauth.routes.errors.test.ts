@@ -87,6 +87,7 @@ jest.mock('@shared/middlewares/auth', () => ({
 }));
 
 import { oauthRoutes, mapOAuthErrorToCode } from '@routes/oauth.routes';
+import { verifyLinkToken } from '@shared/utils/jwt';
 
 describe('oauth routes - /google/callback strategy failure surfacing', () => {
   let app: Express;
@@ -167,6 +168,30 @@ describe('mapOAuthErrorToCode', () => {
     expect(mapOAuthErrorToCode(new Error('Invalid token'))).toBe('invalid_link_token');
   });
 
+  it('maps "Invalid link token" to invalid_link_token', () => {
+    expect(mapOAuthErrorToCode(new Error('Invalid link token'))).toBe('invalid_link_token');
+  });
+
+  it('maps "Token has expired" to invalid_link_token', () => {
+    expect(mapOAuthErrorToCode(new Error('Token has expired'))).toBe('invalid_link_token');
+  });
+
+  it('maps "Invalid token signature" to invalid_link_token', () => {
+    expect(mapOAuthErrorToCode(new Error('Invalid token signature'))).toBe('invalid_link_token');
+  });
+
+  it('maps "Invalid token format" to invalid_link_token', () => {
+    expect(mapOAuthErrorToCode(new Error('Invalid token format'))).toBe('invalid_link_token');
+  });
+
+  it('maps "Invalid token structure" to invalid_link_token', () => {
+    expect(mapOAuthErrorToCode(new Error('Invalid token structure'))).toBe('invalid_link_token');
+  });
+
+  it('maps "Invalid token payload structure" to invalid_link_token', () => {
+    expect(mapOAuthErrorToCode(new Error('Invalid token payload structure'))).toBe('invalid_link_token');
+  });
+
   it('maps "User not found" to user_not_found', () => {
     expect(mapOAuthErrorToCode(new Error('User not found'))).toBe('user_not_found');
   });
@@ -201,15 +226,19 @@ describe('oauth routes - POST /oauth/link/:provider', () => {
       .send({ token: 'a-jwt' });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ url: '/auth/google?linkToken=a-jwt' });
+    expect(res.body.url).toMatch(/^\/auth\/google\?linkToken=.+$/);
+    const linkToken = (res.body.url as string).split('linkToken=')[1]!;
+    expect(verifyLinkToken(linkToken)).toBe('user-1');
     expect(capturedAuthOptions).toEqual({ strategy: ['jwt'] });
   });
 
-  it('returns 400 when no token is provided', async () => {
+  it('signs from the authenticated user, ignoring any body', async () => {
     const res = await request(app).post('/api/auth/link/google').send({});
 
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ message: 'Token is required' });
+    expect(res.status).toBe(200);
+    expect(res.body.url).toMatch(/^\/auth\/google\?linkToken=.+$/);
+    const linkToken = (res.body.url as string).split('linkToken=')[1]!;
+    expect(verifyLinkToken(linkToken)).toBe('user-1');
   });
 });
 

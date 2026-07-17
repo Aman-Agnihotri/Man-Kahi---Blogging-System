@@ -132,7 +132,6 @@ export const useAuthStore = defineStore('auth', {
       const { url } = await authFetch<{ url: string }>('/api/auth/link/google', {
         method: 'POST',
         token: this.token,
-        body: { token: this.token },
       });
       window.location.href = `${config.public.apiUrl}/api${url}`;
     },

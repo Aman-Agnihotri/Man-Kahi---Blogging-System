@@ -44,7 +44,6 @@ describe('useAuthStore', () => {
       expect.objectContaining({
         baseURL: 'http://REPLACE_ME_API_URL',
         method: 'POST',
-        body: { token: 'tok-123' },
         headers: { Authorization: 'Bearer tok-123' },
       })
     );

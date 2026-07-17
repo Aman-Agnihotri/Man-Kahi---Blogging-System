@@ -1,7 +1,7 @@
 import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { prisma } from '@shared/utils/prismaClient'
-import { verifyToken } from '@shared/utils/jwt'
+import { verifyLinkToken } from '@shared/utils/jwt'
 import logger from '@shared/utils/logger'
 import {
   OAuthProvider,
@@ -28,12 +28,12 @@ const authService = new AuthService()
 async function linkProvider(token: string, profile: any): Promise<any> {
   const dbTimer = trackDbOperation('link', 'oauth_provider');
   try {
-    const decodedToken = verifyToken(token)
-    const userId = typeof decodedToken === 'object' ? decodedToken.userId : null
-
-    if (!userId) {
-      trackError('oauth', 'invalid_token', 'link_provider');
-      throw new Error('Invalid token')
+    let userId: string
+    try {
+      userId = verifyLinkToken(token)
+    } catch (err) {
+      trackError('oauth', 'invalid_token', 'link_provider')
+      throw err
     }
 
     const user = await prisma.user.findUnique({

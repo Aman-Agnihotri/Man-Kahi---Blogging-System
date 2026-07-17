@@ -11,6 +11,7 @@ import {
     trackError
 } from '@middlewares/metrics.middleware';
 import { REFRESH_COOKIE_MAX_AGE_MS } from '@config/cookies';
+import { generateLinkToken } from '@shared/utils/jwt';
 
 /**
  * @swagger
@@ -91,6 +92,12 @@ function mapOAuthErrorToCode(err: unknown): string {
         case 'Provider already linked to this account':
             return 'provider_already_linked';
         case 'Invalid token':
+        case 'Invalid link token':
+        case 'Token has expired':
+        case 'Invalid token signature':
+        case 'Invalid token format':
+        case 'Invalid token structure':
+        case 'Invalid token payload structure':
             return 'invalid_link_token';
         case 'User not found':
             return 'user_not_found';
@@ -280,14 +287,15 @@ router.post(
         try {
             const { provider } = req.params as { provider: string };
             trackAuthMetrics('oauth_link', provider);
-            const { token } = req.body;
 
-            if (!token) {
-                res.status(400).json({ message: 'Token is required' });
+            const userId = req.user?.id;
+            if (!userId) {
+                res.status(401).json({ message: 'Unauthorized' });
                 return;
             }
 
-            const authURL = `/auth/${provider}?linkToken=${token}`;
+            const linkToken = generateLinkToken(userId);
+            const authURL = `/auth/${provider}?linkToken=${linkToken}`;
             res.json({ url: authURL });
         } catch (error) {
             const { provider } = req.params;
