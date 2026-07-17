@@ -7,6 +7,7 @@ describe('AuthController - login', () => {
   let mockResponse: Partial<Response>;
   let jsonMock: jest.Mock;
   let statusMock: jest.Mock;
+  let cookieMock: jest.Mock;
   let loginMock: jest.Mock;
 
   beforeEach(() => {
@@ -16,10 +17,32 @@ describe('AuthController - login', () => {
 
     jsonMock = jest.fn();
     statusMock = jest.fn().mockReturnValue({ json: jsonMock });
-    mockResponse = { json: jsonMock, status: statusMock } as Partial<Response>;
+    cookieMock = jest.fn();
+    mockResponse = { json: jsonMock, status: statusMock, cookie: cookieMock } as Partial<Response>;
     mockRequest = {
       body: { email: 'test@example.com', password: 'Password123' },
     };
+  });
+
+  it('sets the refresh cookie and returns the login result on success', async () => {
+    loginMock.mockResolvedValue({
+      user: { id: 'u1', username: 'tester', email: 'test@example.com', roles: ['user'] },
+      token: 'a-token',
+      refreshToken: 'r-token',
+    });
+
+    await authController.login(mockRequest as Request, mockResponse as Response, jest.fn());
+
+    expect(cookieMock).toHaveBeenCalledWith(
+      'refresh_token',
+      'r-token',
+      expect.objectContaining({ httpOnly: true, path: '/api/auth', sameSite: 'lax' })
+    );
+    expect(jsonMock).toHaveBeenCalledWith({
+      user: { id: 'u1', username: 'tester', email: 'test@example.com', roles: ['user'] },
+      token: 'a-token',
+      refreshToken: 'r-token',
+    });
   });
 
   it('returns 423 when the account is locked', async () => {
@@ -51,6 +74,52 @@ describe('AuthController - login', () => {
 
     expect(statusMock).toHaveBeenCalledWith(400);
     expect(loginMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthController - register', () => {
+  let authController: AuthController;
+  let mockRequest: Partial<Request>;
+  let mockResponse: Partial<Response>;
+  let jsonMock: jest.Mock;
+  let statusMock: jest.Mock;
+  let cookieMock: jest.Mock;
+  let registerMock: jest.Mock;
+
+  beforeEach(() => {
+    authController = new AuthController();
+    registerMock = jest.fn();
+    (authController as unknown as { authService: { register: jest.Mock } }).authService.register = registerMock;
+
+    jsonMock = jest.fn();
+    statusMock = jest.fn().mockReturnValue({ json: jsonMock });
+    cookieMock = jest.fn();
+    mockResponse = { json: jsonMock, status: statusMock, cookie: cookieMock } as Partial<Response>;
+    mockRequest = {
+      body: { username: 'tester', email: 'test@example.com', password: 'Password123' },
+    };
+  });
+
+  it('sets the refresh cookie and returns the register result on success', async () => {
+    registerMock.mockResolvedValue({
+      user: { id: 'u1', username: 'tester', email: 'test@example.com', roles: ['user'] },
+      token: 'a-token',
+      refreshToken: 'r-token',
+    });
+
+    await authController.register(mockRequest as Request, mockResponse as Response, jest.fn());
+
+    expect(statusMock).toHaveBeenCalledWith(201);
+    expect(cookieMock).toHaveBeenCalledWith(
+      'refresh_token',
+      'r-token',
+      expect.objectContaining({ httpOnly: true, path: '/api/auth', sameSite: 'lax' })
+    );
+    expect(jsonMock).toHaveBeenCalledWith({
+      user: { id: 'u1', username: 'tester', email: 'test@example.com', roles: ['user'] },
+      token: 'a-token',
+      refreshToken: 'r-token',
+    });
   });
 });
 

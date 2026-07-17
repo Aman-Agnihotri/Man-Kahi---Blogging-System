@@ -81,6 +81,14 @@ export class AuthController {
       const result = await this.authService.register(validatedInput)
       dbTimer.end();
 
+      res.cookie('refresh_token', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env['NODE_ENV'] === 'production',
+        sameSite: 'lax',
+        path: '/api/auth',
+        maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+      });
+
       res.status(201).json(result)
     } catch (error) {
       logger.error({ err: error }, 'Register controller error')
@@ -121,7 +129,15 @@ export class AuthController {
       // Update metrics
       updateActiveTokens(1);
       redisTimer.end();
-      
+
+      res.cookie('refresh_token', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env['NODE_ENV'] === 'production',
+        sameSite: 'lax',
+        path: '/api/auth',
+        maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+      });
+
       res.json(result)
     } catch (error) {
       redisTimer.end();
