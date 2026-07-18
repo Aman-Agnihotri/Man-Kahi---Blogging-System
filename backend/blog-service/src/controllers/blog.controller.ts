@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
+import crypto from 'crypto'
 import logger from '@shared/utils/logger'
 import { BlogService } from '@services/blog.service'
 import { SearchService } from '@services/search.service'
@@ -68,6 +69,29 @@ const searchQuerySchema = z.object({
 // Guards against overlapping fire-and-forget reindex runs - see
 // BlogController.reindex.
 let reindexInProgress = false;
+
+// Identifies a viewer for deduped view counting: authenticated requests key
+// off the user ID; anonymous requests hash client IP + user agent (no raw
+// IP is ever stored, the hash is ephemeral). Optional-chained throughout -
+// bare test request objects lack headers/socket entirely. No trust-proxy is
+// configured on this server, so req.ip would be the proxy's address, not
+// the client's - X-Forwarded-For is read directly instead.
+function resolveViewerId(req: Request): string {
+  if (req.user?.id) {
+    return `u:${req.user.id}`
+  }
+  const forwardedFor = req.headers?.['x-forwarded-for']
+  const clientIp = Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : forwardedFor?.split(',')[0]?.trim()
+  const userAgent = req.headers?.['user-agent']
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${clientIp}|${userAgent}`)
+    .digest('hex')
+    .slice(0, 32)
+  return `a:${hash}`
+}
 
 export class BlogController {
   private readonly blogService: BlogService
@@ -183,7 +207,7 @@ export class BlogController {
           details: 'The slug parameter is missing from the request URL'
         });
       }
-      const blog = await this.blogService.getBlogBySlug(slug, req.user?.id)
+      const blog = await this.blogService.getBlogBySlug(slug, req.user?.id, resolveViewerId(req))
       // Track blog view
       if (blog.published) {
         trackBlogView(blog.id);

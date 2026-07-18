@@ -225,7 +225,7 @@ describe('BlogService.restoreRevision', () => {
     });
     expect(prismaMock.blog.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'blog-1' },
-      data: { content: '<p>restored content</p>', contentMarkdown: 'restored content', version: 6 },
+      data: { content: '<p>restored content</p>', contentMarkdown: 'restored content', readTime: 1, version: 6 },
     }));
     expect(updateBlogIndexMock).toHaveBeenCalledWith('blog-1', expect.objectContaining({
       content: '<p>restored content</p>',

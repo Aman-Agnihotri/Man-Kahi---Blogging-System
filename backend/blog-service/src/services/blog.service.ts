@@ -1,7 +1,7 @@
 import { prisma } from '@shared/utils/prismaClient'
 import { processMarkdown, validateMarkdown } from '@utils/markdown'
 import { indexBlog, updateBlogIndex } from '@utils/elasticsearch'
-import { blogCache, searchCache } from '@shared/config/redis'
+import { redis, blogCache, searchCache } from '@shared/config/redis'
 import { processImage } from '@config/upload'
 import slugify from 'slugify'
 import logger from '@shared/utils/logger'
@@ -43,6 +43,39 @@ interface BlogVisibilitySnapshot {
 export class BlogService {
   private canReadBlog(blog: BlogVisibilitySnapshot, userId?: string): boolean {
     return blog.published || (!!userId && blog.authorId === userId)
+  }
+
+  // Naive whitespace word count over the markdown source, rounded up to a
+  // whole minute at 200wpm (never below 1 minute for non-empty content).
+  private computeReadTime(markdown: string): number {
+    const wordCount = markdown.trim().split(/\s+/).filter(Boolean).length
+    return Math.max(1, Math.ceil(wordCount / 200))
+  }
+
+  // Deduped, fire-and-forget view registration: a Redis NX key scopes one
+  // counted view per (blogId, viewerId) per 24h window. Only the visitor
+  // that actually wins the NX set gets to increment Postgres, so repeat
+  // visits within the window don't inflate the count. Redis failures fail
+  // closed (skip the count, never overcount) and are swallowed - view
+  // counting must never break serving the blog itself.
+  private async registerView(blogId: string, slug: string, viewerId: string): Promise<void> {
+    try {
+      const result = await redis.set(`blog:viewed:${blogId}:${viewerId}`, '1', 'EX', 86400, 'NX')
+      if (result !== 'OK') {
+        return
+      }
+      const updated = await prisma.blogAnalytics.update({
+        where: { blogId },
+        data: { views: { increment: 1 } },
+        select: { views: true },
+      })
+      await Promise.all([
+        blogCache.invalidate(slug),
+        updateBlogIndex(blogId, { views: updated.views }),
+      ])
+    } catch (error) {
+      logger.error({ err: error }, 'Error registering blog view')
+    }
   }
 
   // Snapshots the blog's current (pre-update) content as a BlogRevision row.
@@ -121,6 +154,7 @@ export class BlogService {
         slug,
         content: processedContent,
         contentMarkdown: data.content,
+        readTime: this.computeReadTime(data.content),
         description: data.description,
         published: data.published ?? false,
         publishedAt: data.published ? new Date() : null,
@@ -203,24 +237,31 @@ export class BlogService {
     return blog;
   }
 
-  async getBlogBySlug(slug: string, userId?: string) {
+  async getBlogBySlug(slug: string, userId?: string, viewerId?: string) {
     logger.debug(`Fetching blog by slug: ${slug}`);
     // Try to get from cache first
     const cachedBlog = await blogCache.get(slug);
     if (cachedBlog) {
       const blog = JSON.parse(cachedBlog) as BlogVisibilitySnapshot & {
         analytics?: { views?: number } | null
+        content: string
+        contentMarkdown?: string | null
+        readTime?: number | null
       };
       // Check visibility
       if (blog.deletedAt || !this.canReadBlog(blog, userId)) {
         logger.warn(`Unauthorized access attempt for unpublished blog: ${slug}`);
         throw new Error('Blog not found');
       }
-      // Increment views in background
-      if (blog.published) {
-        blogCache.incrementViews(blog.id).catch((error: Error) =>
-          logger.error({ err: error }, 'Error incrementing views')
-        );
+      // Lazy backfill: cached copies predating read-time support (or
+      // created before this fix) won't have one. In-memory only here -
+      // the DB branch below is what actually heals the persisted row.
+      if (!blog.readTime) {
+        blog.readTime = this.computeReadTime(blog.contentMarkdown ?? blog.content)
+      }
+      // Register (deduped) view in background
+      if (blog.published && viewerId) {
+        this.registerView(blog.id, slug, viewerId);
       }
       return blog;
     }
@@ -259,16 +300,23 @@ export class BlogService {
       throw new Error('Blog not found');
     }
 
+    // Lazy backfill: heal rows written before read-time support existed.
+    // Persist it (fire-and-forget) BEFORE caching so the cached copy is
+    // healed too, instead of caching the stale readTime-less row.
+    if (!blog.readTime) {
+      blog.readTime = this.computeReadTime(blog.contentMarkdown ?? blog.content)
+      prisma.blog.update({
+        where: { id: blog.id },
+        data: { readTime: blog.readTime },
+      }).catch((error: Error) => logger.error({ err: error }, 'Error persisting backfilled read time'));
+    }
+
     // Cache the blog
     await blogCache.set(slug, JSON.stringify(blog));
 
-    // Increment views in background and update Elasticsearch
-    if (blog.published) {
-      logger.debug(`Updating view metrics for blog: ${blog.id}`);
-      Promise.all([
-        blogCache.incrementViews(blog.id),
-        updateBlogIndex(blog.id, { views: (blog.analytics?.views ?? 0) + 1 })
-      ]).catch((error: Error) => logger.error({ err: error }, 'Error updating views'));
+    // Register (deduped) view in background and update Elasticsearch
+    if (blog.published && viewerId) {
+      this.registerView(blog.id, slug, viewerId);
     }
 
     return blog;
@@ -349,7 +397,7 @@ export class BlogService {
           slug: updatedSlug,
         }),
         ...(processedContent && { content: processedContent, contentMarkdown: data.content }),
-        ...(isContentChanging && { version: blog.version + 1 }),
+        ...(isContentChanging && { version: blog.version + 1, readTime: this.computeReadTime(data.content!) }),
         ...(coverImage && { coverImage }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.published !== undefined && { published: data.published }),
@@ -835,6 +883,7 @@ export class BlogService {
       data: {
         content: processedContent,
         contentMarkdown: revision.contentMarkdown ?? restoredSource,
+        readTime: this.computeReadTime(restoredSource),
         version: blog.version + 1,
       },
       include: {

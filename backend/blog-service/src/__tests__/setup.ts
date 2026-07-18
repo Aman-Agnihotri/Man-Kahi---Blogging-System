@@ -75,6 +75,7 @@ jest.mock('@shared/config/redis', () => ({
   redis: {
     ping: jest.fn(),
     quit: jest.fn(),
+    set: jest.fn(),
   },
 }));
 

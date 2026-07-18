@@ -1,6 +1,6 @@
 import { BlogService } from '@services/blog.service';
 import { prisma } from '@shared/utils/prismaClient';
-import { blogCache, searchCache } from '@shared/config/redis';
+import { blogCache, searchCache, redis } from '@shared/config/redis';
 import { processImage } from '@config/upload';
 import { indexBlog, updateBlogIndex } from '@utils/elasticsearch';
 
@@ -9,6 +9,9 @@ const prismaMock = prisma as unknown as {
     create: jest.Mock;
     findFirst: jest.Mock;
     findUnique: jest.Mock;
+    update: jest.Mock;
+  };
+  blogAnalytics: {
     update: jest.Mock;
   };
 };
@@ -24,9 +27,18 @@ const searchCacheMock = searchCache as unknown as {
   invalidateAll: jest.Mock;
 };
 
+const redisMock = redis as unknown as {
+  set: jest.Mock;
+};
+
 const processImageMock = processImage as jest.Mock;
 const indexBlogMock = indexBlog as jest.Mock;
 const updateBlogIndexMock = updateBlogIndex as jest.Mock;
+
+// registerView is a fire-and-forget call from getBlogBySlug (not awaited),
+// so tests asserting on its side effects need to let its internal await
+// chain (redis.set -> blogAnalytics.update -> Promise.all) settle first.
+const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 const blogRecord = {
   id: 'blog-1',
@@ -149,6 +161,10 @@ describe('BlogService contract fixes', () => {
       ...blogRecord,
       slug: 'draft-blog',
       published: false,
+      // Non-null so the read-time lazy backfill (which mutates the
+      // returned object and calls prisma.blog.update) doesn't fire and
+      // change what gets cached below.
+      readTime: 3,
     };
     cacheMock.get.mockResolvedValue(null);
     prismaMock.blog.findUnique.mockResolvedValue(draftBlog);
@@ -167,18 +183,70 @@ describe('BlogService contract fixes', () => {
     expect(updateBlogIndexMock).not.toHaveBeenCalled();
   });
 
-  it('counts views only for published blog reads', async () => {
-    const service = new BlogService();
-    cacheMock.get.mockResolvedValue(null);
-    prismaMock.blog.findUnique.mockResolvedValue({
-      ...blogRecord,
-      analytics: { views: 7 },
+  describe('view counting (deduped per-visitor)', () => {
+    it('registers a deduped view for published blog reads and updates Postgres + Elasticsearch', async () => {
+      const service = new BlogService();
+      cacheMock.get.mockResolvedValue(null);
+      prismaMock.blog.findUnique.mockResolvedValue({
+        ...blogRecord,
+        readTime: 3,
+        analytics: { views: 7 },
+      });
+      redisMock.set.mockResolvedValue('OK');
+      prismaMock.blogAnalytics.update.mockResolvedValue({ views: 8 });
+
+      await service.getBlogBySlug('same-title-1', undefined, 'a:visitor-hash');
+      await flushPromises();
+
+      expect(redisMock.set).toHaveBeenCalledWith(
+        'blog:viewed:blog-1:a:visitor-hash', '1', 'EX', 86400, 'NX'
+      );
+      expect(prismaMock.blogAnalytics.update).toHaveBeenCalledWith({
+        where: { blogId: 'blog-1' },
+        data: { views: { increment: 1 } },
+        select: { views: true },
+      });
+      expect(updateBlogIndexMock).toHaveBeenCalledWith('blog-1', { views: 8 });
+      expect(cacheMock.invalidate).toHaveBeenCalledWith('same-title-1');
     });
 
-    await service.getBlogBySlug('same-title-1');
+    it('does not double-count a repeat view from the same visitor within the dedup window', async () => {
+      const service = new BlogService();
+      cacheMock.get.mockResolvedValue(null);
+      prismaMock.blog.findUnique.mockResolvedValue({
+        ...blogRecord,
+        readTime: 3,
+        analytics: { views: 7 },
+      });
+      redisMock.set.mockResolvedValue(null);
 
-    expect(cacheMock.incrementViews).toHaveBeenCalledWith('blog-1');
-    expect(updateBlogIndexMock).toHaveBeenCalledWith('blog-1', { views: 8 });
+      await service.getBlogBySlug('same-title-1', undefined, 'a:visitor-hash');
+      await flushPromises();
+
+      expect(redisMock.set).toHaveBeenCalledWith(
+        'blog:viewed:blog-1:a:visitor-hash', '1', 'EX', 86400, 'NX'
+      );
+      expect(prismaMock.blogAnalytics.update).not.toHaveBeenCalled();
+      expect(updateBlogIndexMock).not.toHaveBeenCalled();
+    });
+
+    it('swallows a Redis failure during view registration without throwing or counting a view', async () => {
+      const service = new BlogService();
+      cacheMock.get.mockResolvedValue(null);
+      prismaMock.blog.findUnique.mockResolvedValue({
+        ...blogRecord,
+        readTime: 3,
+        analytics: { views: 7 },
+      });
+      redisMock.set.mockRejectedValue(new Error('redis down'));
+
+      await expect(
+        service.getBlogBySlug('same-title-1', undefined, 'a:visitor-hash')
+      ).resolves.toBeDefined();
+      await flushPromises();
+
+      expect(prismaMock.blogAnalytics.update).not.toHaveBeenCalled();
+    });
   });
 
   it('updates blog images through coverImage and excludes the current blog when regenerating slugs', async () => {
@@ -350,6 +418,81 @@ describe('BlogService contract fixes', () => {
 
       await expect(service.setVisibility('missing-blog', false)).rejects.toThrow('Blog not found');
       expect(prismaMock.blog.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('read time', () => {
+    it('computes read time from content on create', async () => {
+      const service = new BlogService();
+      const content = 'word '.repeat(250).trim(); // 250 words -> ceil(250/200) = 2
+      prismaMock.blog.findFirst.mockResolvedValue(null);
+      prismaMock.blog.create.mockResolvedValue(blogRecord);
+
+      await service.createBlog({
+        title: 'Same Title',
+        content,
+        authorId: 'author-1',
+      });
+
+      expect(prismaMock.blog.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ readTime: 2 }),
+      }));
+    });
+
+    it('recomputes read time only when the content is actually changing', async () => {
+      const service = new BlogService();
+      const newContent = 'word '.repeat(400).trim(); // 400 words -> ceil(400/200) = 2
+      prismaMock.blog.update.mockResolvedValue(blogRecord);
+
+      // Content changes -> readTime recomputed.
+      prismaMock.blog.findUnique.mockResolvedValue({
+        authorId: 'author-1',
+        slug: 'same-title',
+        content: '<p>old</p>',
+        contentMarkdown: 'old content',
+        version: 1,
+        tags: [],
+      });
+      await service.updateBlog('blog-1', 'author-1', { content: newContent });
+      expect(prismaMock.blog.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ readTime: 2 }),
+      }));
+
+      // Only the description changes (no content field at all) -> no readTime recompute.
+      prismaMock.blog.update.mockClear();
+      prismaMock.blog.findUnique.mockResolvedValue({
+        authorId: 'author-1',
+        slug: 'same-title',
+        content: '<p>old</p>',
+        contentMarkdown: 'old content',
+        version: 1,
+        tags: [],
+      });
+      await service.updateBlog('blog-1', 'author-1', { description: 'new description' });
+      expect(prismaMock.blog.update.mock.calls[0][0].data).not.toHaveProperty('readTime');
+    });
+
+    it('backfills a missing read time when serving a blog from the database, healing both the row and the cache', async () => {
+      const service = new BlogService();
+      const contentMarkdown = 'word '.repeat(250).trim(); // 250 words -> ceil(250/200) = 2
+      const dbBlog = {
+        ...blogRecord,
+        readTime: null as number | null,
+        content: '<p>rendered</p>',
+        contentMarkdown,
+      };
+      cacheMock.get.mockResolvedValue(null);
+      prismaMock.blog.findUnique.mockResolvedValue(dbBlog);
+      prismaMock.blog.update.mockResolvedValue({ ...dbBlog, readTime: 2 });
+
+      const result = await service.getBlogBySlug('same-title-1');
+
+      expect(result.readTime).toBe(2);
+      expect(prismaMock.blog.update).toHaveBeenCalledWith({
+        where: { id: 'blog-1' },
+        data: { readTime: 2 },
+      });
+      expect(cacheMock.set).toHaveBeenCalledWith('same-title-1', JSON.stringify(dbBlog));
     });
   });
 });

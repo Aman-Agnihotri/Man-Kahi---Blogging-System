@@ -117,7 +117,7 @@ describe('BlogController contract fixes', () => {
       params: { slug: 'published-blog' },
     }), res);
 
-    expect(blogService.getBlogBySlug).toHaveBeenCalledWith('published-blog', undefined);
+    expect(blogService.getBlogBySlug).toHaveBeenCalledWith('published-blog', undefined, expect.any(String));
     expect(trackBlogView).toHaveBeenCalledWith('blog-1');
     expect(res.json).toHaveBeenCalledWith({
       id: 'blog-1',
@@ -140,7 +140,7 @@ describe('BlogController contract fixes', () => {
       user: { id: 'author-1' },
     }), res);
 
-    expect(blogService.getBlogBySlug).toHaveBeenCalledWith('draft-blog', 'author-1');
+    expect(blogService.getBlogBySlug).toHaveBeenCalledWith('draft-blog', 'author-1', 'u:author-1');
     expect(trackBlogView).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({
       id: 'blog-1',
