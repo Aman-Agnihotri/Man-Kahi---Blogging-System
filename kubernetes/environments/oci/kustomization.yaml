@@ -25,7 +25,7 @@ images:
     newTag: 55da1cf74446cf133b34a2e410f51ce1785085e1
   - name: mankahi/blog-service
     newName: ghcr.io/aman-agnihotri/mankahi-blog-service
-    newTag: 16f94b8faa6d17228f45985590c141b1d0d9094a
+    newTag: 4a2ad36b916820bd8666d56883c80480c5b802a3
   - name: mankahi/analytics-service
     newName: ghcr.io/aman-agnihotri/mankahi-analytics-service
     newTag: 12abd2b1eee8ed81f8a492d7350ae955ef85e264
