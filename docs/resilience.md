@@ -150,6 +150,12 @@ Elasticsearch is unreachable at the time of the call, it returns `503` and
 nothing starts. Run it once Elasticsearch is healthy again to close the
 staleness window left by the outage.
 
+The reindex above reconciles Elasticsearch from Postgres; the home page's
+Featured feed now reads Postgres directly via `GET /api/blogs/recent`, so
+its view/read-time counters are already realtime and ES staleness or search
+caching during an outage only affects full-text search relevance, not the
+home page counters.
+
 ## 7. Observability
 
 blog-service's `/metrics` endpoint exposes:
