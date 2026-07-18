@@ -12,6 +12,7 @@ type MockBlogService = {
   getBlogBySlug: jest.Mock;
   updateBlog: jest.Mock;
   setVisibility: jest.Mock;
+  getRecentBlogs: jest.Mock;
 };
 
 type MockSearchService = {
@@ -37,6 +38,7 @@ const createController = () => {
     getBlogBySlug: jest.fn(),
     updateBlog: jest.fn(),
     setVisibility: jest.fn(),
+    getRecentBlogs: jest.fn(),
   } as MockBlogService;
   const searchService = {
     getPopularTags: jest.fn(),
@@ -288,5 +290,20 @@ describe('BlogController contract fixes', () => {
       limit: undefined,
     });
     expect(res.json).toHaveBeenCalledWith(result);
+  });
+
+  it('rejects recent-feed page requests beyond the capped pagination depth', async () => {
+    const { controller, blogService } = createController();
+    const res = createResponse();
+
+    await controller.getRecent(asRequest({
+      query: { page: '1001' },
+    }), res);
+
+    expect(blogService.getRecentBlogs).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Invalid query parameters',
+    }));
   });
 });
