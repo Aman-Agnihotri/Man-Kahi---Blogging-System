@@ -37,7 +37,7 @@ images:
     newTag: 12abd2b1eee8ed81f8a492d7350ae955ef85e264
   - name: frontend
     newName: ghcr.io/aman-agnihotri/mankahi-frontend
-    newTag: d4c6240908d1979000a88d7a6b3936028e9e4770
+    newTag: 6c02e17f9a9687b83fa75167a2fc09ff00fc1917
 
 patches:
   - path: app-config.yaml
