@@ -777,6 +777,59 @@ export class BlogService {
     });
   }
 
+  // --- Recent (realtime Featured feed) --------------------------------------
+
+  // Postgres-realtime counterpart to ES-backed search 'recent' sort - reads
+  // straight from the DB so Featured never shows stale ES-cached counters.
+  // Not Redis-cached for this first pass, mirrors getTrendingBlogs above.
+  async getRecentBlogs(page: number, limit: number) {
+    logger.debug(`Fetching recent blogs, page=${page}, limit=${limit}`);
+    const [blogs, total] = await prisma.$transaction([
+      prisma.blog.findMany({
+        where: { published: true, deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          author: { select: { id: true, username: true, profileImage: true } },
+          category: true,
+          tags: { include: { tag: true } },
+          analytics: true,
+        },
+      }),
+      prisma.blog.count({ where: { published: true, deletedAt: null } }),
+    ]);
+
+    const mapped = blogs.map((blog: typeof blogs[number]) => ({
+      id: blog.id,
+      title: blog.title,
+      content: blog.content,
+      description: blog.description,
+      slug: blog.slug,
+      authorId: blog.authorId,
+      authorUsername: blog.author?.username ?? null,
+      categoryId: blog.categoryId,
+      tags: blog.tags.map((t: { tag: { name: string } }) => t.tag.name),
+      published: blog.published,
+      createdAt: blog.createdAt,
+      updatedAt: blog.updatedAt,
+      publishedAt: blog.publishedAt,
+      deletedAt: blog.deletedAt,
+      views: blog.analytics?.views ?? 0,
+      excerpt: blog.excerpt,
+      coverImage: blog.coverImage,
+      readTime: blog.readTime || this.computeReadTime(blog.contentMarkdown ?? blog.content),
+      score: 0,
+    }));
+
+    return {
+      blogs: mapped,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   // --- Reporting -----------------------------------------------------------
 
   async reportBlog(blogId: string, reporterId: string, reason: string) {

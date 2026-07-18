@@ -5,6 +5,7 @@ import { updateBlogIndex } from '@utils/elasticsearch';
 
 const prismaMock = prisma as unknown as {
   blog: {
+    count: jest.Mock;
     create: jest.Mock;
     findFirst: jest.Mock;
     findMany: jest.Mock;
@@ -251,6 +252,76 @@ describe('BlogService trending', () => {
       take: 5,
     }));
     expect(result).toBe(blogs);
+  });
+});
+
+describe('BlogService recent (Postgres-realtime Featured feed)', () => {
+  it('queries published, non-deleted blogs ordered by createdAt desc, paginated, and returns a flat search-shaped envelope', async () => {
+    const service = new BlogService();
+    const recentBlog = {
+      id: 'blog-1',
+      title: 'Recent Post',
+      content: '<p>rendered</p>',
+      contentMarkdown: 'word '.repeat(250).trim(),
+      description: 'desc',
+      slug: 'recent-post',
+      authorId: 'author-1',
+      author: { id: 'author-1', username: 'author-name', profileImage: null },
+      categoryId: 'cat-1',
+      tags: [{ tag: { name: 'tech' } }],
+      published: true,
+      createdAt: new Date('2026-01-01'),
+      updatedAt: new Date('2026-01-01'),
+      publishedAt: new Date('2026-01-01'),
+      deletedAt: null,
+      analytics: { views: 42 },
+      excerpt: 'excerpt',
+      coverImage: null,
+      readTime: null as number | null,
+    };
+    const blogs = [recentBlog];
+    prismaMock.blog.findMany.mockResolvedValue(blogs);
+    prismaMock.blog.count.mockResolvedValue(1);
+
+    const result = await service.getRecentBlogs(1, 9);
+
+    expect(prismaMock.blog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { published: true, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      skip: 0,
+      take: 9,
+    }));
+    expect(prismaMock.blog.count).toHaveBeenCalledWith({
+      where: { published: true, deletedAt: null },
+    });
+    expect(result).toEqual({
+      blogs: [
+        {
+          id: 'blog-1',
+          title: 'Recent Post',
+          content: '<p>rendered</p>',
+          description: 'desc',
+          slug: 'recent-post',
+          authorId: 'author-1',
+          authorUsername: 'author-name',
+          categoryId: 'cat-1',
+          tags: ['tech'],
+          published: true,
+          createdAt: recentBlog.createdAt,
+          updatedAt: recentBlog.updatedAt,
+          publishedAt: recentBlog.publishedAt,
+          deletedAt: null,
+          views: 42,
+          excerpt: 'excerpt',
+          coverImage: null,
+          readTime: 2,
+          score: 0,
+        },
+      ],
+      total: 1,
+      page: 1,
+      totalPages: 1,
+    });
   });
 });
 

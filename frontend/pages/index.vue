@@ -245,7 +245,7 @@
     initialLoading.value = true
     error.value = ''
     try {
-      const result = await blogApi.search({ sortBy: 'recent', limit: 9 })
+      const result = await blogApi.getRecent(1, 9)
       posts.value = result.blogs
       page.value = result.page
       totalPages.value = result.totalPages
@@ -261,7 +261,7 @@
     loadingMore.value = true
     error.value = ''
     try {
-      const result = await blogApi.search({ sortBy: 'recent', limit: 9, page: page.value + 1 })
+      const result = await blogApi.getRecent(page.value + 1, 9)
       posts.value = [...posts.value, ...result.blogs]
       page.value = result.page
       totalPages.value = result.totalPages

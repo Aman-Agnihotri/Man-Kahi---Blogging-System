@@ -51,6 +51,7 @@ const prismaMock = {
     create: jest.fn(),
     findFirst: jest.fn(),
   },
+  $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
 };
 
 jest.mock('@shared/utils/prismaClient', () => ({

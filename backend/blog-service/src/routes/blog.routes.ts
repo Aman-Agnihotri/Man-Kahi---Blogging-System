@@ -134,6 +134,17 @@ router.get(
   }) as RequestHandler
 );
 
+// Get recent blogs, Postgres-realtime (public) - same "/:slug" catch-all
+// ordering concern as trending above; backs the home Featured feed.
+router.get(
+  '/recent',
+  createEndpointRateLimit('blog:recent') as RequestHandler,
+  trackBlogOperation('get_recent') as RequestHandler,
+  ((req: Request, res: Response, next: NextFunction) => {
+    blogController.getRecent(req, res).catch(next);
+  }) as RequestHandler
+);
+
 // List categories (public) - same "/:slug" catch-all ordering concern as
 // above.
 router.get(

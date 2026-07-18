@@ -44,6 +44,11 @@ const trendingQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
 })
 
+const recentQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(9),
+})
+
 const paginationQuerySchema = z.object({
   page: z.string().transform(Number).optional(),
   limit: z.string().transform(Number).optional(),
@@ -898,6 +903,33 @@ export class BlogController {
       return res.status(500).json({
         message: 'Internal server error',
         details: 'Failed to fetch trending blogs due to an unexpected error'
+      })
+    }
+  }
+
+  // Recent blogs, Postgres-realtime (public) - backs the home Featured feed
+  // so its view/read-time counters never lag behind the ES search index.
+  async getRecent(req: Request, res: Response): Promise<Response> {
+    try {
+      const { page, limit } = recentQuerySchema.parse(req.query)
+      const result = await this.blogService.getRecentBlogs(page, limit);
+      return res.json(result)
+    } catch (error) {
+      logger.error({ err: error }, 'Error fetching recent blogs')
+
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: 'Invalid query parameters',
+          errors: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
+        })
+      }
+
+      return res.status(500).json({
+        message: 'Internal server error',
+        details: 'Failed to fetch recent blogs due to an unexpected error'
       })
     }
   }

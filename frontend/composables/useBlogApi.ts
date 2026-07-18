@@ -72,6 +72,10 @@ export function useBlogApi() {
 
     getTrending: (limit?: number) => api.get<Blog[]>('/api/blogs/trending', { limit }),
 
+    /** Postgres-realtime recent blogs (flat envelope, mirrors `search`). */
+    getRecent: (page?: number, limit?: number) =>
+      api.get<SearchBlogsResult>('/api/blogs/recent', { page, limit }),
+
     // --- Likes / bookmarks -----------------------------------------------
 
     like: (blogId: string) => api.post<LikeResult>(`/api/blogs/${blogId}/like`),
