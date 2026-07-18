@@ -493,6 +493,7 @@ describe('BlogService contract fixes', () => {
         data: { readTime: 2 },
       });
       expect(cacheMock.set).toHaveBeenCalledWith('same-title-1', JSON.stringify(dbBlog));
+      expect(updateBlogIndexMock).toHaveBeenCalledWith('blog-1', { readTime: 2 });
     });
   });
 });

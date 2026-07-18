@@ -309,6 +309,7 @@ export class BlogService {
         where: { id: blog.id },
         data: { readTime: blog.readTime },
       }).catch((error: Error) => logger.error({ err: error }, 'Error persisting backfilled read time'));
+      void updateBlogIndex(blog.id, { readTime: blog.readTime });
     }
 
     // Cache the blog
