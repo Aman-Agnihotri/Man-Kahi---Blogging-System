@@ -349,7 +349,8 @@ Redis — used by auth-service, blog-service (including the search cache
 itself), and analytics-service — is not behind a circuit breaker of any
 kind. A Redis outage today is handled ad hoc wherever it is used, not
 through a common guarded path. This is a deliberate scope boundary, not an
-oversight: the breaker described in this document was scoped to
-Elasticsearch specifically, and extending the same pattern to Redis would
-have grown this change well past what a single reviewable change should
-cover.
+oversight: the circuit breaker exists because Elasticsearch is the
+slow-failing dependency on the write path — a hung ES call would otherwise
+stall blog writes — whereas Redis failures surface fast and are handled at
+each call site. Putting Redis behind the same breaker would add machinery
+without a proportionate resilience gain.
