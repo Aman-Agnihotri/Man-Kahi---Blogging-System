@@ -35,7 +35,7 @@ rather than presented as covered.
 - Postgres, Redis, Elasticsearch, MinIO, and the 4 backend services all have
   Docker Compose `healthcheck:` blocks, visible via `docker compose ps`.
 
-## What is NOT instrumented (real gaps, not yet built)
+## What is NOT instrumented (by design, local Compose only)
 
 - **Host/container CPU, memory, and disk usage** - there is no
   node-exporter or cAdvisor in the compose stack, so there is no Prometheus
@@ -53,11 +53,12 @@ rather than presented as covered.
   Discord - see operations.md). The rules below are conditions to alert
   *on* locally, not alerts that fire today in Compose.
 
-Recommended follow-up: add `node-exporter` (host
-metrics), `cadvisor` (per-container CPU/mem/disk), `postgres_exporter`, and
-`redis_exporter` to `docker-compose.yml`/`docker-compose.prod.yml`, point
-Prometheus at them, then either wire Grafana Alerting or add an Alertmanager
-container with `docker/prometheus/alert.rules.yml`.
+The local Compose stack scopes out `node-exporter` (host metrics),
+`cadvisor` (per-container CPU/mem/disk), `postgres_exporter`, and
+`redis_exporter`: this stack is for local development, not a monitored
+environment, and those exporters plus wiring Grafana Alerting or an
+Alertmanager container with `docker/prometheus/alert.rules.yml` are what
+adding that coverage would take, if it's ever needed here.
 
 ## Recommended alert conditions
 

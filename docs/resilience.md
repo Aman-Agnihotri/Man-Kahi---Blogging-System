@@ -148,7 +148,9 @@ completion logged when it finishes. A second call while one is already
 running returns `409` instead of starting a duplicate pass. If
 Elasticsearch is unreachable at the time of the call, it returns `503` and
 nothing starts. Run it once Elasticsearch is healthy again to close the
-staleness window left by the outage.
+staleness window left by the outage. The admin dashboard (`frontend/pages/admin/dashboard.vue`)
+exposes this as a "Rebuild search index" button, so an administrator can
+trigger the same rebuild without calling the endpoint directly.
 
 The reindex above reconciles Elasticsearch from Postgres; the home page's
 Featured feed now reads Postgres directly via `GET /api/blogs/recent`, so
@@ -180,7 +182,11 @@ delivered through the same alert webhook channel as the rest of the
 
 blog-service's `/health` endpoint intentionally does not include
 Elasticsearch as a dependency check — breaker state is the authoritative
-signal for Elasticsearch's health, not the probe.
+signal for Elasticsearch's health, not the probe. Elasticsearch's own
+cluster health is scraped independently by `elasticsearch-exporter` and
+backs the `ElasticsearchClusterRed` alert (`docs/operations.md` section 4),
+a server-side signal alongside the client-side breaker state described
+above.
 
 Liveness (`/health/live`) is dependency-free across all backend services: it
 only confirms the process is up and answering requests. `/health` remains
@@ -337,11 +343,13 @@ degrades through the circuit breaker exactly as during a runtime outage, and
 index setup retries in the background with capped exponential backoff until
 Elasticsearch returns.
 
-## 10. Documented follow-up
+## 10. Deliberate scope: Redis is not behind a circuit breaker
 
 Redis — used by auth-service, blog-service (including the search cache
 itself), and analytics-service — is not behind a circuit breaker of any
 kind. A Redis outage today is handled ad hoc wherever it is used, not
-through a common guarded path. This is a known gap and a candidate for the
-same treatment described here, deliberately left out of this change to keep
-the change small and reviewable.
+through a common guarded path. This is a deliberate scope boundary, not an
+oversight: the breaker described in this document was scoped to
+Elasticsearch specifically, and extending the same pattern to Redis would
+have grown this change well past what a single reviewable change should
+cover.

@@ -29,9 +29,10 @@ in the same run.
 
 **Least-privilege caveat.** The S3 credential used by the upload step is the
 tenancy user's customer secret key — it is user-scoped, not bucket-scoped, so
-it carries more reach than this job needs. Follow-up: create a dedicated IAM
-user and policy scoped to the backups bucket (terraform output backups_bucket_name)
-only.
+it carries more reach than this job needs. This is an accepted tradeoff: a
+dedicated IAM user and policy scoped to the backups bucket (terraform output
+backups_bucket_name) only would tighten this, but the tenancy-user credential
+is what the rest of this job's S3 access already relies on.
 
 ## 3. Restore drill (perform quarterly; an unrestored backup is a hope, not a backup)
 
@@ -94,24 +95,26 @@ h. Drill log:
 | `DeploymentReplicasUnavailable` | A Deployment's desired replica was unavailable within the last 5m - pod deleted, crashed, or failing readiness; fires on kubectl delete pod (a deliberate kill-pod test) | kubectl -n mankahi get pods -l app=DEPLOYMENT; kill drills self-clear about 5m after Ready |
 | `CertificateExpiringSoon` | a cert-manager certificate expires in under 14 days | check cert-manager logs + the certificate resource; renew/reissue |
 | `ESCircuitBreakerOpen` | blog-service's Elasticsearch circuit breaker has been OPEN >5m (search serving the degraded contract; likely Elasticsearch down or unreachable) | kubectl get pods -n mankahi -l app=elasticsearch; check ES pod logs/boot; breaker self-closes on a successful probe once ES is healthy |
+| `ElasticsearchClusterRed` | Elasticsearch's own cluster health status is `red` for 5m (server-side truth, independent of the client-side breaker above) | kubectl get pods -n mankahi -l app=elasticsearch; check ES pod logs/boot/disk; resolves once cluster health leaves `red` |
 
 PodCrashLooping is restart-count based; kubectl delete pod creates a NEW pod
 whose restart counter starts at 0, so a pod kill raises
 DeploymentReplicasUnavailable (availability-based), not PodCrashLooping. The
 availability alert also fires briefly (about 5m) on the very first rollout of
 a Deployment (0 to 1 replicas); expected, self-clears. PVC-usage and
-node-memory alerts remain follow-ups - KSM exposes no volume/node usage
-bytes; both need a kubelet or node_exporter scrape.
+node-memory alerting are out of scope for the current metric surface: KSM
+exposes no volume/node usage bytes, and adding either requires a kubelet or
+node_exporter scrape that this cluster does not run.
 
 Liveness is dependency-free (`/health/live`) on all four backends while
 readiness stays `/health`, so a Postgres/Redis outage pulls a pod from
 rotation without restart-looping it (see resilience.md section 7).
 
-**Planned rules (pending metric sources or delivery):**
+**Rules not covered by this cluster's metric surface:**
 - PVC above 80 percent — needs kubelet volume stats.
 - Node memory above 85 percent — needs `node-exporter`.
 
-Delivery: Grafana unified alerting to a Discord webhook. The bridge rule (any firing Prometheus alert) is provisioned from git; the contact point and routing policy arrive via the sealed grafana-alerting secret (post-seal grafana restart required - provisioning is read at startup).
+Delivery: Grafana unified alerting to a Discord webhook. The bridge rule fires on any firing Prometheus alert and is provisioned from git; it carries the original alert's name and severity through to Discord (via `label_replace` on `alertname` into a `source_alert` label, since Grafana's own alert-rule title would otherwise clobber it), so each notification identifies which alert fired rather than a generic message. The contact point and routing policy arrive via the sealed grafana-alerting secret (post-seal grafana restart required - provisioning is read at startup).
 
 ## 5. Search index recovery
 

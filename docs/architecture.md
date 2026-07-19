@@ -97,7 +97,7 @@ Browser
 
 Design note:
 
-Blog writes currently mix database writes, search indexing, cache work, and upload handling synchronously. That is acceptable for the single-server stage, but the code should be shaped so indexing and analytics can move to workers later. (Search indexing on this path is already isolated behind a circuit breaker, so an Elasticsearch outage degrades search rather than failing the write — see [resilience.md](resilience.md).)
+Blog writes currently mix database writes, search indexing, cache work, and upload handling synchronously. That is a deliberate fit for the current single-server stage, and the code is shaped so indexing and analytics can move to workers if the scaling path in [scaling.md](scaling.md) is taken. (Search indexing on this path is already isolated behind a circuit breaker, so an Elasticsearch outage degrades search rather than failing the write — see [resilience.md](resilience.md).)
 
 ### Admin Flow
 

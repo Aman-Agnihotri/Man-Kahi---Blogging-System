@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | Local Docker Compose | Supported now | Development and laptop demo |
 | Cloudflare Tunnel | Supported now | Temporary public exposure of the local gateway |
-| Single-server production Compose | Config validates; runtime testing pending | Real VPS/home-server deployment after hardening |
+| Single-server production Compose | Supported (config-validated) | Real VPS/home-server deployment after hardening |
 | Kubernetes (k3s/OCI) | Production | see docs/oci-deployment.md |
 
 ## Local Development
