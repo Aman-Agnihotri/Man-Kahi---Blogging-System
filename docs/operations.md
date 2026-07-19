@@ -49,15 +49,21 @@ a. List dumps:
    aws --endpoint-url "$EP" s3 ls "s3://$BUCKET/postgres/"
    ```
 
-b. Download newest:
+b. OPTIONAL — download a local copy (only needed if you want to inspect the
+   dump on your own machine; the restore steps below do not depend on this):
    ```
    aws --endpoint-url "$EP" s3 cp "s3://$BUCKET/postgres/DUMPFILE" /tmp/restore.dump
    ```
 
-c. Copy into the postgres pod:
+c. Presign the newest dump and have the pod fetch it directly:
    ```
-   kubectl cp /tmp/restore.dump mankahi/POSTGRES_POD:/tmp/restore.dump
+   PRESIGNED=$(aws --endpoint-url "$EP" s3 presign "s3://$BUCKET/postgres/DUMPFILE" --expires-in 900)
+   kubectl exec -n mankahi POSTGRES_POD -- sh -c "wget -q -O /tmp/restore.dump '$PRESIGNED'"
+   kubectl exec -n mankahi POSTGRES_POD -- sh -c 'ls -l /tmp/restore.dump'   # size must match the bucket object
    ```
+   The pod pulls the dump directly from object storage, so the restore path
+   is identical from any workstation and exercises the same network path a
+   real recovery would use.
 
 d. Create scratch DB:
    ```
@@ -84,7 +90,7 @@ h. Drill log:
 
 | date | dump file | rows expected | rows restored | operator |
 |------|-----------|----------------|-----------------|----------|
-|      |           |                |                  |          |
+| 2026-07-19 | mankahi-2026-07-19T02-00-13Z.dump | users 5 / roles 3 / blogs 3 (live) | users 5 / roles 3 / blogs 3 (match) | Aman |
 
 ## 4. Alerts and what they mean
 
